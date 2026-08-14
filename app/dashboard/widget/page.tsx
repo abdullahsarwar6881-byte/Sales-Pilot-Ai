@@ -1,153 +1,665 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { PaintBrushIcon, CodeBracketIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
+import { useEffect, useState } from "react";
 
-export default function WidgetStudio() {
-  const [aiName, setAiName] = useState('Pilot Bot');
-  const [welcomeMsg, setWelcomeMsg] = useState('Hello! How can I assist your business today?');
-  const [brandColor, setBrandColor] = useState('#4F46E5');
-  const [isCopied, setIsCopied] = useState(false);
+import { createClient } from "@/lib/supabase/client";
 
-  const generatedEmbedCode = `<!-- Sales Pilot Chat Widget Embed -->
-<script>
-  window.SalesPilotConfig = {
-    aiName: "${aiName}",
-    welcomeMessage: "${welcomeMsg}",
-    brandColor: "${brandColor}"
-  };
-</script>
-<script src="https://salespilot.ai" async></script>`;
+import WidgetStats from "@/components/widget/WidgetStats";
+import WidgetPreview from "@/components/widget/WidgetPreview";
+import WidgetSettings from "@/components/widget/WidgetSettings";
+import WidgetAppearance from "@/components/widget/WidgetAppearance";
+import WidgetBehavior from "@/components/widget/WidgetBehavior";
+import WidgetCode from "@/components/widget/WidgetCode";
+import WidgetInstall from "@/components/widget/WidgetInstall";
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(generatedEmbedCode);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
+export default function WidgetStudioPage() {
+  const supabase = createClient();
+
+  // =====================================================
+  // PROFILE
+  // =====================================================
+
+  const [profileId, setProfileId] = useState("");
+
+  // =====================================================
+  // WIDGET APPEARANCE SETTINGS
+  // =====================================================
+
+  const [aiName, setAiName] =
+    useState("Sales Pilot AI");
+
+  const [welcomeMessage, setWelcomeMessage] =
+    useState(
+      "👋 Hi! How can I help you today?"
+    );
+
+  const [brandColor, setBrandColor] =
+    useState("#6366F1");
+
+  const [position, setPosition] =
+    useState("Bottom Right");
+
+  const [theme, setTheme] =
+    useState("Light");
+
+  const [size, setSize] =
+    useState("Medium");
+
+  const [radius, setRadius] =
+    useState("Rounded");
+
+  // =====================================================
+  // SAVE STATE
+  // =====================================================
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [saved, setSaved] =
+    useState(false);
+
+  // =====================================================
+  // LOAD WIDGET
+  // =====================================================
+
+  useEffect(() => {
+    loadWidget();
+  }, []);
+
+  async function loadWidget() {
+    try {
+      // -------------------------------------------------
+      // GET AUTHENTICATED USER
+      // -------------------------------------------------
+
+      const {
+        data: { user },
+        error: authError,
+      } =
+        await supabase.auth.getUser();
+
+      if (authError) {
+        console.error(
+          "Widget Studio authentication error:",
+          authError
+        );
+
+        return;
+      }
+
+      if (!user) {
+        console.error(
+          "Widget Studio: No authenticated user."
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // PROFILE ID
+      // -------------------------------------------------
+
+      setProfileId(user.id);
+
+      // -------------------------------------------------
+      // LOAD WIDGET SETTINGS
+      // -------------------------------------------------
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("widget_settings")
+        .select("*")
+        .eq(
+          "user_id",
+          user.id
+        )
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Failed to load widget settings:",
+          {
+            message:
+              error.message,
+
+            details:
+              error.details,
+
+            hint:
+              error.hint,
+
+            code:
+              error.code,
+          }
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // NO SETTINGS
+      // -------------------------------------------------
+
+      if (!data) {
+        console.log(
+          "Widget Studio: No widget settings found. Using defaults."
+        );
+
+        return;
+      }
+
+      // =================================================
+      // APPLY SAVED SETTINGS
+      // =================================================
+
+      setAiName(
+        data.ai_name ??
+          "Sales Pilot AI"
+      );
+
+      setWelcomeMessage(
+        data.welcome_message ??
+          "👋 Hi! How can I help you today?"
+      );
+
+      setBrandColor(
+        data.brand_color ??
+          "#6366F1"
+      );
+
+      setPosition(
+        data.position ??
+          "Bottom Right"
+      );
+
+      setTheme(
+        data.theme ??
+          "Light"
+      );
+
+      setSize(
+        data.size ??
+          "Medium"
+      );
+
+      setRadius(
+        data.radius ??
+          "Rounded"
+      );
+
+      console.log(
+        "Widget Studio settings loaded:",
+        data
+      );
+    } catch (error) {
+      console.error(
+        "Widget Studio loading error:",
+        error
+      );
+    }
+  }
+
+  // =====================================================
+  // SAVE WIDGET APPEARANCE
+  // =====================================================
+
+  async function saveWidget() {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+    setSaved(false);
+
+    try {
+      // -------------------------------------------------
+      // GET CURRENT USER
+      // -------------------------------------------------
+
+      const {
+        data: { user },
+        error: authError,
+      } =
+        await supabase.auth.getUser();
+
+      if (authError) {
+        console.error(
+          "Widget save authentication error:",
+          authError
+        );
+
+        return;
+      }
+
+      if (!user) {
+        console.error(
+          "Widget save: No authenticated user."
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // CLEAN VALUES
+      // -------------------------------------------------
+
+      const cleanAiName =
+        aiName.trim() ||
+        "Sales Pilot AI";
+
+      const cleanWelcomeMessage =
+        welcomeMessage.trim() ||
+        "👋 Hi! How can I help you today?";
+
+      const cleanBrandColor =
+        brandColor ||
+        "#6366F1";
+
+      const cleanPosition =
+        position ||
+        "Bottom Right";
+
+      const cleanTheme =
+        theme ||
+        "Light";
+
+      const cleanSize =
+        size ||
+        "Medium";
+
+      const cleanRadius =
+        radius ||
+        "Rounded";
+
+      // -------------------------------------------------
+      // DATA
+      // -------------------------------------------------
+
+      const widgetData = {
+        user_id:
+          user.id,
+
+        ai_name:
+          cleanAiName,
+
+        welcome_message:
+          cleanWelcomeMessage,
+
+        brand_color:
+          cleanBrandColor,
+
+        position:
+          cleanPosition,
+
+        theme:
+          cleanTheme,
+
+        size:
+          cleanSize,
+
+        radius:
+          cleanRadius,
+
+        updated_at:
+          new Date().toISOString(),
+      };
+
+      console.log(
+        "Saving Widget Studio settings:",
+        widgetData
+      );
+
+      // -------------------------------------------------
+      // UPSERT
+      // -------------------------------------------------
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("widget_settings")
+        .upsert(
+          widgetData,
+          {
+            onConflict:
+              "user_id",
+          }
+        )
+        .select()
+        .single();
+
+      // -------------------------------------------------
+      // HANDLE ERROR
+      // -------------------------------------------------
+
+      if (error) {
+        console.error(
+          "Widget Studio save error:",
+          {
+            message:
+              error.message,
+
+            details:
+              error.details,
+
+            hint:
+              error.hint,
+
+            code:
+              error.code,
+          }
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // SUCCESS
+      // -------------------------------------------------
+
+      console.log(
+        "Widget Studio saved successfully:",
+        data
+      );
+
+      // Make sure UI uses exactly
+      // what was saved.
+
+      setAiName(
+        data.ai_name ??
+          cleanAiName
+      );
+
+      setWelcomeMessage(
+        data.welcome_message ??
+          cleanWelcomeMessage
+      );
+
+      setBrandColor(
+        data.brand_color ??
+          cleanBrandColor
+      );
+
+      setPosition(
+        data.position ??
+          cleanPosition
+      );
+
+      setTheme(
+        data.theme ??
+          cleanTheme
+      );
+
+      setSize(
+        data.size ??
+          cleanSize
+      );
+
+      setRadius(
+        data.radius ??
+          cleanRadius
+      );
+
+      setSaved(true);
+
+      // -------------------------------------------------
+      // REMOVE SUCCESS MESSAGE
+      // -------------------------------------------------
+
+      setTimeout(() => {
+        setSaved(false);
+      }, 3000);
+    } catch (error) {
+      console.error(
+        "Unexpected Widget Studio save error:",
+        error
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // =====================================================
+  // PAGE
+  // =====================================================
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 bg-[#0F172A] text-slate-100 min-h-screen">
+    <div
+      className="
+        min-w-0
+        space-y-8
+        text-slate-900
+        transition-colors
+        duration-200
+        dark:text-slate-100
+      "
+    >
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Chat Widget Studio</h1>
-        <p className="text-slate-400 mt-2">Design, style, and generate implementation scripts for your website interface.</p>
+        <h1
+          className="
+            text-4xl
+            font-bold
+            text-slate-900
+            transition-colors
+            duration-200
+            dark:text-white
+          "
+        >
+          Widget Studio
+        </h1>
+
+        <p
+          className="
+            mt-2
+            text-slate-500
+            transition-colors
+            duration-200
+            dark:text-slate-400
+          "
+        >
+          Customize your AI widget and
+          install it on any website.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Left Side: Customization Options Form */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <PaintBrushIcon className="w-5 h-5 text-indigo-400" />
-            Visual Customization
-          </h2>
+      {/* =================================================
+          STATS
+      ================================================= */}
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">AI Assistant Identity</label>
-              <input
-                type="text"
-                value={aiName}
-                onChange={(e) => setAiName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
+      <WidgetStats
+        conversations={0}
+        resolution={0}
+        visitors={0}
+        views={0}
+      />
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Greeting Configuration</label>
-              <textarea
-                rows={3}
-                value={welcomeMsg}
-                onChange={(e) => setWelcomeMsg(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-              />
-            </div>
+      {/* =================================================
+          PREVIEW + SETTINGS
+      ================================================= */}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Brand Accent Theme</label>
-              <div className="flex gap-4 items-center">
-                <input
-                  type="color"
-                  value={brandColor}
-                  onChange={(e) => setBrandColor(e.target.value)}
-                  className="w-12 h-12 bg-slate-950 border border-slate-800 rounded-xl p-1 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={brandColor}
-                  onChange={(e) => setBrandColor(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 font-mono text-sm focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
+      <div
+        className="
+          grid
+          min-w-0
+          gap-6
+          xl:grid-cols-2
+        "
+      >
+        {/* ===============================================
+            LIVE PREVIEW
+        =============================================== */}
 
-          {/* Embed Script Output Window */}
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <CodeBracketIcon className="w-4 h-4 text-cyan-400" />
-              Installation Script
-            </h3>
-            <div className="relative bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-[11px] text-slate-300 overflow-x-auto whitespace-pre">
-              {generatedEmbedCode}
-            </div>
-            <button
-              type="button"
-              onClick={copyToClipboard}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-xl transition-colors text-sm shadow-md"
-            >
-              {isCopied ? 'Copied Code to Clipboard!' : 'Copy Implementation Widget Code'}
-            </button>
-          </div>
+        <div className="min-w-0">
+          <WidgetPreview
+            aiName={
+              aiName
+            }
+            welcomeMessage={
+              welcomeMessage
+            }
+            brandColor={
+              brandColor
+            }
+            theme={
+              theme
+            }
+            size={
+              size
+            }
+            radius={
+              radius
+            }
+          />
         </div>
 
-        {/* Right Side: Live Visual Mockup Preview */}
-        <div className="bg-slate-950 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between min-h-[500px] relative overflow-hidden">
-          <div className="text-center space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">Workspace Sandbox</span>
-            <h2 className="text-sm font-semibold text-slate-400">Live Client Site Preview</h2>
-          </div>
+        {/* ===============================================
+            SETTINGS
+        =============================================== */}
 
-          <div className="w-full max-w-sm mx-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-            <div className="p-4 flex items-center justify-between text-white border-b border-slate-800" style={{ backgroundColor: brandColor }}>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
-                  {aiName[0]}
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold leading-none">{aiName}</h4>
-                  <span className="text-[10px] opacity-80 flex items-center gap-1 mt-0.5">
-                    <span className="h-1.5 w-1.5 bg-green-400 rounded-full inline-block" />
-                    Agent active
-                  </span>
-                </div>
-              </div>
-            </div>
+        <div
+          className="
+            min-w-0
+            space-y-6
+          "
+        >
+          <WidgetSettings
+            aiName={
+              aiName
+            }
+            setAiName={
+              setAiName
+            }
+            welcomeMessage={
+              welcomeMessage
+            }
+            setWelcomeMessage={
+              setWelcomeMessage
+            }
+            brandColor={
+              brandColor
+            }
+            setBrandColor={
+              setBrandColor
+            }
+          />
 
-            <div className="p-4 space-y-4 h-48 bg-slate-900 overflow-y-auto text-xs flex flex-col justify-end">
-              <div className="bg-slate-950 border border-slate-800 text-slate-300 rounded-2xl rounded-tl-none p-3 max-w-[85%] self-start shadow-sm">
-                {welcomeMsg}
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
-              <input
-                type="text"
-                disabled
-                placeholder="Ask a customer support question..."
-                className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-400 focus:outline-none"
-              />
-              <button type="button" className="p-1.5 rounded-lg text-white" style={{ backgroundColor: brandColor }}>
-                <ChatBubbleLeftIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="text-center text-[11px] text-slate-600">
-            Alter options on the left to review style properties in real-time.
-          </div>
+          <WidgetAppearance
+            position={
+              position
+            }
+            setPosition={
+              setPosition
+            }
+            theme={
+              theme
+            }
+            setTheme={
+              setTheme
+            }
+            size={
+              size
+            }
+            setSize={
+              setSize
+            }
+            radius={
+              radius
+            }
+            setRadius={
+              setRadius
+            }
+          />
         </div>
-
       </div>
+
+      {/* =================================================
+          BEHAVIOR
+      ================================================= */}
+
+      <WidgetBehavior />
+
+      {/* =================================================
+          SAVE
+      ================================================= */}
+
+      <div
+        className="
+          space-y-3
+        "
+      >
+        <button
+          type="button"
+          onClick={
+            saveWidget
+          }
+          disabled={
+            saving
+          }
+          className="
+            w-full
+            rounded-xl
+            bg-indigo-600
+            px-6
+            py-3
+            font-semibold
+            text-white
+            shadow-sm
+            transition
+            hover:bg-indigo-700
+            disabled:cursor-not-allowed
+            disabled:opacity-50
+            dark:bg-indigo-600
+            dark:hover:bg-indigo-500
+          "
+        >
+          {saving
+            ? "Saving..."
+            : saved
+              ? "✓ Widget Saved"
+              : "Save Widget"}
+        </button>
+
+        {saved && (
+          <p
+            className="
+              text-center
+              text-sm
+              font-medium
+              text-emerald-600
+              dark:text-emerald-400
+            "
+          >
+            Your widget settings have
+            been saved successfully.
+          </p>
+        )}
+      </div>
+
+      {/* =================================================
+          EMBED CODE
+      ================================================= */}
+
+      <WidgetCode
+        profileId={
+          profileId
+        }
+      />
+
+      {/* =================================================
+          INSTALLATION
+      ================================================= */}
+
+      <WidgetInstall
+        profileId={
+          profileId
+        }
+      />
     </div>
   );
 }

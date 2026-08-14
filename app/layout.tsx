@@ -1,25 +1,56 @@
-import './globals.css';
-import type { Metadata } from 'next';
+import "./globals.css";
+import type { Metadata } from "next";
+import ThemeProvider from "@/components/theme/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: 'Sales Pilot | Your AI Sales & Customer Support Employee',
-  description: 'Train an AI on your business in minutes.',
-}
+  title: "Sales Pilot | Your AI Sales & Customer Support Employee",
+  description: "Train an AI on your business in minutes.",
+};
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  const shopifyApiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY;
+
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://googleapis.com" />
-        <link rel="preconnect" href="https://gstatic.com" crossOrigin="anonymous" />
-        <link href="https://googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        {/* Shopify App Bridge */}
+        {shopifyApiKey && (
+          <meta name="shopify-api-key" content={shopifyApiKey} />
+        )}
+
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
+
+        {/* Fonts */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
-      <body className="h-full bg-[#0F172A] text-slate-100 font-sans antialiased">
-        {children}
+
+      <body
+        className="
+          min-h-screen
+          bg-background
+          text-foreground
+          font-sans
+          antialiased
+          transition-colors
+          duration-200
+        "
+      >
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

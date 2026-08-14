@@ -1,0 +1,19 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "79b63db0f617a13cadd8d3ffd7d52013"
+name = "Sales Pilot"
+application_url = "https://example.com"
+embedded = true
+[build]
+automatically_update_urls_on_dev = true
+web_directories = ["web"]
+[access_scopes]
+scopes = "read_products,read_inventory,read_orders,read_customers"
+optional_scopes = []
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = []
+
+[webhooks]
+api_version = "2026-07"

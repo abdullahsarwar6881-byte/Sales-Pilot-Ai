@@ -1,9 +1,217 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  body {
-    @apply bg-[#0F172A] text-slate-100 antialiased;
-  }
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  --border: #e2e8f0;
+
+  --input: #ffffff;
+  --input-foreground: #0f172a;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+
+  --hover: #f1f5f9;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+
+  --border: #334155;
+
+  --input: #0f172a;
+  --input-foreground: #f8fafc;
+
+  --sidebar: #020617;
+  --sidebar-foreground: #f8fafc;
+
+  --hover: #1e293b;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border-theme: var(--border);
+
+  --color-input: var(--input);
+  --color-input-foreground: var(--input-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+
+  --color-hover-theme: var(--hover);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+html {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+/* Semantic theme classes */
+
+.bg-background {
+  background-color: var(--background) !important;
+}
+
+.text-foreground {
+  color: var(--foreground) !important;
+}
+
+.bg-card {
+  background-color: var(--card) !important;
+}
+
+.text-card-foreground {
+  color: var(--card-foreground) !important;
+}
+
+.bg-muted {
+  background-color: var(--muted) !important;
+}
+
+.text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+.border-theme {
+  border-color: var(--border) !important;
+}
+
+.bg-input {
+  background-color: var(--input) !important;
+}
+
+.text-input-foreground {
+  color: var(--input-foreground) !important;
+}
+
+.bg-sidebar {
+  background-color: var(--sidebar) !important;
+}
+
+.text-sidebar-foreground {
+  color: var(--sidebar-foreground) !important;
+}
+
+/* Dark mode compatibility for existing components */
+
+.dark .bg-white {
+  background-color: #0f172a !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #020617 !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+
+.dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-700 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-black {
+  color: #f8fafc !important;
+}
+
+.dark .border-slate-200 {
+  border-color: #334155 !important;
+}
+
+.dark .border-slate-300 {
+  border-color: #475569 !important;
+}
+
+.dark .border-slate-400 {
+  border-color: #64748b !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  color: #f8fafc;
+  background-color: #0f172a;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Smooth theme transition */
+
+* {
+  transition-property:
+    background-color,
+    border-color,
+    color,
+    fill,
+    stroke;
+
+  transition-duration: 150ms;
+  transition-timing-function: ease;
 }

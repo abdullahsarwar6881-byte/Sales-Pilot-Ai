@@ -1,117 +1,492 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { GlobeAltIcon, DocumentTextIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { v4 as uuidv4 } from "uuid";
 
-export default function KnowledgeBase() {
-  const [urlInput, setUrlInput] = useState('');
+import KnowledgeStats from "@/components/knowledge/KnowledgeStats";
+import UploadCard from "@/components/knowledge/UploadCard";
+import WebsiteCard from "@/components/knowledge/WebsiteCard";
+import InstallCodeCard from "@/components/knowledge/InstallCodeCard";
+import DocumentList from "@/components/knowledge/DocumentList";
+
+export default function KnowledgePage() {
+  const supabase = createClient();
+
+  const [urlInput, setUrlInput] = useState("");
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [pages, setPages] = useState(0);
+  const [chunks, setChunks] = useState(0);
+  const [connected, setConnected] = useState(false);
+
+  // Profile ID used by the widget installation code
+  const [profileId, setProfileId] = useState("");
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
+
+  const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
 
-  const handleWebsiteSync = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!urlInput) return;
+  useEffect(() => {
+    loadKnowledge();
+  }, []);
+
+  // --------------------------------
+  // LOAD KNOWLEDGE
+  // --------------------------------
+
+  async function loadKnowledge() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    // IMPORTANT:
+    // Your profiles.id is the same as auth.users.id.
+    // Therefore the authenticated user's ID is the profile ID.
+    setProfileId(user.id);
+
+    const [
+      documentsData,
+      pagesData,
+      chunksData,
+      urlsData,
+    ] = await Promise.all([
+      supabase
+        .from("knowledge_documents")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", {
+          ascending: false,
+        }),
+
+      supabase
+        .from("knowledge_pages")
+        .select("*", {
+          count: "exact",
+          head: true,
+        })
+        .eq("user_id", user.id),
+
+      supabase
+        .from("knowledge_chunks")
+        .select("*", {
+          count: "exact",
+          head: true,
+        })
+        .eq("user_id", user.id),
+
+      supabase
+        .from("knowledge_urls")
+        .select("*")
+        .eq("user_id", user.id),
+    ]);
+
+    setDocuments(
+      documentsData.data || []
+    );
+
+    setPages(
+      pagesData.count || 0
+    );
+
+    setChunks(
+      chunksData.count || 0
+    );
+
+    setConnected(
+      (urlsData.data?.length || 0) > 0
+    );
+  }
+
+  // --------------------------------
+  // DELETE DOCUMENT
+  // --------------------------------
+
+  async function deleteDocument(
+    doc: any
+  ) {
+    const filePath =
+      doc.file_url?.split(
+        "/knowledge-files/"
+      )[1];
+
+    if (filePath) {
+      await supabase.storage
+        .from("knowledge-files")
+        .remove([filePath]);
+    }
+
+    await supabase
+      .from("knowledge_documents")
+      .delete()
+      .eq("id", doc.id);
+
+    await loadKnowledge();
+  }
+
+  // --------------------------------
+  // WEBSITE SYNC
+  // --------------------------------
+
+  async function handleWebsiteSync() {
+    if (!urlInput.trim()) return;
 
     setIsSyncing(true);
-    setSyncMessage('Connecting to website target paths...');
+
+    setSyncMessage(
+      "Creating sync job..."
+    );
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setIsSyncing(false);
+      return;
+    }
+
+    // --------------------------------
+    // CREATE CRAWL JOB
+    // --------------------------------
+
+    const {
+      data: crawlJob,
+      error: jobError,
+    } = await supabase
+      .from("crawl_jobs")
+      .insert({
+        user_id: user.id,
+        url: urlInput,
+        status: "crawling",
+      })
+      .select()
+      .single();
+
+    if (
+      jobError ||
+      !crawlJob
+    ) {
+      console.error(
+        "Crawl job error:",
+        jobError
+      );
+
+      setSyncMessage(
+        "Failed to create crawl job."
+      );
+
+      setIsSyncing(false);
+
+      return;
+    }
+
+    // --------------------------------
+    // SAVE WEBSITE
+    // --------------------------------
+
+    const {
+      data: knowledgeUrl,
+      error,
+    } = await supabase
+      .from("knowledge_urls")
+      .insert({
+        user_id: user.id,
+        url: urlInput,
+        status: "scanning",
+      })
+      .select()
+      .single();
+
+    if (
+      error ||
+      !knowledgeUrl
+    ) {
+      console.error(
+        "Knowledge URL error:",
+        error
+      );
+
+      setSyncMessage(
+        "Failed to save website."
+      );
+
+      setIsSyncing(false);
+
+      return;
+    }
+
+    setSyncMessage(
+      "Starting website crawler..."
+    );
+
+    // --------------------------------
+    // START CRAWLER API
+    // --------------------------------
 
     try {
-      const response = await fetch('/api/knowledge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput }),
-      });
+      const response =
+        await fetch(
+          "/api/crawl",
+          {
+            method: "POST",
 
-      const result = await response.json();
-      if (result.success) {
-        setSyncMessage('Website linked! AI is processing layout text rows inside your Supabase dashboard.');
-        setUrlInput('');
-      } else {
-        setSyncMessage('Error initializing tracking system pipeline.');
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              url: urlInput,
+
+              knowledgeUrlId:
+                knowledgeUrl.id,
+
+              crawlJobId:
+                crawlJob.id,
+            }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "Crawler failed."
+        );
       }
-    } catch (err) {
-      setSyncMessage('Network resolution error occurred.');
+
+      setSyncMessage(
+        `Website synced successfully! ${result.pagesProcessed} pages crawled.`
+      );
+
+      await loadKnowledge();
+    } catch (err: any) {
+      console.error(
+        "Website crawl error:",
+        err
+      );
+
+      setSyncMessage(
+        err.message ||
+          "Website crawl failed."
+      );
     } finally {
-      setTimeout(() => {
-        setIsSyncing(false);
-        setSyncMessage('');
-      }, 4000);
+      setIsSyncing(false);
     }
-  };
+  }
+
+  // --------------------------------
+  // FILE UPLOAD
+  // --------------------------------
+
+  async function handleFileUpload(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      e.target.files?.[0];
+
+    if (!file) return;
+
+    setUploading(true);
+
+    setUploadMessage("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setUploading(false);
+        return;
+      }
+
+      const uniqueName =
+        `${uuidv4()}-${file.name}`;
+
+      const filePath =
+        `${user.id}/${uniqueName}`;
+
+      // --------------------------------
+      // UPLOAD FILE
+      // --------------------------------
+
+      const {
+        error: uploadError,
+      } = await supabase.storage
+        .from("knowledge-files")
+        .upload(
+          filePath,
+          file
+        );
+
+      if (uploadError) {
+        console.error(
+          "Upload error:",
+          uploadError
+        );
+
+        setUploadMessage(
+          "Failed to upload document."
+        );
+
+        return;
+      }
+
+      // --------------------------------
+      // CREATE SIGNED URL
+      // --------------------------------
+
+      const {
+        data: signedUrl,
+        error:
+          signedUrlError,
+      } =
+        await supabase.storage
+          .from(
+            "knowledge-files"
+          )
+          .createSignedUrl(
+            filePath,
+            3600
+          );
+
+      if (signedUrlError) {
+        console.error(
+          "Signed URL error:",
+          signedUrlError
+        );
+
+        setUploadMessage(
+          "Failed to create document URL."
+        );
+
+        return;
+      }
+
+      // --------------------------------
+      // SAVE DOCUMENT
+      // --------------------------------
+
+      const {
+        error: documentError,
+      } = await supabase
+        .from(
+          "knowledge_documents"
+        )
+        .insert({
+          user_id: user.id,
+
+          file_name:
+            file.name,
+
+          file_type:
+            file.type,
+
+          file_url:
+            signedUrl?.signedUrl,
+
+          processing_status:
+            "processing",
+        });
+
+      if (documentError) {
+        console.error(
+          "Document database error:",
+          documentError
+        );
+
+        setUploadMessage(
+          "File uploaded but failed to save document."
+        );
+
+        return;
+      }
+
+      setUploadMessage(
+        "Document uploaded successfully."
+      );
+
+      await loadKnowledge();
+    } catch (err) {
+      console.error(
+        "File upload error:",
+        err
+      );
+
+      setUploadMessage(
+        "Document upload failed."
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // --------------------------------
+  // PAGE
+  // --------------------------------
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 bg-[#0F172A] text-slate-100 min-h-screen">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Knowledge Base</h1>
-        <p className="text-slate-400 mt-2">Train your Sales Pilot AI workforce on your unique operational content repositories.</p>
-      </div>
+    <>
+      <UploadCard
+        uploading={uploading}
+        uploadMessage={uploadMessage}
+        onUpload={handleFileUpload}
+      />
 
-      {/* Sync Web Module */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <h2 className="text-xl font-semibold text-white flex items-center gap-2 mb-4">
-          <GlobeAltIcon className="w-5 h-5 text-indigo-400" />
-          Sync Business Website
-        </h2>
-        <form onSubmit={handleWebsiteSync} className="flex gap-4">
-          <input
-            type="url"
-            required
-            placeholder="https://yourbusiness.com"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={isSyncing}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-3 rounded-xl transition-all shadow-lg disabled:opacity-50 flex items-center gap-2"
-          >
-            {isSyncing ? (
-              <>
-                <ArrowPathIcon className="w-5 h-5 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              'Sync Website'
-            )}
-          </button>
-        </form>
-        {syncMessage && (
-          <p className="mt-4 text-sm text-indigo-400 animate-pulse font-medium bg-indigo-950/30 p-3 rounded-lg border border-indigo-900/50">
+      <WebsiteCard
+        url={urlInput}
+        setUrl={setUrlInput}
+        syncing={isSyncing}
+        syncMessage={syncMessage}
+        onGenerate={
+          handleWebsiteSync
+        }
+      />
+
+      {isSyncing && (
+        <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="h-3 w-3 animate-pulse rounded-full bg-blue-600" />
+
+            <p className="font-semibold text-blue-700">
+              Website Sync in Progress
+            </p>
+          </div>
+
+          <p className="mt-2 text-sm text-slate-600">
+            Your website is currently
+            being crawled and processed.
+            This may take a few moments
+            depending on the size of your
+            website.
+          </p>
+
+          <p className="mt-3 text-sm font-medium text-slate-700">
             {syncMessage}
           </p>
-        )}
-      </div>
-
-      {/* Grid Layout Documentation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="w-12 h-12 bg-cyan-950 border border-cyan-800 rounded-xl flex items-center justify-center mb-4">
-              <DocumentTextIcon className="w-6 h-6 text-cyan-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">Upload Training Documents</h3>
-            <p className="text-slate-400 text-sm mt-1">Supports PDF, DOCX, TXT, and CSV catalog structures up to 25MB.</p>
-          </div>
-          <button type="button" className="mt-6 border border-slate-800 hover:bg-slate-800 text-slate-300 font-medium py-2.5 rounded-xl transition-colors w-full">
-            Browse System Files
-          </button>
         </div>
+      )}
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="w-12 h-12 bg-purple-950 border border-purple-800 rounded-xl flex items-center justify-center mb-4">
-              <GlobeAltIcon className="w-6 h-6 text-purple-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">Active Scanned Document Assets</h3>
-            <p className="text-slate-400 text-sm mt-1">View indexed links, update triggers, or clear training items in real-time.</p>
-          </div>
-          <div className="mt-6 flex gap-3 text-xs text-slate-400">
-            <span className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg">Sync Interval: Manual</span>
-            <span className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg">Default Language: English</span>
-          </div>
-        </div>
-      </div>
-    </div>
+      {/* Installation Code */}
+
+      <InstallCodeCard
+        websiteUrl={urlInput}
+        profileId={profileId}
+      />
+
+      {/* Documents */}
+
+      <DocumentList
+        documents={documents}
+        onDelete={deleteDocument}
+      />
+    </>
   );
 }

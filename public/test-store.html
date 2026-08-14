@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>Test Store — Sales Pilot</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      color: #111827;
+    }
+
+    .store-header {
+      background: #111827;
+      color: white;
+      padding: 24px 40px;
+    }
+
+    .store-header h1 {
+      margin: 0;
+    }
+
+    .store-content {
+      max-width: 1100px;
+      margin: 60px auto;
+      padding: 0 24px;
+    }
+
+    .product {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    .product h2 {
+      margin-top: 0;
+    }
+
+    .price {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+
+    button {
+      padding: 12px 20px;
+      border: 0;
+      border-radius: 10px;
+      background: #6366f1;
+      color: white;
+      cursor: pointer;
+      font-size: 15px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="store-header">
+    <h1>My Test Store</h1>
+    <p>Sales Pilot Widget Testing Store</p>
+  </header>
+
+  <main class="store-content">
+
+    <div class="product">
+
+      <h2>Premium Product</h2>
+
+      <p>
+        This is a fake Shopify-style store used
+        to test the Sales Pilot customer support
+        widget.
+      </p>
+
+      <div class="price">
+        $49.99
+      </div>
+
+      <button>
+        Add to Cart
+      </button>
+
+    </div>
+
+  </main>
+
+  <!-- SALES PILOT WIDGET -->
+
+  <script
+    src="/widget.js"
+    data-profile="3c321d7c-23e8-4101-9d30-1a2a8a0a37f9"
+    defer>
+  </script>
+
+</body>
+</html>

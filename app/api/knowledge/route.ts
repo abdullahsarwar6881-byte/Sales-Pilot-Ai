@@ -1,83 +1,258 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from "next/server";
+import * as cheerio from "cheerio";
+import { createClient } from "@supabase/supabase-js";
 
-// Read environment variables
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Validate environment variables
+
+
 if (!supabaseUrl) {
   throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL in your .env.local file."
+    "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local"
   );
 }
+
 
 if (!supabaseKey) {
   throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) in your .env.local file."
+    "Missing Supabase key in .env.local"
   );
 }
 
-// Create Supabase client
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+
+const supabase = createClient(
+  supabaseUrl,
+  supabaseKey
+);
+
+
 
 export async function POST(request: Request) {
+
   try {
-    const { url } = await request.json();
 
-    if (!url) {
+
+    const {
+      url,
+      knowledgeUrlId,
+      userId
+
+    } = await request.json();
+
+
+
+    if (!url || !knowledgeUrlId || !userId) {
+
       return NextResponse.json(
-        { error: "URL is required" },
-        { status: 400 }
-      );
-    }
-
-    // Insert a new knowledge base record
-    const { data: insertedItem, error: insertError } = await supabase
-      .from("knowledge_base")
-      .insert([
         {
-          page_url: url,
-          sync_status: "Scanning",
-          page_content: "AI is reading contextual data...",
+          error:
+            "URL, knowledgeUrlId and userId are required"
         },
-      ])
-      .select()
-      .single();
+        {
+          status: 400
+        }
+      );
 
-    if (insertError) {
-      throw insertError;
     }
 
-    // Simulate scraping process
-    setTimeout(async () => {
-      const simulatedText = `Extracted layout text from ${url}. Product catalog, pricing matrix, and FAQ guidelines processed successfully for Sales Pilot context parameters.`;
 
-      await supabase
-        .from("knowledge_base")
-        .update({
-          sync_status: "Completed",
-          page_content: simulatedText,
-          last_synchronized: new Date().toISOString(),
-        })
-        .eq("id", insertedItem.id);
-    }, 5000);
+
+
+
+    // Fetch website
+
+    const response = await fetch(url);
+
+
+
+    if (!response.ok) {
+
+      return NextResponse.json(
+        {
+          error:
+            "Could not fetch website"
+        },
+        {
+          status: 400
+        }
+      );
+
+    }
+
+
+
+    const html = await response.text();
+
+
+
+
+    // Parse HTML
+
+    const $ = cheerio.load(html);
+
+
+
+    const title =
+      $("title").text() || "Untitled page";
+
+
+
+    $("script").remove();
+
+    $("style").remove();
+
+
+
+
+    const content =
+      $("body")
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+
+
+
+
+
+
+
+    // Save crawled page
+
+    const {
+      error: pageError
+
+    } = await supabase
+
+      .from("knowledge_pages")
+
+      .insert({
+
+        user_id: userId,
+
+        knowledge_url_id:
+          knowledgeUrlId,
+
+        page_url:
+          url,
+
+        title,
+
+        content,
+
+      });
+
+
+
+
+
+
+    if (pageError) {
+
+      console.log(pageError);
+
+
+      return NextResponse.json(
+        {
+          error:
+            pageError.message
+        },
+        {
+          status: 500
+        }
+      );
+
+    }
+
+
+
+
+
+
+    // Update URL status
+
+    const {
+      error:updateError
+
+    } = await supabase
+
+      .from("knowledge_urls")
+
+      .update({
+
+        status:
+          "completed"
+
+      })
+
+      .eq(
+        "id",
+        knowledgeUrlId
+      );
+
+
+
+
+
+
+    if(updateError){
+
+      console.log(updateError);
+
+    }
+
+
+
+
+
 
     return NextResponse.json({
-      success: true,
-      message: "Sync sequence initiated successfully.",
+
+      success:true,
+
+      message:
+        "Website crawled successfully"
+
     });
-  } catch (error: any) {
-    console.error(error);
+
+
+
+
+
+
+  } catch(error:any){
+
+
+    console.log(error);
+
+
 
     return NextResponse.json(
+
       {
-        success: false,
-        error: error.message || "Unknown server error",
+
+        success:false,
+
+        error:
+          error.message ||
+          "Crawler failed"
+
       },
-      { status: 500 }
+
+      {
+
+        status:500
+
+      }
+
     );
+
+
   }
+
 }
