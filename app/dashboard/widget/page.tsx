@@ -108,14 +108,15 @@ export default function WidgetStudioPage() {
       const {
         data,
         error,
-      } = await supabase
-        .from("widget_settings")
-        .select("*")
-        .eq(
-          "user_id",
-          user.id
-        )
-        .maybeSingle();
+      } =
+        await supabase
+          .from("widget_settings")
+          .select("*")
+          .eq(
+            "user_id",
+            user.id
+          )
+          .maybeSingle();
 
       if (error) {
         console.error(
@@ -318,17 +319,18 @@ export default function WidgetStudioPage() {
       const {
         data,
         error,
-      } = await supabase
-        .from("widget_settings")
-        .upsert(
-          widgetData,
-          {
-            onConflict:
-              "user_id",
-          }
-        )
-        .select()
-        .single();
+      } =
+        await supabase
+          .from("widget_settings")
+          .upsert(
+            widgetData,
+            {
+              onConflict:
+                "user_id",
+            }
+          )
+          .select()
+          .single();
 
       // -------------------------------------------------
       // HANDLE ERROR
@@ -364,8 +366,9 @@ export default function WidgetStudioPage() {
         data
       );
 
-      // Make sure UI uses exactly
-      // what was saved.
+      // -------------------------------------------------
+      // APPLY SAVED VALUES
+      // -------------------------------------------------
 
       setAiName(
         data.ai_name ??
@@ -492,28 +495,61 @@ export default function WidgetStudioPage() {
         "
       >
         {/* ===============================================
-            LIVE PREVIEW
+            REAL LIVE PREVIEW
         =============================================== */}
 
         <div className="min-w-0">
           <WidgetPreview
+            profileId={
+              profileId
+            }
+
             aiName={
               aiName
             }
+
             welcomeMessage={
               welcomeMessage
             }
+
             brandColor={
               brandColor
             }
+
             theme={
               theme
             }
+
             size={
               size
             }
+
             radius={
               radius
+            }
+
+            position={
+              position
+            }
+
+            autoOpen={
+              true
+            }
+
+            showTypingIndicator={
+              true
+            }
+
+            showAiAvatar={
+              true
+            }
+
+            enableAnimations={
+              true
+            }
+
+            showPoweredBy={
+              true
             }
           />
         </div>
@@ -532,18 +568,23 @@ export default function WidgetStudioPage() {
             aiName={
               aiName
             }
+
             setAiName={
               setAiName
             }
+
             welcomeMessage={
               welcomeMessage
             }
+
             setWelcomeMessage={
               setWelcomeMessage
             }
+
             brandColor={
               brandColor
             }
+
             setBrandColor={
               setBrandColor
             }
@@ -553,24 +594,31 @@ export default function WidgetStudioPage() {
             position={
               position
             }
+
             setPosition={
               setPosition
             }
+
             theme={
               theme
             }
+
             setTheme={
               setTheme
             }
+
             size={
               size
             }
+
             setSize={
               setSize
             }
+
             radius={
               radius
             }
+
             setRadius={
               setRadius
             }

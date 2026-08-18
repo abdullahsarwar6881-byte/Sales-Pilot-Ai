@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import ThemeProvider from "@/components/theme/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Sales Pilot | Your AI Sales & Customer Support Employee",
@@ -12,20 +11,25 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const shopifyApiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY;
+  const shopifyApiKey =
+    process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || "";
 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Shopify App Bridge */}
-        {shopifyApiKey && (
-          <meta name="shopify-api-key" content={shopifyApiKey} />
-        )}
+        <meta
+          name="shopify-api-key"
+          content={shopifyApiKey}
+        />
 
-        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
         {/* Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+        />
 
         <link
           rel="preconnect"
@@ -50,7 +54,7 @@ export default function RootLayout({
           duration-200
         "
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        {children}
       </body>
     </html>
   );

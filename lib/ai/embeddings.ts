@@ -41,33 +41,37 @@ export async function createEmbedding(
     attempt <= MAX_RETRIES;
     attempt++
   ) {
-    const controller = new AbortController();
+    const controller =
+      new AbortController();
 
     const timeout = setTimeout(() => {
       controller.abort();
     }, TIMEOUT);
 
-    const start = performance.now();
+    const start =
+      performance.now();
 
     try {
-      const response = await fetch(
-        OLLAMA_URL,
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          OLLAMA_URL,
+          {
+            method: "POST",
 
-          signal: controller.signal,
+            signal:
+              controller.signal,
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-          body: JSON.stringify({
-            model: MODEL,
-            prompt,
-          }),
-        }
-      );
+            body: JSON.stringify({
+              model: MODEL,
+              prompt,
+            }),
+          }
+        );
 
       clearTimeout(timeout);
 
@@ -82,7 +86,9 @@ export async function createEmbedding(
 
       if (
         !data.embedding ||
-        !Array.isArray(data.embedding)
+        !Array.isArray(
+          data.embedding
+        )
       ) {
         throw new Error(
           "Invalid embedding returned from Ollama."
@@ -91,7 +97,8 @@ export async function createEmbedding(
 
       const duration =
         Math.round(
-          performance.now() - start
+          performance.now() -
+            start
         );
 
       console.log(
@@ -127,12 +134,15 @@ export async function createEmbedding(
 /**
  * Create multiple embeddings concurrently.
  *
- * Default concurrency is 3 because Ollama
- * is currently running locally.
+ * Default concurrency is 6.
+ *
+ * This increases throughput while keeping
+ * the number of simultaneous Ollama requests
+ * controlled.
  */
 export async function createEmbeddings(
   texts: string[],
-  concurrency = 3
+  concurrency = 6
 ): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
@@ -145,7 +155,8 @@ export async function createEmbeddings(
 
   async function worker() {
     while (true) {
-      const index = currentIndex++;
+      const index =
+        currentIndex++;
 
       if (
         index >= texts.length
@@ -154,7 +165,9 @@ export async function createEmbeddings(
       }
 
       console.log(
-        `Creating embedding ${index + 1}/${texts.length}`
+        `Creating embedding ${
+          index + 1
+        }/${texts.length}`
       );
 
       results[index] =

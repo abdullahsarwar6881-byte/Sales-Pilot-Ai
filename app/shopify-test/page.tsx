@@ -1,151 +1,86 @@
 "use client";
 
-import { useState } from "react";
-
-type Product = {
-  id: string;
-  title: string;
-  handle: string;
-  description: string;
-  status: string;
-  variants: {
-    nodes: {
-      id: string;
-      title: string;
-      price: string;
-      inventoryQuantity: number;
-    }[];
-  };
-};
+import { useEffect, useState } from "react";
 
 export default function ShopifyTestPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [clickCount, setClickCount] = useState(0);
 
-  async function testShopify() {
-    setLoading(true);
-    setError("");
+  useEffect(() => {
+    console.log("SALES PILOT CLIENT JAVASCRIPT IS RUNNING");
+    setMounted(true);
+  }, []);
 
-    try {
-      const response = await fetch("/api/shopify/products", {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      });
+  function handleClick() {
+    console.log("SHOPIFY TEST BUTTON CLICKED");
 
-      const data = await response.json();
-
-      console.log("Shopify response:", data);
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Shopify request failed");
-      }
-
-      setProducts(data.products?.nodes ?? []);
-    } catch (error) {
-      console.error(error);
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to connect to Shopify"
-      );
-    } finally {
-      setLoading(false);
-    }
+    setClickCount((current) => current + 1);
   }
 
   return (
     <main className="min-h-screen bg-white p-10 text-gray-900">
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-4xl font-bold">
           Shopify Connection Test
         </h1>
 
-        <p className="mt-2 text-gray-600">
-          Test the connection between Sales Pilot and Shopify.
+        <p className="mt-3 text-lg text-gray-600">
+          We're testing the Sales Pilot client application.
         </p>
 
+        {/* Client status */}
+        <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-6">
+          <h2 className="text-lg font-bold">
+            Client Status
+          </h2>
+
+          <p className="mt-2 text-xl">
+            {mounted
+              ? "✅ Client JavaScript is running"
+              : "⏳ Waiting for client JavaScript..."}
+          </p>
+        </div>
+
+        {/* Button */}
         <button
-          onClick={testShopify}
-          disabled={loading}
-          className="mt-6 rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+          type="button"
+          onClick={handleClick}
+          className="mt-8 rounded-xl bg-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-md transition hover:bg-purple-700 active:scale-95"
         >
-          {loading
-            ? "Connecting to Shopify..."
-            : "Test Shopify Connection"}
+          Test Shopify Connection
         </button>
 
-        {error && (
-          <div className="mt-6 rounded-lg border border-red-300 bg-red-50 p-4 text-red-700">
-            <strong>Shopify Error:</strong>
+        {/* Click status */}
+        <div className="mt-8 rounded-xl border border-gray-200 p-6">
+          <h2 className="text-lg font-bold">
+            Button Status
+          </h2>
 
-            <p className="mt-1">{error}</p>
-          </div>
-        )}
+          <p className="mt-2 text-xl">
+            Click count: {clickCount}
+          </p>
 
-        {products.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold">
-              Shopify Products
-            </h2>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {products.map((product) => (
-                <div
-                  key={product.id}
-                  className="rounded-xl border border-gray-200 p-5 shadow-sm"
-                >
-                  <h3 className="text-lg font-semibold">
-                    {product.title}
-                  </h3>
-
-                  <p className="mt-2 text-sm text-gray-500">
-                    Status: {product.status}
-                  </p>
-
-                  <p className="mt-2 text-sm text-gray-500">
-                    Handle: {product.handle}
-                  </p>
-
-                  <div className="mt-4">
-                    <p className="font-medium">
-                      Variants
-                    </p>
-
-                    {product.variants.nodes.map((variant) => (
-                      <div
-                        key={variant.id}
-                        className="mt-2 rounded-lg bg-gray-50 p-3"
-                      >
-                        <p>{variant.title}</p>
-
-                        <p className="text-sm text-gray-600">
-                          Price: ${variant.price}
-                        </p>
-
-                        <p className="text-sm text-gray-600">
-                          Inventory:{" "}
-                          {variant.inventoryQuantity}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!loading &&
-          !error &&
-          products.length === 0 && (
-            <div className="mt-8 rounded-lg border border-gray-200 p-6 text-gray-500">
-              No products loaded yet. Click the button above.
-            </div>
+          {clickCount > 0 && (
+            <p className="mt-3 font-semibold text-green-600">
+              ✅ React click handler is working.
+            </p>
           )}
+        </div>
+
+        {/* Debug information */}
+        <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-6">
+          <h2 className="font-bold">
+            What we are testing
+          </h2>
+
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li>Next.js page rendering</li>
+            <li>React client hydration</li>
+            <li>React state</li>
+            <li>Button click handler</li>
+            <li>Shopify authentication comes AFTER this test</li>
+          </ul>
+        </div>
       </div>
     </main>
   );

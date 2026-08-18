@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createEmbeddings } from "@/lib/ai/embeddings";
 import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
 import { classifyContent } from "@/lib/ai/classifyContent";
+import { detectPageType } from "@/lib/crawler/detectPageType";
 import { closeBrowser } from "@/lib/browser/browser";
 
 function normalizeUrl(url: string) {
@@ -260,21 +261,50 @@ export async function POST(
       }
 
       // --------------------------------
-      // AI CLASSIFICATION
+      // FAST PAGE TYPE DETECTION
       // --------------------------------
 
       console.log(
-        "Classifying page..."
+        "Detecting page type..."
       );
 
       const classificationStart =
         Date.now();
 
       let pageType =
-        await classifyContent(
-          crawledPage.title,
-          crawledPage.content
+        detectPageType(
+          crawledPage.url,
+          crawledPage.title
         );
+
+      // --------------------------------
+      // AI CLASSIFICATION FALLBACK
+      // --------------------------------
+
+      if (pageType === "page") {
+        console.log(
+          "Fast detector could not determine page type."
+        );
+
+        console.log(
+          "Using AI classifier..."
+        );
+
+        pageType =
+          await classifyContent(
+            crawledPage.title,
+            crawledPage.content
+          );
+
+        console.log(
+          "AI Page Type:",
+          pageType
+        );
+      } else {
+        console.log(
+          `Fast page type detected: ${pageType}`
+        );
+      }
 
       const classificationDuration =
         (Date.now() -
@@ -293,11 +323,6 @@ export async function POST(
       if (!pageType) {
         pageType = "other";
       }
-
-      console.log(
-        "AI Page Type:",
-        pageType
-      );
 
       // --------------------------------
       // PRODUCT INFORMATION

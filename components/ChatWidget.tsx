@@ -16,9 +16,9 @@ import {
   User,
 } from "lucide-react";
 
-// ========================================
+// =====================================================
 // PROPS
-// ========================================
+// =====================================================
 
 interface Props {
   profileId: string;
@@ -36,14 +36,9 @@ interface Props {
 
   size?: "Small" | "Medium" | "Large";
 
-  radius?:
-    | "Square"
-    | "Rounded"
-    | "Pill";
+  radius?: "Square" | "Rounded" | "Pill";
 
-  position?:
-    | "Bottom Right"
-    | "Bottom Left";
+  position?: "Bottom Right" | "Bottom Left";
 
   // Behavior
   autoOpen?: boolean;
@@ -63,9 +58,9 @@ interface Props {
   showPoweredBy?: boolean;
 }
 
-// ========================================
-// MESSAGE TYPES
-// ========================================
+// =====================================================
+// MESSAGE TYPE
+// =====================================================
 
 interface Message {
   id: string;
@@ -77,23 +72,9 @@ interface Message {
   timestamp: Date;
 }
 
-// ========================================
-// PRODUCT TYPE
-// ========================================
-
-interface Product {
-  name: string;
-
-  price?: string;
-
-  description?: string;
-
-  url?: string;
-}
-
-// ========================================
+// =====================================================
 // COMPONENT
-// ========================================
+// =====================================================
 
 export default function ChatWidget({
   profileId,
@@ -131,20 +112,17 @@ export default function ChatWidget({
 
   showPoweredBy = true,
 }: Props) {
-  // ======================================
+  // ===================================================
   // STATE
-  // ======================================
+  // ===================================================
 
-  const [open, setOpen] =
-    useState(
-      preview || autoOpen
-    );
+  const [open, setOpen] = useState(
+    preview || autoOpen
+  );
 
-  const [message, setMessage] =
-    useState("");
+  const [message, setMessage] = useState("");
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [visitorName, setVisitorName] =
     useState("");
@@ -155,29 +133,27 @@ export default function ChatWidget({
   const [visitorSessionId, setVisitorSessionId] =
     useState("");
 
-  const [started, setStarted] =
-    useState(
-      !collectVisitorName &&
-        !collectVisitorEmail
-    );
+  const [started, setStarted] = useState(
+    !collectVisitorName &&
+      !collectVisitorEmail
+  );
 
-  // ======================================
+  // Used to prevent hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+
+  // ===================================================
   // REFS
-  // ======================================
+  // ===================================================
 
   const messagesEndRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
+    useRef<HTMLDivElement | null>(null);
 
   const inputRef =
-    useRef<HTMLInputElement | null>(
-      null
-    );
+    useRef<HTMLInputElement | null>(null);
 
-  // ======================================
+  // ===================================================
   // MESSAGE STATE
-  // ======================================
+  // ===================================================
 
   const [messages, setMessages] =
     useState<Message[]>([
@@ -188,19 +164,38 @@ export default function ChatWidget({
 
         content: welcomeMessage,
 
-        timestamp: new Date(),
+        // IMPORTANT:
+        // Fixed date prevents SSR/client hydration
+        // mismatch caused by new Date().
+        timestamp: new Date(0),
       },
     ]);
 
-  // ======================================
-  // LOAD SESSION
-  // ======================================
+  // ===================================================
+  // MOUNT
+  // ===================================================
 
   useEffect(() => {
-    if (
-      typeof window ===
-      "undefined"
-    ) {
+    setMounted(true);
+
+    setMessages((previous) =>
+      previous.map((item) =>
+        item.id === "welcome"
+          ? {
+              ...item,
+              timestamp: new Date(),
+            }
+          : item
+      )
+    );
+  }, []);
+
+  // ===================================================
+  // LOAD VISITOR SESSION
+  // ===================================================
+
+  useEffect(() => {
+    if (!mounted || !profileId) {
       return;
     }
 
@@ -208,39 +203,33 @@ export default function ChatWidget({
       `sales-pilot-session-${profileId}`;
 
     const existingSession =
-      localStorage.getItem(
-        storageKey
-      );
+      localStorage.getItem(storageKey);
 
     if (existingSession) {
-      setVisitorSessionId(
-        existingSession
-      );
+      setVisitorSessionId(existingSession);
     }
-  }, [profileId]);
+  }, [profileId, mounted]);
 
-  // ======================================
+  // ===================================================
   // AUTO SCROLL
-  // ======================================
+  // ===================================================
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView(
-      {
-        behavior:
-          enableAnimations
-            ? "smooth"
-            : "auto",
-      }
-    );
+    messagesEndRef.current?.scrollIntoView({
+      behavior:
+        enableAnimations
+          ? "smooth"
+          : "auto",
+    });
   }, [
     messages,
     loading,
     enableAnimations,
   ]);
 
-  // ======================================
+  // ===================================================
   // FOCUS INPUT
-  // ======================================
+  // ===================================================
 
   useEffect(() => {
     if (
@@ -248,9 +237,11 @@ export default function ChatWidget({
       started &&
       !loading
     ) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [
     open,
@@ -258,20 +249,20 @@ export default function ChatWidget({
     loading,
   ]);
 
-  // ======================================
+  // ===================================================
   // SIZE
-  // ======================================
+  // ===================================================
 
   const sizeClass =
     size === "Small"
-      ? "w-[340px] h-[500px]"
+      ? "h-[500px] w-[340px]"
       : size === "Large"
-      ? "w-[430px] h-[680px]"
-      : "w-[390px] h-[600px]";
+      ? "h-[680px] w-[430px]"
+      : "h-[600px] w-[390px]";
 
-  // ======================================
+  // ===================================================
   // RADIUS
-  // ======================================
+  // ===================================================
 
   const radiusClass =
     radius === "Square"
@@ -280,18 +271,18 @@ export default function ChatWidget({
       ? "rounded-[32px]"
       : "rounded-[24px]";
 
-  // ======================================
+  // ===================================================
   // POSITION
-  // ======================================
+  // ===================================================
 
   const positionClass =
     position === "Bottom Left"
       ? "left-6"
       : "right-6";
 
-  // ======================================
+  // ===================================================
   // THEME
-  // ======================================
+  // ===================================================
 
   const isDark =
     theme === "Dark";
@@ -301,14 +292,9 @@ export default function ChatWidget({
       ? "bg-slate-950 text-white"
       : "bg-white text-slate-900";
 
-  const messagesBackground =
-    isDark
-      ? "bg-slate-900"
-      : "bg-slate-50";
-
-  // ======================================
+  // ===================================================
   // START CONVERSATION
-  // ======================================
+  // ===================================================
 
   function startConversation() {
     if (
@@ -332,43 +318,50 @@ export default function ChatWidget({
     }, 100);
   }
 
-  // ======================================
+  // ===================================================
   // FORMAT TIME
-  // ======================================
+  // ===================================================
 
-  function formatTime(
-    date: Date
-  ) {
-    return date.toLocaleTimeString(
-      [],
-      {
-        hour: "numeric",
-        minute: "2-digit",
-      }
-    );
+  function formatTime(date: Date) {
+    // Don't render dynamic browser time before
+    // hydration has completed.
+    if (!mounted) {
+      return "";
+    }
+
+    return date.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
   }
 
-  // ======================================
+  // ===================================================
   // PLAY SOUND
-  // ======================================
+  // ===================================================
 
   function playNotificationSound() {
     if (
       !soundNotifications ||
-      typeof window ===
-        "undefined"
+      typeof window === "undefined"
     ) {
       return;
     }
 
     try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (
+          window as typeof window & {
+            webkitAudioContext?: typeof AudioContext;
+          }
+        ).webkitAudioContext;
+
+      if (!AudioContextClass) {
+        return;
+      }
+
       const audioContext =
-        new (
-          window.AudioContext ||
-          (
-            window as any
-          ).webkitAudioContext
-        )();
+        new AudioContextClass();
 
       const oscillator =
         audioContext.createOscillator();
@@ -376,18 +369,13 @@ export default function ChatWidget({
       const gain =
         audioContext.createGain();
 
-      oscillator.frequency.value =
-        700;
+      oscillator.frequency.value = 700;
 
-      oscillator.type =
-        "sine";
+      oscillator.type = "sine";
 
-      gain.gain.value =
-        0.04;
+      gain.gain.value = 0.04;
 
-      oscillator.connect(
-        gain
-      );
+      oscillator.connect(gain);
 
       gain.connect(
         audioContext.destination
@@ -396,17 +384,16 @@ export default function ChatWidget({
       oscillator.start();
 
       oscillator.stop(
-        audioContext.currentTime +
-          0.08
+        audioContext.currentTime + 0.08
       );
     } catch {
-      // Ignore audio errors.
+      // Ignore sound errors.
     }
   }
 
-  // ========================================
+  // ===================================================
   // SEND MESSAGE
-  // ========================================
+  // ===================================================
 
   async function sendMessage() {
     if (
@@ -416,102 +403,170 @@ export default function ChatWidget({
       return;
     }
 
+    if (!profileId) {
+      console.error(
+        "ChatWidget: profileId is missing."
+      );
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `error-${Date.now()}`,
+
+          sender: "ai",
+
+          content:
+            "This chat widget is not connected to a Sales Pilot account.",
+
+          timestamp: new Date(),
+        },
+      ]);
+
+      return;
+    }
+
     const userMessage =
       message.trim();
 
-    const customerMessage: Message =
-      {
-        id:
-          `customer-${Date.now()}`,
+    // Save current conversation history
+    // before adding the new customer message.
+    const historyForApi =
+      messages.map((msg) => ({
+        sender: msg.sender,
+        content: msg.content,
+      }));
 
-        sender:
-          "customer",
+    const customerMessage: Message = {
+      id:
+        `customer-${Date.now()}`,
 
-        content:
-          userMessage,
+      sender: "customer",
 
-        timestamp:
-          new Date(),
-      };
+      content: userMessage,
 
-    setMessages(
-      (prev) => [
-        ...prev,
-        customerMessage,
-      ]
-    );
+      timestamp: new Date(),
+    };
+
+    setMessages((previous) => [
+      ...previous,
+      customerMessage,
+    ]);
 
     setMessage("");
 
     setLoading(true);
 
     try {
-      // ------------------------------------
-      // SEND TO API
-      // ------------------------------------
+      console.log(
+        "================================="
+      );
 
-      const response =
-        await fetch(
-          "/api/chat",
-          {
-            method: "POST",
+      console.log(
+        "SALES PILOT CHAT"
+      );
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+      console.log(
+        "PROFILE:",
+        profileId
+      );
 
-            body:
-              JSON.stringify({
-                message:
-                  userMessage,
+      console.log(
+        "SESSION:",
+        visitorSessionId
+      );
 
-                profileId,
+      console.log(
+        "MESSAGE:",
+        userMessage
+      );
 
-                visitorSessionId,
+      console.log(
+        "================================="
+      );
 
-                customerName:
-                  visitorName ||
-                  "Website Visitor",
+      // =================================================
+      // API REQUEST
+      // =================================================
 
-                customerEmail:
-                  visitorEmail ||
-                  null,
+      const response = await fetch(
+        "/api/chat",
+        {
+          method: "POST",
 
-                // Send conversation
-                // history as well.
-                conversationHistory:
-                  messages.map(
-                    (msg) => ({
-                      sender:
-                        msg.sender,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-                      content:
-                        msg.content,
-                    })
-                  ),
-              }),
-          }
-        );
+          body: JSON.stringify({
+            message:
+              userMessage,
 
-      const data =
-        await response.json();
+            profileId,
+
+            visitorSessionId:
+              visitorSessionId ||
+              null,
+
+            customerName:
+              visitorName.trim() ||
+              "Website Visitor",
+
+            customerEmail:
+              visitorEmail.trim() ||
+              null,
+
+            conversationHistory:
+              historyForApi,
+          }),
+        }
+      );
+
+      // =================================================
+      // READ RESPONSE
+      // =================================================
+
+      let data: any = null;
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        data = null;
+      }
+
+      console.log(
+        "CHAT API STATUS:",
+        response.status
+      );
+
+      console.log(
+        "CHAT API RESPONSE:",
+        data
+      );
+
+      // =================================================
+      // API ERROR
+      // =================================================
 
       if (!response.ok) {
+        const errorMessage =
+          data?.error ||
+          data?.message ||
+          `Chat request failed (${response.status})`;
+
         throw new Error(
-          data.error ||
-            "Chat failed"
+          errorMessage
         );
       }
 
-      // ------------------------------------
+      // =================================================
       // SAVE SESSION
-      // ------------------------------------
+      // =================================================
 
       if (
-        data.visitorSessionId &&
-        typeof window !==
-          "undefined"
+        data?.visitorSessionId &&
+        typeof window !== "undefined"
       ) {
         const storageKey =
           `sales-pilot-session-${profileId}`;
@@ -526,66 +581,142 @@ export default function ChatWidget({
         );
       }
 
-      // ------------------------------------
+      // =================================================
       // AI RESPONSE
-      // ------------------------------------
+      // =================================================
 
-      const aiMessage: Message =
-        {
-          id:
-            `ai-${Date.now()}`,
+      const aiResponse =
+        String(
+          data?.response ||
+            "I'm sorry, I couldn't find an answer."
+        ).trim();
 
-          sender:
-            "ai",
+      const aiMessage: Message = {
+        id:
+          `ai-${Date.now()}`,
 
-          content:
-            data.response ||
-            "I'm sorry, I couldn't find an answer.",
+        sender: "ai",
 
-          timestamp:
-            new Date(),
-        };
+        content: aiResponse,
 
-      setMessages(
-        (prev) => [
-          ...prev,
-          aiMessage,
-        ]
-      );
+        timestamp: new Date(),
+      };
+
+      setMessages((previous) => [
+        ...previous,
+        aiMessage,
+      ]);
 
       playNotificationSound();
-    } catch (error: any) {
+
+      console.log(
+        "AI RESPONSE:",
+        aiResponse
+      );
+    } catch (error: unknown) {
+      console.error(
+        "================================="
+      );
+
       console.error(
         "CHAT ERROR:",
         error
       );
 
-      setMessages(
-        (prev) => [
-          ...prev,
-          {
-            id:
-              `error-${Date.now()}`,
-
-            sender:
-              "ai",
-
-            content:
-              "I'm sorry, something went wrong. Please try again.",
-
-            timestamp:
-              new Date(),
-          },
-        ]
+      console.error(
+        "================================="
       );
+
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong.";
+
+      // =================================================
+      // FRIENDLY ERROR MESSAGE
+      // =================================================
+
+      let userFacingError =
+        "I'm sorry, something went wrong. Please try again.";
+
+      // Billing error
+      if (
+        errorMessage
+          .toLowerCase()
+          .includes("billing") ||
+        errorMessage
+          .toLowerCase()
+          .includes("subscription") ||
+        errorMessage
+          .toLowerCase()
+          .includes("active billing")
+      ) {
+        userFacingError =
+          "This Sales Pilot account does not have an active billing subscription. Please activate a plan before using the AI support agent.";
+      }
+
+      // Profile error
+      else if (
+        errorMessage
+          .toLowerCase()
+          .includes("profile")
+      ) {
+        userFacingError =
+          "This chat widget is not connected to a valid Sales Pilot account.";
+      }
+
+      // Knowledge error
+      else if (
+        errorMessage
+          .toLowerCase()
+          .includes("knowledge")
+      ) {
+        userFacingError =
+          "I couldn't access the store's knowledge base right now. Please try again.";
+      }
+
+      // Timeout
+      else if (
+        errorMessage
+          .toLowerCase()
+          .includes("timeout") ||
+        errorMessage
+          .toLowerCase()
+          .includes("timed out")
+      ) {
+        userFacingError =
+          "The AI is taking longer than expected. Please try again.";
+      }
+
+      // Development mode:
+      // Show actual error in console only.
+      console.error(
+        "BACKEND ERROR:",
+        errorMessage
+      );
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id:
+            `error-${Date.now()}`,
+
+          sender: "ai",
+
+          content:
+            userFacingError,
+
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   }
 
-  // ========================================
-  // HANDLE ENTER
-  // ========================================
+  // ===================================================
+  // ENTER KEY
+  // ===================================================
 
   function handleKeyDown(
     e: React.KeyboardEvent<HTMLInputElement>
@@ -599,9 +730,9 @@ export default function ChatWidget({
     }
   }
 
-  // ========================================
+  // ===================================================
   // PARSE PRODUCT RESPONSE
-  // ========================================
+  // ===================================================
 
   function parseProductResponse(
     content: string
@@ -610,9 +741,7 @@ export default function ChatWidget({
       /(https?:\/\/[^\s]+)/gi;
 
     const urls =
-      content.match(
-        urlRegex
-      ) || [];
+      content.match(urlRegex) || [];
 
     return {
       urls,
@@ -620,9 +749,9 @@ export default function ChatWidget({
     };
   }
 
-  // ========================================
+  // ===================================================
   // RENDER MESSAGE
-  // ========================================
+  // ===================================================
 
   function renderMessageContent(
     msg: Message
@@ -635,13 +764,12 @@ export default function ChatWidget({
     let text =
       parsed.content;
 
-    // --------------------------------------
-    // Convert product URL into clickable
-    // button/link
-    // --------------------------------------
-
     const url =
       parsed.urls[0];
+
+    // =================================================
+    // REMOVE URL FROM MESSAGE TEXT
+    // =================================================
 
     if (url) {
       text =
@@ -660,9 +788,9 @@ export default function ChatWidget({
         text.trim();
     }
 
-    // --------------------------------------
-    // Remove placeholder URL
-    // --------------------------------------
+    // =================================================
+    // REMOVE PLACEHOLDER
+    // =================================================
 
     text =
       text.replace(
@@ -672,9 +800,11 @@ export default function ChatWidget({
 
     return (
       <div className="space-y-3">
-        <p className="whitespace-pre-wrap break-words leading-6">
-          {text}
-        </p>
+        {text && (
+          <p className="whitespace-pre-wrap break-words leading-6">
+            {text}
+          </p>
+        )}
 
         {url && (
           <a
@@ -691,6 +821,7 @@ export default function ChatWidget({
             className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
           >
             View Product
+
             <ExternalLink
               size={15}
             />
@@ -700,15 +831,15 @@ export default function ChatWidget({
     );
   }
 
-  // ========================================
+  // ===================================================
   // RENDER
-  // ========================================
+  // ===================================================
 
   return (
     <>
-      {/* ================================== */}
-      {/* CHAT WINDOW */}
-      {/* ================================== */}
+      {/* =================================================
+          CHAT WINDOW
+          ================================================= */}
 
       {open && (
         <div
@@ -733,9 +864,9 @@ export default function ChatWidget({
             }
           `}
         >
-          {/* ================================= */}
-          {/* HEADER */}
-          {/* ================================= */}
+          {/* =================================================
+              HEADER
+              ================================================= */}
 
           <div
             style={{
@@ -749,12 +880,8 @@ export default function ChatWidget({
 
               <div className="relative">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 backdrop-blur">
-                  <Bot
-                    size={22}
-                  />
+                  <Bot size={22} />
                 </div>
-
-                {/* Online dot */}
 
                 <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
               </div>
@@ -787,16 +914,14 @@ export default function ChatWidget({
                 className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/15"
                 aria-label="Close chat"
               >
-                <X
-                  size={20}
-                />
+                <X size={20} />
               </button>
             )}
           </div>
 
-          {/* ================================= */}
-          {/* WELCOME / START FORM */}
-          {/* ================================= */}
+          {/* =================================================
+              START FORM
+              ================================================= */}
 
           {!started ? (
             <div
@@ -823,9 +948,7 @@ export default function ChatWidget({
                   }}
                   className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl"
                 >
-                  <Bot
-                    size={25}
-                  />
+                  <Bot size={25} />
                 </div>
 
                 <h2 className="text-2xl font-bold">
@@ -845,6 +968,8 @@ export default function ChatWidget({
                 </p>
               </div>
 
+              {/* Name */}
+
               {collectVisitorName && (
                 <div className="mb-4">
                   <label className="mb-2 block text-sm font-semibold">
@@ -861,7 +986,7 @@ export default function ChatWidget({
                       )
                     }
                     placeholder="Enter your name"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none transition focus:ring-2"
+                    className="w-full rounded-xl border px-4 py-3 outline-none transition"
                     style={{
                       borderColor:
                         `${brandColor}55`,
@@ -869,6 +994,8 @@ export default function ChatWidget({
                   />
                 </div>
               )}
+
+              {/* Email */}
 
               {collectVisitorEmail && (
                 <div className="mb-5">
@@ -892,6 +1019,8 @@ export default function ChatWidget({
                 </div>
               )}
 
+              {/* Start */}
+
               <button
                 type="button"
                 onClick={
@@ -908,9 +1037,9 @@ export default function ChatWidget({
             </div>
           ) : (
             <>
-              {/* ================================= */}
-              {/* MESSAGES */}
-              {/* ================================= */}
+              {/* =================================================
+                  MESSAGES
+                  ================================================= */}
 
               <div
                 className={`
@@ -980,7 +1109,7 @@ export default function ChatWidget({
                               )}
 
                             <div>
-                              {/* Bubble */}
+                              {/* Message bubble */}
 
                               <div
                                 className={`
@@ -1073,9 +1202,9 @@ export default function ChatWidget({
                     }
                   )}
 
-                  {/* ================================= */}
-                  {/* TYPING INDICATOR */}
-                  {/* ================================= */}
+                  {/* =================================================
+                      TYPING INDICATOR
+                      ================================================= */}
 
                   {loading &&
                     showTypingIndicator && (
@@ -1090,11 +1219,7 @@ export default function ChatWidget({
                             }}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
                           >
-                            <Bot
-                              size={
-                                16
-                              }
-                            />
+                            <Bot size={16} />
                           </div>
                         )}
 
@@ -1149,9 +1274,9 @@ export default function ChatWidget({
                 </div>
               </div>
 
-              {/* ================================= */}
-              {/* INPUT */}
-              {/* ================================= */}
+              {/* =================================================
+                  INPUT
+                  ================================================= */}
 
               <div
                 className={`
@@ -1166,6 +1291,8 @@ export default function ChatWidget({
                 `}
               >
                 <div className="flex items-end gap-2">
+                  {/* Input */}
+
                   <div
                     className={`
                       flex
@@ -1183,8 +1310,12 @@ export default function ChatWidget({
                     `}
                   >
                     <input
-                      ref={inputRef}
-                      value={message}
+                      ref={
+                        inputRef
+                      }
+                      value={
+                        message
+                      }
                       onChange={(e) =>
                         setMessage(
                           e.target.value
@@ -1211,6 +1342,8 @@ export default function ChatWidget({
                     />
                   </div>
 
+                  {/* Send */}
+
                   <button
                     type="button"
                     onClick={
@@ -1227,9 +1360,7 @@ export default function ChatWidget({
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Send message"
                   >
-                    <Send
-                      size={19}
-                    />
+                    <Send size={19} />
                   </button>
                 </div>
 
@@ -1260,9 +1391,9 @@ export default function ChatWidget({
         </div>
       )}
 
-      {/* ================================== */}
-      {/* FLOATING BUTTON */}
-      {/* ================================== */}
+      {/* =================================================
+          FLOATING BUTTON
+          ================================================= */}
 
       {!preview && (
         <button

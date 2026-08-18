@@ -7,6 +7,11 @@ import { chatWithAI } from "@/lib/ai/chat";
 import { detectAction } from "@/lib/actions/detectAction";
 import { executeAction } from "@/lib/actions/actionRouter";
 
+import {
+  BILLING_PLANS,
+  type BillingPlanId,
+} from "@/lib/billing/plans";
+
 // =====================================================
 // SUPABASE ADMIN CLIENT
 // =====================================================
@@ -17,15 +22,357 @@ const supabaseAdmin = createClient(
 );
 
 // =====================================================
+// BILLING ACCESS CHECK
+// =====================================================
+//
+// This runs only when a NEW conversation needs to be
+// created.
+//
+// Existing conversations are allowed to continue even
+// when the merchant has reached the conversation limit.
+//
+// =====================================================
+
+async function checkBillingAccess(profileId: string) {
+  const now = new Date();
+
+  // -----------------------------------------------------
+  // GET SUBSCRIPTION
+  // -----------------------------------------------------
+
+  const {
+    data: subscription,
+    error: subscriptionError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select(
+      `
+        id,
+        user_id,
+        plan_id,
+        status,
+        billing_cycle,
+        current_period_start,
+        current_period_end
+      `
+    )
+    .eq("user_id", profileId)
+    .maybeSingle();
+
+  if (subscriptionError) {
+    console.error(
+      "BILLING SUBSCRIPTION ERROR:",
+      subscriptionError
+    );
+
+    return {
+      allowed: false,
+      error:
+        "Unable to verify your Sales Pilot subscription.",
+    };
+  }
+
+  // -----------------------------------------------------
+  // NO SUBSCRIPTION
+  // -----------------------------------------------------
+  //
+  // We do NOT create subscriptions from the public
+  // customer chat endpoint.
+  //
+  // A subscription should already exist from the
+  // authenticated merchant account creation flow.
+  //
+  // This prevents an anonymous website visitor from
+  // creating billing records.
+  //
+  // -----------------------------------------------------
+
+  if (!subscription) {
+    console.error(
+      "NO BILLING SUBSCRIPTION FOR PROFILE:",
+      profileId
+    );
+
+    return {
+      allowed: false,
+      error:
+        "This Sales Pilot account does not have an active billing subscription.",
+    };
+  }
+
+  // -----------------------------------------------------
+  // PLAN
+  // -----------------------------------------------------
+
+  const planId: BillingPlanId =
+    subscription.plan_id &&
+    subscription.plan_id in BILLING_PLANS
+      ? (subscription.plan_id as BillingPlanId)
+      : "starter";
+
+  const plan = BILLING_PLANS[planId];
+
+  // -----------------------------------------------------
+  // BILLING PERIOD
+  // -----------------------------------------------------
+
+  const periodStart = subscription.current_period_start
+    ? new Date(subscription.current_period_start)
+    : null;
+
+  const periodEnd = subscription.current_period_end
+    ? new Date(subscription.current_period_end)
+    : null;
+
+  // -----------------------------------------------------
+  // INVALID BILLING PERIOD
+  // -----------------------------------------------------
+
+  if (!periodStart || !periodEnd) {
+    console.error(
+      "INVALID BILLING PERIOD:",
+      subscription
+    );
+
+    return {
+      allowed: false,
+      error:
+        "Your Sales Pilot billing period is not configured correctly.",
+    };
+  }
+
+  // -----------------------------------------------------
+  // BILLING PERIOD EXPIRED
+  // -----------------------------------------------------
+
+  if (now >= periodEnd) {
+    return {
+      allowed: false,
+
+      error:
+        "Your Sales Pilot billing period has ended. Please upgrade or renew your plan.",
+
+      code: "BILLING_PERIOD_EXPIRED",
+
+      planId,
+
+      planName: plan.name,
+
+      used: 0,
+
+      limit: plan.conversations,
+    };
+  }
+
+  // -----------------------------------------------------
+  // SUBSCRIPTION STATUS
+  // -----------------------------------------------------
+
+  const status =
+    String(subscription.status || "")
+      .toLowerCase()
+      .trim();
+
+  /*
+   * Active:
+   *      Normal paid subscription.
+   *
+   * Trialing:
+   *      Development/free trial.
+   *
+   * Past due:
+   *      We allow access until current_period_end.
+   *      Later we can introduce a grace period.
+   *
+   * Canceled:
+   *      The merchant can continue using the service
+   *      until current_period_end.
+   *
+   * Incomplete:
+   *      Payment/subscription setup wasn't completed.
+   */
+
+  if (status === "incomplete") {
+    return {
+      allowed: false,
+
+      error:
+        "Your Sales Pilot subscription setup is incomplete. Please complete billing to continue.",
+
+      code: "SUBSCRIPTION_INCOMPLETE",
+
+      planId,
+
+      planName: plan.name,
+
+      used: 0,
+
+      limit: plan.conversations,
+    };
+  }
+
+  // -----------------------------------------------------
+  // COUNT REAL CONVERSATIONS
+  // -----------------------------------------------------
+  //
+  // conversations.user_id is the merchant/user ID.
+  //
+  // created_at allows us to count only conversations
+  // from the current billing period.
+  //
+  // -----------------------------------------------------
+
+  const {
+    count: conversationCount,
+    error: conversationCountError,
+  } = await supabaseAdmin
+    .from("conversations")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("user_id", profileId)
+    .gte(
+      "created_at",
+      periodStart.toISOString()
+    )
+    .lt(
+      "created_at",
+      periodEnd.toISOString()
+    );
+
+  if (conversationCountError) {
+    console.error(
+      "BILLING CONVERSATION COUNT ERROR:",
+      conversationCountError
+    );
+
+    return {
+      allowed: false,
+
+      error:
+        "Unable to verify conversation usage.",
+    };
+  }
+
+  const used =
+    conversationCount ?? 0;
+
+  const limit =
+    plan.conversations;
+
+  // -----------------------------------------------------
+  // LIMIT REACHED
+  // -----------------------------------------------------
+
+  if (used >= limit) {
+    return {
+      allowed: false,
+
+      error:
+        `Your ${plan.name} plan has reached its limit of ${limit.toLocaleString()} AI conversations for this billing period. Please upgrade your plan to continue.`,
+
+      code: "CONVERSATION_LIMIT_REACHED",
+
+      planId,
+
+      planName: plan.name,
+
+      used,
+
+      limit,
+    };
+  }
+
+  // -----------------------------------------------------
+  // ALLOWED
+  // -----------------------------------------------------
+
+  return {
+    allowed: true,
+
+    planId,
+
+    planName: plan.name,
+
+    used,
+
+    limit,
+
+    remaining:
+      limit - used,
+  };
+}
+
+// =====================================================
+// FAST RESPONSE
+// =====================================================
+
+function getFastResponse(message: string) {
+  const text = message
+    .toLowerCase()
+    .trim()
+    .replace(/[!?.,]/g, "")
+    .replace(/\s+/g, " ");
+
+  const greetings = [
+    "hi",
+    "hello",
+    "hey",
+    "hii",
+    "hiii",
+    "helo",
+    "good morning",
+    "good afternoon",
+    "good evening",
+  ];
+
+  if (greetings.includes(text)) {
+    return "Hi! 👋 How can I help you today?";
+  }
+
+  const thanks = [
+    "thanks",
+    "thank you",
+    "thanks a lot",
+    "thankyou",
+    "thx",
+  ];
+
+  if (thanks.includes(text)) {
+    return "You're welcome! 😊";
+  }
+
+  const goodbye = [
+    "bye",
+    "goodbye",
+    "see you",
+    "see you later",
+  ];
+
+  if (goodbye.includes(text)) {
+    return "Goodbye! 👋 Have a great day!";
+  }
+
+  if (
+    [
+      "how are you",
+      "how are you doing",
+      "how r u",
+    ].includes(text)
+  ) {
+    return "I'm doing great! 😊 How can I help you today?";
+  }
+
+  return null;
+}
+
+// =====================================================
 // DETECT INTENT
 // =====================================================
 
 function detectIntent(question: string) {
   const text = question.toLowerCase();
-
-  // ---------------------------------------------------
-  // POLICY
-  // ---------------------------------------------------
 
   if (
     [
@@ -39,16 +386,10 @@ function detectIntent(question: string) {
       "warranty",
       "payment",
       "returns",
-    ].some((word) =>
-      text.includes(word)
-    )
+    ].some((word) => text.includes(word))
   ) {
     return "policy";
   }
-
-  // ---------------------------------------------------
-  // PRODUCT
-  // ---------------------------------------------------
 
   if (
     [
@@ -83,16 +424,10 @@ function detectIntent(question: string) {
       "bags",
       "watch",
       "watches",
-    ].some((word) =>
-      text.includes(word)
-    )
+    ].some((word) => text.includes(word))
   ) {
     return "product";
   }
-
-  // ---------------------------------------------------
-  // GENERAL
-  // ---------------------------------------------------
 
   return "general";
 }
@@ -110,30 +445,42 @@ function buildContext(matches: any[]) {
   }
 
   return matches
-    .map(
-      (item, index) => `
-==============================
-KNOWLEDGE RESULT ${index + 1}
-==============================
+    .slice(0, 3)
+    .map((item, index) => {
+      const title = String(
+        item.page_title ||
+          item.title ||
+          ""
+      ).slice(0, 150);
 
-Title:
-${item.page_title || item.title || ""}
+      const sourceUrl = String(
+        item.source_url ||
+          item.page_url ||
+          item.url ||
+          ""
+      ).slice(0, 500);
 
-Source URL:
-${item.source_url || item.page_url || item.url || ""}
+      const content = String(
+        item.content || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 800);
 
-IMPORTANT:
-Use the exact Source URL when a customer asks where
-to view a product.
+      return `
+RESULT ${index + 1}
 
-Never invent a URL.
-Never write "[Product URL]".
+TITLE:
+${title}
 
-Content:
-${item.content || ""}
-`
-    )
-    .join("\n\n");
+URL:
+${sourceUrl}
+
+CONTENT:
+${content}
+`;
+    })
+    .join("\n");
 }
 
 // =====================================================
@@ -151,414 +498,23 @@ function buildConversationHistory(
   }
 
   return messages
+    .slice(-4)
     .map((item) => {
       const sender =
         item.sender === "customer"
           ? "Customer"
           : "AI";
 
-      return `${sender}: ${
+      const content = String(
         item.content || ""
-      }`;
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 500);
+
+      return `${sender}: ${content}`;
     })
     .join("\n");
-}
-
-// =====================================================
-// CLEAN PRODUCT DESCRIPTION
-// =====================================================
-
-function cleanProductDescription(
-  description: string,
-  productName: string
-) {
-  if (
-    !description
-  ) {
-    return "";
-  }
-
-  let clean =
-    String(description);
-
-  // ---------------------------------------------------
-  // REMOVE URLS
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /https?:\/\/\S+/gi,
-      ""
-    );
-
-  // ---------------------------------------------------
-  // REMOVE MARKDOWN / BULLET SYMBOLS
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /[•▪●]/g,
-      ""
-    );
-
-  // ---------------------------------------------------
-  // REMOVE COMMON WEBSITE NOISE
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /\bSales Pilot\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bAI Sales & Customer Support Employee\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bAI Customer Support\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bAcme Store\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bTest website for Sales Pilot AI\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bSales Pilot Widget Test\b/gi,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bShipping & Returns\b[\s\S]*$/i,
-      ""
-    );
-
-  clean =
-    clean.replace(
-      /\bKnowledge Base\b[\s\S]*$/i,
-      ""
-    );
-
-  // ---------------------------------------------------
-  // REMOVE PRODUCT NAME FROM DESCRIPTION
-  // ---------------------------------------------------
-
-  if (
-    productName
-  ) {
-    const escapedName =
-      productName.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
-
-    clean =
-      clean.replace(
-        new RegExp(
-          escapedName,
-          "gi"
-        ),
-        ""
-      );
-  }
-
-  // ---------------------------------------------------
-  // REMOVE COMMON LABELS
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
-      ""
-    );
-
-  // ---------------------------------------------------
-  // NORMALIZE WHITESPACE
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /\s+/g,
-      " "
-    ).trim();
-
-  // ---------------------------------------------------
-  // REMOVE LEADING PUNCTUATION
-  // ---------------------------------------------------
-
-  clean =
-    clean.replace(
-      /^[,.:;!?-]+\s*/,
-      ""
-    );
-
-  // ---------------------------------------------------
-  // LIMIT DESCRIPTION
-  // ---------------------------------------------------
-
-  const MAX_LENGTH = 140;
-
-  if (
-    clean.length >
-    MAX_LENGTH
-  ) {
-    clean =
-      clean
-        .slice(
-          0,
-          MAX_LENGTH
-        )
-        .trim();
-
-    const lastSpace =
-      clean.lastIndexOf(
-        " "
-      );
-
-    if (
-      lastSpace > 80
-    ) {
-      clean =
-        clean.slice(
-          0,
-          lastSpace
-        );
-    }
-
-    clean += "...";
-  }
-
-  return clean;
-}
-
-// =====================================================
-// CLEAN PRODUCT NAME
-// =====================================================
-
-function cleanProductName(
-  name: string
-) {
-  if (
-    !name
-  ) {
-    return "this product";
-  }
-
-  return String(name)
-    .replace(
-      /\s+/g,
-      " "
-    )
-    .trim();
-}
-
-// =====================================================
-// CLEAN PRODUCT PRICE
-// =====================================================
-
-function cleanProductPrice(
-  price: unknown
-) {
-  if (
-    price === null ||
-    price === undefined
-  ) {
-    return "";
-  }
-
-  const value =
-    String(price)
-      .replace(
-        /\s+/g,
-        " "
-      )
-      .trim();
-
-  if (
-    !value
-  ) {
-    return "";
-  }
-
-  return value;
-}
-
-// =====================================================
-// CLEAN PRODUCT URL
-// =====================================================
-
-function cleanProductUrl(
-  product: any
-) {
-  const url =
-    product?.url ||
-    product?.page_url ||
-    product?.product_url ||
-    "";
-
-  if (
-    !url
-  ) {
-    return "";
-  }
-
-  return String(url)
-    .trim();
-}
-
-// =====================================================
-// FORMAT ONE PRODUCT
-// =====================================================
-
-function formatSingleProduct(
-  product: any
-) {
-  const name =
-    cleanProductName(
-      product?.name ||
-        product?.title ||
-        ""
-    );
-
-  const description =
-    cleanProductDescription(
-      product?.description ||
-        "",
-      name
-    );
-
-  const price =
-    cleanProductPrice(
-      product?.price
-    );
-
-  const url =
-    cleanProductUrl(
-      product
-    );
-
-  // ---------------------------------------------------
-  // NATURAL RESPONSE
-  // ---------------------------------------------------
-
-  let response =
-    `We have the ${name}`;
-
-  if (
-    description
-  ) {
-    response +=
-      ` — ${description}`;
-  }
-
-  response += ".";
-
-  if (
-    price
-  ) {
-    response +=
-      ` It's ${price}.`;
-  }
-
-  if (
-    url
-  ) {
-    response +=
-      `\n🔗 View product: ${url}`;
-  }
-
-  return response;
-}
-
-// =====================================================
-// FORMAT PRODUCT RESULTS NATURALLY
-// =====================================================
-
-function formatProductResults(
-  products: any[]
-) {
-  if (
-    !products ||
-    products.length === 0
-  ) {
-    return (
-      "I couldn't find a matching product. What type of product are you looking for?"
-    );
-  }
-
-  // ---------------------------------------------------
-  // ONLY SHOW TOP 3
-  // ---------------------------------------------------
-
-  const selectedProducts =
-    products
-      .filter(
-        (product) =>
-          product &&
-          (
-            product.name ||
-            product.title
-          )
-      )
-      .slice(0, 3);
-
-  if (
-    selectedProducts.length ===
-    0
-  ) {
-    return (
-      "I couldn't find a matching product."
-    );
-  }
-
-  // ---------------------------------------------------
-  // ONE PRODUCT
-  // ---------------------------------------------------
-
-  if (
-    selectedProducts.length ===
-    1
-  ) {
-    return formatSingleProduct(
-      selectedProducts[0]
-    );
-  }
-
-  // ---------------------------------------------------
-  // MULTIPLE PRODUCTS
-  // ---------------------------------------------------
-
-  const formatted =
-    selectedProducts.map(
-      (
-        product: any
-      ) => {
-        return formatSingleProduct(
-          product
-        );
-      }
-    );
-
-  return (
-    "Here are a few options:\n\n" +
-    formatted.join(
-      "\n\n"
-    )
-  );
 }
 
 // =====================================================
@@ -571,29 +527,21 @@ async function getConversationHistory(
   const {
     data,
     error,
-  } =
-    await supabaseAdmin
-      .from(
-        "conversation_messages"
-      )
-      .select(
-        "sender, content, created_at"
-      )
-      .eq(
-        "conversation_id",
-        conversationId
-      )
-      .order(
-        "created_at",
-        {
-          ascending: false,
-        }
-      )
-      .limit(12);
+  } = await supabaseAdmin
+    .from("conversation_messages")
+    .select(
+      "sender, content, created_at"
+    )
+    .eq(
+      "conversation_id",
+      conversationId
+    )
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(6);
 
-  if (
-    error
-  ) {
+  if (error) {
     console.error(
       "CONVERSATION HISTORY ERROR:",
       error
@@ -602,9 +550,7 @@ async function getConversationHistory(
     return [];
   }
 
-  if (
-    !data
-  ) {
+  if (!data) {
     return [];
   }
 
@@ -628,10 +574,6 @@ function addProductUrl(
     return response;
   }
 
-  // ---------------------------------------------------
-  // ONLY DO THIS IF THE AI USED THE PLACEHOLDER
-  // ---------------------------------------------------
-
   if (
     !response.match(
       /\[Product URL\]/i
@@ -643,48 +585,30 @@ function addProductUrl(
   const question =
     userMessage.toLowerCase();
 
-  // ---------------------------------------------------
-  // TRY TO FIND THE MOST RELEVANT PRODUCT
-  // ---------------------------------------------------
-
   let selected =
-    matches.find(
-      (item: any) => {
-        const title =
-          String(
-            item.page_title ||
-              item.title ||
-              ""
-          ).toLowerCase();
+    matches.find((item: any) => {
+      const title = String(
+        item.page_title ||
+          item.title ||
+          ""
+      ).toLowerCase();
 
-        return (
-          title &&
-          question.includes(
-            title
-          )
-        );
-      }
-    );
-
-  // ---------------------------------------------------
-  // FALLBACK TO FIRST SOURCE
-  // ---------------------------------------------------
-
-  if (
-    !selected
-  ) {
-    selected =
-      matches.find(
-        (item: any) =>
-          item.source_url ||
-          item.page_url ||
-          item.url
+      return (
+        title &&
+        question.includes(title)
       );
+    });
+
+  if (!selected) {
+    selected = matches.find(
+      (item: any) =>
+        item.source_url ||
+        item.page_url ||
+        item.url
+    );
   }
 
-  if (
-    !selected
-  ) {
+  if (!selected) {
     return response;
   }
 
@@ -694,9 +618,7 @@ function addProductUrl(
     selected.url ||
     "";
 
-  if (
-    !productUrl
-  ) {
+  if (!productUrl) {
     return response;
   }
 
@@ -713,6 +635,9 @@ function addProductUrl(
 export async function POST(
   req: Request
 ) {
+  const requestStartedAt =
+    Date.now();
+
   try {
     console.log(
       "================================="
@@ -762,8 +687,7 @@ export async function POST(
 
     if (
       !message ||
-      typeof message !==
-        "string"
+      typeof message !== "string"
     ) {
       return NextResponse.json(
         {
@@ -778,8 +702,7 @@ export async function POST(
 
     if (
       !profileId ||
-      typeof profileId !==
-        "string"
+      typeof profileId !== "string"
     ) {
       return NextResponse.json(
         {
@@ -795,53 +718,74 @@ export async function POST(
     // =================================================
     // FIND EXISTING CONVERSATION
     // =================================================
+    //
+    // We check this BEFORE billing.
+    //
+    // Existing conversations are allowed to continue
+    // even after the merchant reaches their monthly
+    // conversation limit.
+    //
+    // Only NEW conversations consume a conversation slot.
+    //
+    // =================================================
 
     let conversation:
       | any
       | null = null;
 
-    if (
-      visitorSessionId
-    ) {
+    if (visitorSessionId) {
       const {
         data,
         error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .select("*")
-          .eq(
-            "visitor_session_id",
-            visitorSessionId
-          )
-          .eq(
-            "profile_id",
-            profileId
-          )
-          .maybeSingle();
+      } = await supabaseAdmin
+        .from("conversations")
+        .select(
+          "id, profile_id, user_id, visitor_session_id"
+        )
+        .eq(
+          "visitor_session_id",
+          visitorSessionId
+        )
+        .eq(
+          "profile_id",
+          profileId
+        )
+        .maybeSingle();
 
-      if (
-        error
-      ) {
+      if (error) {
         console.error(
           "CONVERSATION LOOKUP ERROR:",
           error
         );
       }
 
-      conversation =
-        data;
+      conversation = data;
     }
+
+   // =================================================
+// BILLING CHECK
+// =================================================
+//
+// TEMPORARILY DISABLED FOR DEVELOPMENT / DEMO.
+//
+// Sales Pilot currently allows conversations without
+// requiring an active billing subscription.
+//
+// Billing code remains in this file and can be enabled
+// later when Stripe/payment functionality is ready.
+//
+
+if (!conversation) {
+  console.log(
+    "NEW CONVERSATION - BILLING CHECK SKIPPED (DEMO MODE)"
+  );
+}
 
     // =================================================
     // CREATE CONVERSATION
     // =================================================
 
-    if (
-      !conversation
-    ) {
+    if (!conversation) {
       console.log(
         "CREATING CONVERSATION"
       );
@@ -853,43 +797,51 @@ export async function POST(
       const {
         data,
         error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .insert({
-            profile_id:
-              profileId,
+      } = await supabaseAdmin
+        .from("conversations")
+        .insert({
+          profile_id:
+            profileId,
 
-            visitor_session_id:
-              session,
+          /*
+           * IMPORTANT:
+           *
+           * Your billing system counts conversations
+           * using user_id.
+           *
+           * Previously this field was missing, which
+           * caused Billing to show 0 conversations.
+           */
+          user_id:
+            profileId,
 
-            customer_name:
-              customerName ||
-              "Website Visitor",
+          visitor_session_id:
+            session,
 
-            customer_email:
-              customerEmail ||
-              null,
+          customer_name:
+            customerName ||
+            "Website Visitor",
 
-            assigned_to:
-              "ai",
+          customer_email:
+            customerEmail ||
+            null,
 
-            status:
-              "open",
-          })
-          .select()
-          .single();
+          assigned_to:
+            "ai",
 
-      if (
-        error
-      ) {
+          status:
+            "open",
+        })
+        .select(
+          "id, profile_id, user_id, visitor_session_id"
+        )
+        .single();
+
+      if (error) {
         throw error;
       }
 
-      conversation =
-        data;
+      conversation = data;
     }
 
     // =================================================
@@ -915,9 +867,7 @@ export async function POST(
             message,
         });
 
-    if (
-      customerMessageError
-    ) {
+    if (customerMessageError) {
       console.error(
         "CUSTOMER MESSAGE ERROR:",
         customerMessageError
@@ -925,26 +875,86 @@ export async function POST(
     }
 
     // =================================================
-    // GET CONVERSATION HISTORY
+    // FAST RESPONSE
+    // =================================================
+    //
+    // IMPORTANT:
+    // Fast responses happen AFTER the conversation has
+    // been created and counted.
+    //
+    // Therefore:
+    //
+    // "Hi"
+    //
+    // can correctly start a billable conversation.
+    //
     // =================================================
 
-    const conversationHistory =
-      await getConversationHistory(
-        conversation.id
+    const fastResponse =
+      getFastResponse(message);
+
+    if (fastResponse) {
+      console.log(
+        "FAST RESPONSE:",
+        fastResponse
       );
 
-    console.log(
-      "CONVERSATION HISTORY:",
-      conversationHistory.length
-    );
+      // Save the fast AI response too.
 
-    const historyContext =
-      buildConversationHistory(
-        conversationHistory
+      const {
+        error:
+          fastMessageError,
+      } =
+        await supabaseAdmin
+          .from(
+            "conversation_messages"
+          )
+          .insert({
+            conversation_id:
+              conversation.id,
+
+            sender:
+              "ai",
+
+            content:
+              fastResponse,
+          });
+
+      if (fastMessageError) {
+        console.error(
+          "FAST AI MESSAGE ERROR:",
+          fastMessageError
+        );
+      }
+
+      console.log(
+        `FAST RESPONSE TIME: ${
+          Date.now() -
+          requestStartedAt
+        }ms`
       );
+
+      return NextResponse.json({
+        success: true,
+
+        response:
+          fastResponse,
+
+        visitorSessionId:
+          conversation.visitor_session_id,
+
+        intent: "general",
+
+        matches: 0,
+
+        action: null,
+
+        actionExecuted: false,
+      });
+    }
 
     // =================================================
-    // ACTION SYSTEM
+    // DETECT ACTION
     // =================================================
 
     console.log(
@@ -960,17 +970,9 @@ export async function POST(
     );
 
     let actionRequest =
-      detectAction(
-        message
-      );
+      detectAction(message);
 
-    // =================================================
-    // ADD PROFILE ID TO ACTION
-    // =================================================
-
-    if (
-      actionRequest
-    ) {
+    if (actionRequest) {
       actionRequest = {
         ...actionRequest,
 
@@ -987,12 +989,10 @@ export async function POST(
     }
 
     // =================================================
-    // ACTION DETECTED
+    // ACTION
     // =================================================
 
-    if (
-      actionRequest
-    ) {
+    if (actionRequest) {
       console.log(
         "================================="
       );
@@ -1003,13 +1003,11 @@ export async function POST(
       );
 
       console.log(
-        "PARAMETERS:",
-        actionRequest.parameters
-      );
-
-      console.log(
         "================================="
       );
+
+      const actionStartedAt =
+        Date.now();
 
       const actionResult =
         await executeAction(
@@ -1018,16 +1016,14 @@ export async function POST(
         );
 
       console.log(
-        "ACTION RESULT:",
-        actionResult
+        `ACTION TIME: ${
+          Date.now() -
+          actionStartedAt
+        }ms`
       );
 
       let actionResponse =
         "";
-
-      // =================================================
-      // ACTION FAILED
-      // =================================================
 
       if (
         !actionResult.success
@@ -1035,31 +1031,17 @@ export async function POST(
         actionResponse =
           actionResult.error ||
           "I'm unable to complete that request right now.";
-      }
-
-      // =================================================
-      // ACTION SUCCESS
-      // =================================================
-
-      else {
+      } else {
         switch (
           actionRequest.action
         ) {
-          // ---------------------------------------------
-          // SEARCH PRODUCTS
-          // ---------------------------------------------
-
           case "search_products": {
             const products =
               (
                 actionResult as any
-              )?.data?.products ||
+              )?.data
+                ?.products ||
               [];
-
-            console.log(
-              "PRODUCTS RETURNED:",
-              products.length
-            );
 
             actionResponse =
               formatProductResults(
@@ -1069,20 +1051,12 @@ export async function POST(
             break;
           }
 
-          // ---------------------------------------------
-          // HUMAN HANDOFF
-          // ---------------------------------------------
-
           case "handoff_to_human": {
             actionResponse =
               "Absolutely. I'll connect you with a member of our support team.";
 
             break;
           }
-
-          // ---------------------------------------------
-          // ORDER STATUS
-          // ---------------------------------------------
 
           case "get_order_status": {
             actionResponse =
@@ -1091,20 +1065,12 @@ export async function POST(
             break;
           }
 
-          // ---------------------------------------------
-          // ORDER DETAILS
-          // ---------------------------------------------
-
           case "get_order_details": {
             actionResponse =
               "I found your order details.";
 
             break;
           }
-
-          // ---------------------------------------------
-          // PRODUCT STOCK
-          // ---------------------------------------------
 
           case "check_product_stock": {
             actionResponse =
@@ -1113,20 +1079,12 @@ export async function POST(
             break;
           }
 
-          // ---------------------------------------------
-          // PRODUCT DETAILS
-          // ---------------------------------------------
-
           case "get_product_details": {
             actionResponse =
               "I found the product details.";
 
             break;
           }
-
-          // ---------------------------------------------
-          // SHIPPING
-          // ---------------------------------------------
 
           case "get_shipping_policy": {
             actionResponse =
@@ -1135,20 +1093,12 @@ export async function POST(
             break;
           }
 
-          // ---------------------------------------------
-          // RETURN
-          // ---------------------------------------------
-
           case "get_return_policy": {
             actionResponse =
               "I found the store's return information.";
 
             break;
           }
-
-          // ---------------------------------------------
-          // FALLBACK
-          // ---------------------------------------------
 
           default: {
             actionResponse =
@@ -1159,45 +1109,30 @@ export async function POST(
         }
       }
 
-      // =================================================
-      // SAVE ACTION RESPONSE
-      // =================================================
+      await supabaseAdmin
+        .from(
+          "conversation_messages"
+        )
+        .insert({
+          conversation_id:
+            conversation.id,
 
-      const {
-        error:
-          actionMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
+          sender:
+            "ai",
 
-            sender:
-              "ai",
+          content:
+            actionResponse,
+        });
 
-            content:
-              actionResponse,
-          });
-
-      if (
-        actionMessageError
-      ) {
-        console.error(
-          "ACTION MESSAGE ERROR:",
-          actionMessageError
-        );
-      }
-
-      // =================================================
-      // RETURN ACTION RESPONSE
-      // =================================================
+      console.log(
+        `TOTAL ACTION REQUEST TIME: ${
+          Date.now() -
+          requestStartedAt
+        }ms`
+      );
 
       return NextResponse.json({
-        success:
-          true,
+        success: true,
 
         response:
           actionResponse,
@@ -1214,28 +1149,40 @@ export async function POST(
     }
 
     // =================================================
-    // NORMAL KNOWLEDGE CHAT
+    // CONVERSATION HISTORY
     // =================================================
 
+    const historyStartedAt =
+      Date.now();
+
+    const conversationHistory =
+      await getConversationHistory(
+        conversation.id
+      );
+
     console.log(
-      "================================="
+      "CONVERSATION HISTORY:",
+      conversationHistory.length
     );
 
     console.log(
-      "NO ACTION DETECTED"
+      `HISTORY TIME: ${
+        Date.now() -
+        historyStartedAt
+      }ms`
     );
 
-    console.log(
-      "CONTINUING WITH KNOWLEDGE SEARCH"
-    );
-
-    console.log(
-      "================================="
-    );
+    const historyContext =
+      buildConversationHistory(
+        conversationHistory
+      );
 
     // =================================================
-    // CREATE EMBEDDING
+    // CREATE QUERY EMBEDDING
     // =================================================
+
+    const embeddingStartedAt =
+      Date.now();
 
     const embedding =
       await createEmbedding(
@@ -1246,14 +1193,19 @@ export async function POST(
       "EMBEDDING CREATED"
     );
 
+    console.log(
+      `EMBEDDING TIME: ${
+        Date.now() -
+        embeddingStartedAt
+      }ms`
+    );
+
     // =================================================
     // DETECT INTENT
     // =================================================
 
     const intent =
-      detectIntent(
-        message
-      );
+      detectIntent(message);
 
     console.log(
       "INTENT:",
@@ -1261,8 +1213,11 @@ export async function POST(
     );
 
     // =================================================
-    // SEARCH KNOWLEDGE
+    // USER-SCOPED KNOWLEDGE SEARCH
     // =================================================
+
+    const knowledgeStartedAt =
+      Date.now();
 
     const {
       data: matches,
@@ -1270,19 +1225,20 @@ export async function POST(
         searchError,
     } =
       await supabaseAdmin.rpc(
-        "match_knowledge_chunks",
+        "match_knowledge_chunks_for_user",
         {
           query_embedding:
             embedding,
 
           match_count:
-            10,
+            3,
+
+          filter_user_id:
+            profileId,
         }
       );
 
-    if (
-      searchError
-    ) {
+    if (searchError) {
       console.error(
         "KNOWLEDGE SEARCH ERROR:",
         searchError
@@ -1295,22 +1251,25 @@ export async function POST(
       matches || [];
 
     console.log(
-      "KNOWLEDGE MATCHES:",
+      "USER-SCOPED KNOWLEDGE MATCHES:",
       knowledgeMatches.length
     );
 
+    console.log(
+      `KNOWLEDGE SEARCH TIME: ${
+        Date.now() -
+        knowledgeStartedAt
+      }ms`
+    );
+
     // =================================================
-    // BUILD KNOWLEDGE CONTEXT
+    // BUILD CONTEXT
     // =================================================
 
     const knowledgeContext =
       buildContext(
         knowledgeMatches
       );
-
-    // =================================================
-    // COMBINE HISTORY + KNOWLEDGE
-    // =================================================
 
     let finalContext =
       "";
@@ -1319,10 +1278,7 @@ export async function POST(
       historyContext.trim()
     ) {
       finalContext += `
-========================================
-RECENT CONVERSATION
-========================================
-
+RECENT CONVERSATION:
 ${historyContext}
 
 `;
@@ -1332,10 +1288,7 @@ ${historyContext}
       knowledgeContext.trim()
     ) {
       finalContext += `
-========================================
-STORE KNOWLEDGE
-========================================
-
+STORE KNOWLEDGE:
 ${knowledgeContext}
 
 `;
@@ -1348,71 +1301,41 @@ ${knowledgeContext}
     let aiResponse =
       "";
 
-    // =================================================
-    // NO KNOWLEDGE BUT HISTORY
-    // =================================================
+    const aiStartedAt =
+      Date.now();
 
     if (
       !knowledgeContext.trim() &&
       historyContext.trim()
     ) {
-      try {
-        aiResponse =
-          await chatWithAI(
-            message,
-            finalContext
-          );
-      } catch (
-        error
-      ) {
-        console.error(
-          "AI HISTORY RESPONSE FAILED:",
-          error
+      aiResponse =
+        await chatWithAI(
+          message,
+          finalContext
         );
-
-        aiResponse =
-          "I'm sorry, I couldn't find that information. Could you please clarify what you're asking about?";
-      }
-    }
-
-    // =================================================
-    // NO KNOWLEDGE + NO HISTORY
-    // =================================================
-
-    else if (
+    } else if (
       !knowledgeContext.trim() &&
       !historyContext.trim()
     ) {
       aiResponse =
-        "I couldn't find that information yet. Please contact the store for more details.";
-    }
-
-    // =================================================
-    // KNOWLEDGE FOUND
-    // =================================================
-
-    else {
-      try {
-        aiResponse =
-          await chatWithAI(
-            message,
-            finalContext
-          );
-      } catch (
-        error
-      ) {
-        console.error(
-          "AI FAILED:",
-          error
+        "I couldn't find that information in this store's knowledge base.";
+    } else {
+      aiResponse =
+        await chatWithAI(
+          message,
+          finalContext
         );
-
-        aiResponse =
-          "I'm sorry, I'm unable to answer right now. Please try again.";
-      }
     }
 
+    console.log(
+      `AI TIME: ${
+        Date.now() -
+        aiStartedAt
+      }ms`
+    );
+
     // =================================================
-    // CLEAN AI RESPONSE
+    // CLEAN RESPONSE
     // =================================================
 
     aiResponse =
@@ -1421,15 +1344,13 @@ ${knowledgeContext}
       )
         .trim();
 
-    if (
-      !aiResponse
-    ) {
+    if (!aiResponse) {
       aiResponse =
         "I'm sorry, I couldn't generate a response.";
     }
 
     // =================================================
-    // REPLACE PRODUCT URL PLACEHOLDER
+    // PRODUCT URL
     // =================================================
 
     aiResponse =
@@ -1439,10 +1360,6 @@ ${knowledgeContext}
         message
       );
 
-    // =================================================
-    // REMOVE PLACEHOLDER IF URL WAS NOT FOUND
-    // =================================================
-
     aiResponse =
       aiResponse.replace(
         /\[Product URL\]/gi,
@@ -1450,7 +1367,7 @@ ${knowledgeContext}
       );
 
     // =================================================
-    // CLEAN EXTRA SPACES
+    // FINAL CLEANUP
     // =================================================
 
     aiResponse =
@@ -1488,9 +1405,7 @@ ${knowledgeContext}
             aiResponse,
         });
 
-    if (
-      aiMessageError
-    ) {
+    if (aiMessageError) {
       console.error(
         "AI MESSAGE ERROR:",
         aiMessageError
@@ -1500,6 +1415,10 @@ ${knowledgeContext}
     // =================================================
     // SUCCESS
     // =================================================
+
+    const totalTime =
+      Date.now() -
+      requestStartedAt;
 
     console.log(
       "================================="
@@ -1515,18 +1434,22 @@ ${knowledgeContext}
     );
 
     console.log(
+      `TOTAL CHAT TIME: ${totalTime}ms`
+    );
+
+    console.log(
       "================================="
     );
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
       response:
         aiResponse,
 
       visitorSessionId:
-        conversation.visitor_session_id,
+        conversation
+          .visitor_session_id,
 
       intent,
 
@@ -1539,13 +1462,7 @@ ${knowledgeContext}
       actionExecuted:
         false,
     });
-  } catch (
-    error: any
-  ) {
-    // =================================================
-    // ERROR
-    // =================================================
-
+  } catch (error: any) {
     console.error(
       "================================="
     );
@@ -1561,8 +1478,7 @@ ${knowledgeContext}
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
         error:
           error?.message ||
@@ -1573,4 +1489,301 @@ ${knowledgeContext}
       }
     );
   }
+}
+
+// =====================================================
+// PRODUCT HELPERS
+// =====================================================
+
+function cleanProductDescription(
+  description: string,
+  productName: string
+) {
+  if (!description) {
+    return "";
+  }
+
+  let clean =
+    String(description);
+
+  clean = clean.replace(
+    /https?:\/\/\S+/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /[•▪●]/g,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bSales Pilot\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bAI Sales & Customer Support Employee\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bAI Customer Support\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bAcme Store\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bTest website for Sales Pilot AI\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bSales Pilot Widget Test\b/gi,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bShipping & Returns\b[\s\S]*$/i,
+    ""
+  );
+
+  clean = clean.replace(
+    /\bKnowledge Base\b[\s\S]*$/i,
+    ""
+  );
+
+  if (productName) {
+    const escapedName =
+      productName.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+    clean = clean.replace(
+      new RegExp(
+        escapedName,
+        "gi"
+      ),
+      ""
+    );
+  }
+
+  clean = clean.replace(
+    /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
+    ""
+  );
+
+  clean =
+    clean
+      .replace(/\s+/g, " ")
+      .trim();
+
+  clean = clean.replace(
+    /^[,.:;!?-]+\s*/,
+    ""
+  );
+
+  const MAX_LENGTH =
+    140;
+
+  if (
+    clean.length >
+    MAX_LENGTH
+  ) {
+    clean =
+      clean
+        .slice(
+          0,
+          MAX_LENGTH
+        )
+        .trim();
+
+    const lastSpace =
+      clean.lastIndexOf(
+        " "
+      );
+
+    if (
+      lastSpace > 80
+    ) {
+      clean =
+        clean.slice(
+          0,
+          lastSpace
+        );
+    }
+
+    clean += "...";
+  }
+
+  return clean;
+}
+
+// =====================================================
+// PRODUCT NAME
+// =====================================================
+
+function cleanProductName(
+  name: string
+) {
+  if (!name) {
+    return "this product";
+  }
+
+  return String(name)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// =====================================================
+// PRODUCT PRICE
+// =====================================================
+
+function cleanProductPrice(
+  price: unknown
+) {
+  if (
+    price === null ||
+    price === undefined
+  ) {
+    return "";
+  }
+
+  return String(price)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// =====================================================
+// PRODUCT URL
+// =====================================================
+
+function cleanProductUrl(
+  product: any
+) {
+  const url =
+    product?.url ||
+    product?.page_url ||
+    product?.product_url ||
+    "";
+
+  if (!url) {
+    return "";
+  }
+
+  return String(url).trim();
+}
+
+// =====================================================
+// FORMAT SINGLE PRODUCT
+// =====================================================
+
+function formatSingleProduct(
+  product: any
+) {
+  const name =
+    cleanProductName(
+      product?.name ||
+        product?.title ||
+        ""
+    );
+
+  const description =
+    cleanProductDescription(
+      product?.description ||
+        "",
+      name
+    );
+
+  const price =
+    cleanProductPrice(
+      product?.price
+    );
+
+  const url =
+    cleanProductUrl(
+      product
+    );
+
+  let response =
+    `We have the ${name}`;
+
+  if (description) {
+    response +=
+      ` — ${description}`;
+  }
+
+  response += ".";
+
+  if (price) {
+    response +=
+      ` It's ${price}.`;
+  }
+
+  if (url) {
+    response +=
+      `\n🔗 View product: ${url}`;
+  }
+
+  return response;
+}
+
+// =====================================================
+// FORMAT PRODUCT RESULTS
+// =====================================================
+
+function formatProductResults(
+  products: any[]
+) {
+  if (
+    !products ||
+    products.length === 0
+  ) {
+    return "I couldn't find a matching product. What type of product are you looking for?";
+  }
+
+  const selectedProducts =
+    products
+      .filter(
+        (product) =>
+          product &&
+          (product.name ||
+            product.title)
+      )
+      .slice(0, 3);
+
+  if (
+    selectedProducts.length ===
+    0
+  ) {
+    return "I couldn't find a matching product.";
+  }
+
+  if (
+    selectedProducts.length ===
+    1
+  ) {
+    return formatSingleProduct(
+      selectedProducts[0]
+    );
+  }
+
+  const formatted =
+    selectedProducts.map(
+      (product: any) =>
+        formatSingleProduct(
+          product
+        )
+    );
+
+  return (
+    "Here are a few options:\n\n" +
+    formatted.join(
+      "\n\n"
+    )
+  );
 }
