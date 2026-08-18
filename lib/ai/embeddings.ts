@@ -1,27 +1,42 @@
-const OLLAMA_URL =
-  process.env.OLLAMA_EMBEDDING_URL ??
-  "http://localhost:11434/api/embeddings";
+// =====================================================
+// OPENAI EMBEDDINGS CONFIG
+// =====================================================
+
+const OPENAI_API_URL =
+  "https://api.openai.com/v1/embeddings";
 
 const MODEL =
-  process.env.OLLAMA_EMBEDDING_MODEL ??
-  "nomic-embed-text";
+  process.env.OPENAI_EMBEDDING_MODEL ??
+  "text-embedding-3-small";
 
 const MAX_RETRIES = 3;
 const TIMEOUT = 30000;
 
+// =====================================================
+// CLEAN TEXT
+// =====================================================
+
 function cleanText(text: string) {
-  return text
+  return String(text || "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 8000);
 }
 
+// =====================================================
+// SLEEP
+// =====================================================
+
 function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
+
+// =====================================================
+// CREATE SINGLE EMBEDDING
+// =====================================================
 
 export async function createEmbedding(
   text: string
@@ -34,7 +49,24 @@ export async function createEmbedding(
     );
   }
 
+  // ===================================================
+  // API KEY
+  // ===================================================
+
+  const apiKey =
+    process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "OPENAI_API_KEY is not configured."
+    );
+  }
+
   let lastError: unknown;
+
+  // ===================================================
+  // RETRIES
+  // ===================================================
 
   for (
     let attempt = 1;
@@ -44,17 +76,45 @@ export async function createEmbedding(
     const controller =
       new AbortController();
 
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, TIMEOUT);
+    const timeout =
+      setTimeout(() => {
+        controller.abort();
+      }, TIMEOUT);
 
     const start =
       performance.now();
 
     try {
+      console.log(
+        "================================="
+      );
+
+      console.log(
+        "OPENAI EMBEDDING START"
+      );
+
+      console.log(
+        "MODEL:",
+        MODEL
+      );
+
+      console.log(
+        "TEXT LENGTH:",
+        prompt.length
+      );
+
+      console.log(
+        "ATTEMPT:",
+        `${attempt}/${MAX_RETRIES}`
+      );
+
+      // =================================================
+      // OPENAI REQUEST
+      // =================================================
+
       const response =
         await fetch(
-          OLLAMA_URL,
+          OPENAI_API_URL,
           {
             method: "POST",
 
@@ -64,34 +124,116 @@ export async function createEmbedding(
             headers: {
               "Content-Type":
                 "application/json",
+
+              Authorization:
+                `Bearer ${apiKey}`,
             },
 
             body: JSON.stringify({
               model: MODEL,
-              prompt,
+
+              input: prompt,
+
+              encoding_format:
+                "float",
             }),
           }
         );
 
       clearTimeout(timeout);
 
+      // =================================================
+      // READ RESPONSE
+      // =================================================
+
+      const responseText =
+        await response.text();
+
+      // =================================================
+      // API ERROR
+      // =================================================
+
       if (!response.ok) {
+        console.error(
+          "OPENAI EMBEDDING STATUS:",
+          response.status
+        );
+
+        console.error(
+          "OPENAI EMBEDDING ERROR:",
+          responseText
+        );
+
+        let errorMessage =
+          `OpenAI embeddings returned ${response.status}.`;
+
+        try {
+          const errorData =
+            JSON.parse(
+              responseText
+            );
+
+          errorMessage =
+            errorData?.error
+              ?.message ||
+            errorMessage;
+        } catch {
+          // Response was not JSON.
+        }
+
         throw new Error(
-          `Ollama returned ${response.status} ${response.statusText}`
+          errorMessage
         );
       }
 
-      const data =
-        await response.json();
+      // =================================================
+      // PARSE RESPONSE
+      // =================================================
+
+      let data: any;
+
+      try {
+        data =
+          JSON.parse(
+            responseText
+          );
+      } catch {
+        throw new Error(
+          "OpenAI returned invalid JSON for embeddings."
+        );
+      }
+
+      // =================================================
+      // GET EMBEDDING
+      // =================================================
+
+      const embedding =
+        data?.data?.[0]?.embedding;
 
       if (
-        !data.embedding ||
         !Array.isArray(
-          data.embedding
+          embedding
         )
       ) {
+        console.error(
+          "OPENAI EMBEDDING RAW RESPONSE:",
+          data
+        );
+
         throw new Error(
-          "Invalid embedding returned from Ollama."
+          "Invalid embedding returned from OpenAI."
+        );
+      }
+
+      // =================================================
+      // VALIDATE EMBEDDING
+      // =================================================
+
+      if (
+        embedding.length === 0
+      ) {
+        throw new Error(
+          "OpenAI returned an empty embedding."
         );
       }
 
@@ -102,11 +244,23 @@ export async function createEmbedding(
         );
 
       console.log(
-        `Embedding created in ${duration} ms`
+        "OPENAI EMBEDDING COMPLETED"
       );
 
-      return data.embedding;
-    } catch (error) {
+      console.log(
+        `EMBEDDING DIMENSIONS: ${embedding.length}`
+      );
+
+      console.log(
+        `EMBEDDING TIME: ${duration}ms`
+      );
+
+      console.log(
+        "================================="
+      );
+
+      return embedding;
+    } catch (error: any) {
       clearTimeout(timeout);
 
       lastError = error;
@@ -116,6 +270,20 @@ export async function createEmbedding(
         error
       );
 
+      // =================================================
+      // TIMEOUT
+      // =================================================
+
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        lastError =
+          new Error(
+            "OpenAI embedding request timed out after 30 seconds."
+          );
+      }
+
       if (
         attempt < MAX_RETRIES
       ) {
@@ -124,32 +292,51 @@ export async function createEmbedding(
     }
   }
 
+  // =====================================================
+  // ALL RETRIES FAILED
+  // =====================================================
+
   console.error(
-    "Embedding generation failed after all retries."
+    "================================="
   );
 
-  throw lastError;
+  console.error(
+    "OPENAI EMBEDDING FAILED"
+  );
+
+  console.error(
+    lastError
+  );
+
+  console.error(
+    "================================="
+  );
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(
+        "Embedding generation failed after all retries."
+      );
 }
 
-/**
- * Create multiple embeddings concurrently.
- *
- * Default concurrency is 6.
- *
- * This increases throughput while keeping
- * the number of simultaneous Ollama requests
- * controlled.
- */
+// =====================================================
+// CREATE MULTIPLE EMBEDDINGS
+// =====================================================
+
 export async function createEmbeddings(
   texts: string[],
   concurrency = 6
 ): Promise<number[][]> {
-  if (texts.length === 0) {
+  if (
+    texts.length === 0
+  ) {
     return [];
   }
 
   const results: number[][] =
-    new Array(texts.length);
+    new Array(
+      texts.length
+    );
 
   let currentIndex = 0;
 
@@ -159,7 +346,8 @@ export async function createEmbeddings(
         currentIndex++;
 
       if (
-        index >= texts.length
+        index >=
+        texts.length
       ) {
         return;
       }
@@ -186,7 +374,8 @@ export async function createEmbeddings(
   const workers =
     Array.from(
       {
-        length: workerCount,
+        length:
+          workerCount,
       },
       () => worker()
     );
