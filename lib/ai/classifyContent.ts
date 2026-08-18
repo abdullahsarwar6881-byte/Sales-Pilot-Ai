@@ -1,13 +1,20 @@
-const OLLAMA_URL =
-  process.env.OLLAMA_CHAT_URL ??
-  "http://localhost:11434/api/generate";
+// =====================================================
+// OPENAI PAGE CLASSIFIER
+// =====================================================
+
+const OPENAI_API_URL =
+  "https://api.openai.com/v1/responses";
 
 const MODEL =
-  process.env.OLLAMA_CLASSIFIER_MODEL ??
-  "qwen2.5:3b";
+  process.env.OPENAI_CLASSIFIER_MODEL ??
+  "gpt-5-mini";
 
 const MAX_RETRIES = 2;
 const TIMEOUT = 30000;
+
+// =====================================================
+// ALLOWED CATEGORIES
+// =====================================================
 
 const ALLOWED_CATEGORIES = [
   "product",
@@ -22,18 +29,28 @@ const ALLOWED_CATEGORIES = [
 type PageCategory =
   (typeof ALLOWED_CATEGORIES)[number];
 
-function cleanContent(content: string) {
-  return content
+// =====================================================
+// CLEAN CONTENT
+// =====================================================
+
+function cleanContent(
+  content: string
+) {
+  return String(content || "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 3000);
 }
 
+// =====================================================
+// NORMALIZE CATEGORY
+// =====================================================
+
 function normalizeCategory(
   value: string
 ): PageCategory {
-  const result = value
+  const result = String(value || "")
     .trim()
     .toLowerCase()
     .replace(/["'`]/g, "")
@@ -51,16 +68,52 @@ function normalizeCategory(
   return "other";
 }
 
+// =====================================================
+// SLEEP
+// =====================================================
+
 function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
+// =====================================================
+// CLASSIFY CONTENT
+// =====================================================
+
 export async function classifyContent(
   title: string,
   content: string
 ): Promise<PageCategory> {
+  const cleanTitle =
+    String(title || "")
+      .replace(/\u0000/g, "")
+      .trim()
+      .slice(0, 500);
+
+  const cleanPageContent =
+    cleanContent(content);
+
+  // ===================================================
+  // API KEY
+  // ===================================================
+
+  const apiKey =
+    process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    console.error(
+      "OPENAI_API_KEY is not configured."
+    );
+
+    return "other";
+  }
+
+  // ===================================================
+  // PROMPT
+  // ===================================================
+
   const prompt = `
 You are a website content classifier.
 
@@ -116,16 +169,20 @@ other:
 - Anything that does not clearly fit the categories above
 
 Page title:
-${title}
+${cleanTitle}
 
 Page content:
-${cleanContent(content)}
+${cleanPageContent}
 
 Return ONLY ONE category name.
 Do not explain your answer.
-`;
+`.trim();
 
   let lastError: unknown;
+
+  // ===================================================
+  // RETRIES
+  // ===================================================
 
   for (
     let attempt = 1;
@@ -135,79 +192,233 @@ Do not explain your answer.
     const controller =
       new AbortController();
 
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, TIMEOUT);
+    const timeout =
+      setTimeout(() => {
+        controller.abort();
+      }, TIMEOUT);
 
-    const start = performance.now();
+    const start =
+      performance.now();
 
     try {
-      const response = await fetch(
-        OLLAMA_URL,
-        {
-          method: "POST",
-
-          signal:
-            controller.signal,
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            model: MODEL,
-
-            prompt,
-
-            stream: false,
-
-            keep_alive: "10m",
-
-            options: {
-              temperature: 0,
-
-              num_predict: 5,
-
-              num_ctx: 4096,
-            },
-          }),
-        }
+      console.log(
+        "================================="
       );
+
+      console.log(
+        "OPENAI CLASSIFIER START"
+      );
+
+      console.log(
+        "MODEL:",
+        MODEL
+      );
+
+      console.log(
+        "PAGE TITLE:",
+        cleanTitle
+      );
+
+      console.log(
+        "ATTEMPT:",
+        `${attempt}/${MAX_RETRIES}`
+      );
+
+      // =================================================
+      // OPENAI REQUEST
+      // =================================================
+
+      const response =
+        await fetch(
+          OPENAI_API_URL,
+          {
+            method: "POST",
+
+            signal:
+              controller.signal,
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Authorization:
+                `Bearer ${apiKey}`,
+            },
+
+            body: JSON.stringify({
+              model: MODEL,
+
+              input: prompt,
+
+              store: false,
+
+              max_output_tokens: 10,
+            }),
+          }
+        );
 
       clearTimeout(timeout);
 
+      // =================================================
+      // READ RESPONSE
+      // =================================================
+
+      const responseText =
+        await response.text();
+
+      // =================================================
+      // API ERROR
+      // =================================================
+
       if (!response.ok) {
+        console.error(
+          "OPENAI CLASSIFIER STATUS:",
+          response.status
+        );
+
+        console.error(
+          "OPENAI CLASSIFIER ERROR:",
+          responseText
+        );
+
+        let errorMessage =
+          `OpenAI classifier returned ${response.status}.`;
+
+        try {
+          const errorData =
+            JSON.parse(
+              responseText
+            );
+
+          errorMessage =
+            errorData?.error
+              ?.message ||
+            errorMessage;
+        } catch {
+          // Response was not JSON.
+        }
+
         throw new Error(
-          `Ollama classifier returned ${response.status}`
+          errorMessage
         );
       }
 
-      const data =
-        await response.json();
+      // =================================================
+      // PARSE RESPONSE
+      // =================================================
 
-      const duration =
-        Math.round(
-          performance.now() - start
+      let data: any;
+
+      try {
+        data =
+          JSON.parse(
+            responseText
+          );
+      } catch {
+        throw new Error(
+          "OpenAI classifier returned invalid JSON."
         );
+      }
 
-      const result =
-        typeof data.response ===
+      // =================================================
+      // EXTRACT TEXT
+      // =================================================
+
+      let result = "";
+
+      if (
+        typeof data?.output_text ===
         "string"
-          ? data.response
-          : "";
+      ) {
+        result =
+          data.output_text.trim();
+      }
+
+      // =================================================
+      // FALLBACK OUTPUT PARSER
+      // =================================================
+
+      if (
+        !result &&
+        Array.isArray(
+          data?.output
+        )
+      ) {
+        const textParts: string[] =
+          [];
+
+        for (
+          const outputItem of
+          data.output
+        ) {
+          if (
+            !Array.isArray(
+              outputItem?.content
+            )
+          ) {
+            continue;
+          }
+
+          for (
+            const contentItem of
+            outputItem.content
+          ) {
+            if (
+              typeof contentItem?.text ===
+              "string"
+            ) {
+              textParts.push(
+                contentItem.text
+              );
+            }
+          }
+        }
+
+        result =
+          textParts
+            .join(" ")
+            .trim();
+      }
+
+      // =================================================
+      // NORMALIZE RESULT
+      // =================================================
 
       const category =
         normalizeCategory(
           result
         );
 
+      const duration =
+        Math.round(
+          performance.now() -
+            start
+        );
+
       console.log(
-        `Classification completed in ${duration} ms: ${category}`
+        "OPENAI CLASSIFIER COMPLETED"
+      );
+
+      console.log(
+        `CLASSIFICATION TIME: ${duration}ms`
+      );
+
+      console.log(
+        "RAW CLASSIFICATION:",
+        result
+      );
+
+      console.log(
+        "CATEGORY:",
+        category
+      );
+
+      console.log(
+        "================================="
       );
 
       return category;
-    } catch (error) {
+    } catch (error: any) {
       clearTimeout(timeout);
 
       lastError = error;
@@ -217,6 +428,20 @@ Do not explain your answer.
         error
       );
 
+      // =================================================
+      // TIMEOUT
+      // =================================================
+
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        lastError =
+          new Error(
+            "OpenAI classifier request timed out after 30 seconds."
+          );
+      }
+
       if (
         attempt < MAX_RETRIES
       ) {
@@ -224,6 +449,10 @@ Do not explain your answer.
       }
     }
   }
+
+  // =====================================================
+  // FALLBACK
+  // =====================================================
 
   console.error(
     "Classification failed. Using 'other'.",
@@ -233,13 +462,10 @@ Do not explain your answer.
   return "other";
 }
 
-/**
- * Classify multiple pages concurrently.
- *
- * Default concurrency is 3 because
- * the classifier is currently running
- * through local Ollama.
- */
+// =====================================================
+// CLASSIFY MULTIPLE PAGES
+// =====================================================
+
 export async function classifyContents(
   pages: {
     title: string;
@@ -247,12 +473,16 @@ export async function classifyContents(
   }[],
   concurrency = 3
 ): Promise<PageCategory[]> {
-  if (pages.length === 0) {
+  if (
+    pages.length === 0
+  ) {
     return [];
   }
 
   const results: PageCategory[] =
-    new Array(pages.length);
+    new Array(
+      pages.length
+    );
 
   let currentIndex = 0;
 
@@ -262,7 +492,8 @@ export async function classifyContents(
         currentIndex++;
 
       if (
-        index >= pages.length
+        index >=
+        pages.length
       ) {
         return;
       }
@@ -290,7 +521,8 @@ export async function classifyContents(
   const workers =
     Array.from(
       {
-        length: workerCount,
+        length:
+          workerCount,
       },
       () => worker()
     );
