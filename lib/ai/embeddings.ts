@@ -9,6 +9,12 @@ const MODEL =
   process.env.OPENAI_EMBEDDING_MODEL ??
   "text-embedding-3-small";
 
+// IMPORTANT:
+// Your Supabase vector column currently uses 768 dimensions.
+// OpenAI text-embedding-3-small supports reducing the
+// embedding size to 768.
+const DIMENSIONS = 768;
+
 const MAX_RETRIES = 3;
 const TIMEOUT = 30000;
 
@@ -99,6 +105,11 @@ export async function createEmbedding(
       );
 
       console.log(
+        "TARGET DIMENSIONS:",
+        DIMENSIONS
+      );
+
+      console.log(
         "TEXT LENGTH:",
         prompt.length
       );
@@ -133,6 +144,12 @@ export async function createEmbedding(
               model: MODEL,
 
               input: prompt,
+
+              // IMPORTANT:
+              // Keep this at 768 because the
+              // Supabase vector column uses 768.
+              dimensions:
+                DIMENSIONS,
 
               encoding_format:
                 "float",
@@ -226,7 +243,7 @@ export async function createEmbedding(
       }
 
       // =================================================
-      // VALIDATE EMBEDDING
+      // CHECK EMPTY EMBEDDING
       // =================================================
 
       if (
@@ -236,6 +253,23 @@ export async function createEmbedding(
           "OpenAI returned an empty embedding."
         );
       }
+
+      // =================================================
+      // CHECK DIMENSIONS
+      // =================================================
+
+      if (
+        embedding.length !==
+        DIMENSIONS
+      ) {
+        throw new Error(
+          `Expected ${DIMENSIONS}-dimensional embedding but received ${embedding.length}.`
+        );
+      }
+
+      // =================================================
+      // COMPLETED
+      // =================================================
 
       const duration =
         Math.round(
@@ -284,8 +318,13 @@ export async function createEmbedding(
           );
       }
 
+      // =================================================
+      // RETRY
+      // =================================================
+
       if (
-        attempt < MAX_RETRIES
+        attempt <
+        MAX_RETRIES
       ) {
         await sleep(1000);
       }
@@ -340,6 +379,10 @@ export async function createEmbeddings(
 
   let currentIndex = 0;
 
+  // ===================================================
+  // WORKER
+  // ===================================================
+
   async function worker() {
     while (true) {
       const index =
@@ -364,6 +407,10 @@ export async function createEmbeddings(
         );
     }
   }
+
+  // ===================================================
+  // CONCURRENCY
+  // ===================================================
 
   const workerCount =
     Math.min(
