@@ -1,21 +1,44 @@
 // =====================================================
-// OPENAI EMBEDDINGS CONFIG
+// OPENAI EMBEDDINGS
 // =====================================================
 
 const OPENAI_API_URL =
   "https://api.openai.com/v1/embeddings";
 
+// =====================================================
+// MODEL
+// =====================================================
+//
+// IMPORTANT:
+// This must match the model configured in Netlify.
+//
+// Recommended:
+// text-embedding-3-small
+//
+
 const MODEL =
   process.env.OPENAI_EMBEDDING_MODEL ??
   "text-embedding-3-small";
 
-// IMPORTANT:
-// Your Supabase vector column currently uses 768 dimensions.
-// OpenAI text-embedding-3-small supports reducing the
-// embedding size to 768.
+// =====================================================
+// EMBEDDING DIMENSIONS
+// =====================================================
+//
+// Your Supabase knowledge_chunks.embedding column
+// currently uses:
+//
+// vector(768)
+//
+// text-embedding-3-small supports the dimensions
+// parameter, so we request exactly 768 dimensions.
+//
+
 const DIMENSIONS = 768;
 
-const MAX_RETRIES = 3;
+// =====================================================
+// TIMEOUT
+// =====================================================
+
 const TIMEOUT = 30000;
 
 // =====================================================
@@ -31,16 +54,6 @@ function cleanText(text: string) {
 }
 
 // =====================================================
-// SLEEP
-// =====================================================
-
-function sleep(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-// =====================================================
 // CREATE SINGLE EMBEDDING
 // =====================================================
 
@@ -49,15 +62,19 @@ export async function createEmbedding(
 ): Promise<number[]> {
   const prompt = cleanText(text);
 
+  // ---------------------------------------------------
+  // EMPTY TEXT
+  // ---------------------------------------------------
+
   if (!prompt) {
     throw new Error(
       "Cannot create embedding from empty text."
     );
   }
 
-  // ===================================================
+  // ---------------------------------------------------
   // API KEY
-  // ===================================================
+  // ---------------------------------------------------
 
   const apiKey =
     process.env.OPENAI_API_KEY;
@@ -68,309 +85,294 @@ export async function createEmbedding(
     );
   }
 
-  let lastError: unknown;
+  // ---------------------------------------------------
+  // ABORT CONTROLLER
+  // ---------------------------------------------------
 
-  // ===================================================
-  // RETRIES
-  // ===================================================
+  const controller =
+    new AbortController();
 
-  for (
-    let attempt = 1;
-    attempt <= MAX_RETRIES;
-    attempt++
-  ) {
-    const controller =
-      new AbortController();
+  const timeout =
+    setTimeout(() => {
+      controller.abort();
+    }, TIMEOUT);
 
-    const timeout =
-      setTimeout(() => {
-        controller.abort();
-      }, TIMEOUT);
+  const startedAt =
+    Date.now();
 
-    const start =
-      performance.now();
+  try {
+    console.log(
+      "================================="
+    );
 
-    try {
-      console.log(
-        "================================="
-      );
+    console.log(
+      "OPENAI EMBEDDING START"
+    );
 
-      console.log(
-        "OPENAI EMBEDDING START"
-      );
+    console.log(
+      "MODEL:",
+      MODEL
+    );
 
-      console.log(
-        "MODEL:",
-        MODEL
-      );
+    console.log(
+      "TARGET DIMENSIONS:",
+      DIMENSIONS
+    );
 
-      console.log(
-        "TARGET DIMENSIONS:",
-        DIMENSIONS
-      );
+    console.log(
+      "TEXT LENGTH:",
+      prompt.length
+    );
 
-      console.log(
-        "TEXT LENGTH:",
-        prompt.length
-      );
+    // =================================================
+    // OPENAI REQUEST
+    // =================================================
 
-      console.log(
-        "ATTEMPT:",
-        `${attempt}/${MAX_RETRIES}`
-      );
+    const response =
+      await fetch(
+        OPENAI_API_URL,
+        {
+          method: "POST",
 
-      // =================================================
-      // OPENAI REQUEST
-      // =================================================
+          signal:
+            controller.signal,
 
-      const response =
-        await fetch(
-          OPENAI_API_URL,
-          {
-            method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-            signal:
-              controller.signal,
+            Authorization:
+              `Bearer ${apiKey}`,
+          },
 
-            headers: {
-              "Content-Type":
-                "application/json",
+          body: JSON.stringify({
+            model: MODEL,
 
-              Authorization:
-                `Bearer ${apiKey}`,
-            },
+            input: prompt,
 
-            body: JSON.stringify({
-              model: MODEL,
+            dimensions:
+              DIMENSIONS,
 
-              input: prompt,
-
-              // IMPORTANT:
-              // Keep this at 768 because the
-              // Supabase vector column uses 768.
-              dimensions:
-                DIMENSIONS,
-
-              encoding_format:
-                "float",
-            }),
-          }
-        );
-
-      clearTimeout(timeout);
-
-      // =================================================
-      // READ RESPONSE
-      // =================================================
-
-      const responseText =
-        await response.text();
-
-      // =================================================
-      // API ERROR
-      // =================================================
-
-      if (!response.ok) {
-        console.error(
-          "OPENAI EMBEDDING STATUS:",
-          response.status
-        );
-
-        console.error(
-          "OPENAI EMBEDDING ERROR:",
-          responseText
-        );
-
-        let errorMessage =
-          `OpenAI embeddings returned ${response.status}.`;
-
-        try {
-          const errorData =
-            JSON.parse(
-              responseText
-            );
-
-          errorMessage =
-            errorData?.error
-              ?.message ||
-            errorMessage;
-        } catch {
-          // Response was not JSON.
+            encoding_format:
+              "float",
+          }),
         }
+      );
 
-        throw new Error(
-          errorMessage
-        );
-      }
+    // ---------------------------------------------------
+    // READ RESPONSE
+    // ---------------------------------------------------
 
-      // =================================================
-      // PARSE RESPONSE
-      // =================================================
+    const responseText =
+      await response.text();
 
-      let data: any;
+    // ---------------------------------------------------
+    // OPENAI ERROR
+    // ---------------------------------------------------
+
+    if (!response.ok) {
+      console.error(
+        "OPENAI EMBEDDING STATUS:",
+        response.status
+      );
+
+      console.error(
+        "OPENAI EMBEDDING ERROR:",
+        responseText
+      );
+
+      let errorMessage =
+        `OpenAI embeddings returned ${response.status}.`;
 
       try {
-        data =
+        const errorData =
           JSON.parse(
             responseText
           );
+
+        errorMessage =
+          errorData?.error
+            ?.message ||
+          errorMessage;
       } catch {
-        throw new Error(
-          "OpenAI returned invalid JSON for embeddings."
-        );
+        // Response was not JSON.
       }
 
-      // =================================================
-      // GET EMBEDDING
-      // =================================================
-
-      const embedding =
-        data?.data?.[0]?.embedding;
-
-      if (
-        !Array.isArray(
-          embedding
-        )
-      ) {
-        console.error(
-          "OPENAI EMBEDDING RAW RESPONSE:",
-          data
-        );
-
-        throw new Error(
-          "Invalid embedding returned from OpenAI."
-        );
-      }
-
-      // =================================================
-      // CHECK EMPTY EMBEDDING
-      // =================================================
-
-      if (
-        embedding.length === 0
-      ) {
-        throw new Error(
-          "OpenAI returned an empty embedding."
-        );
-      }
-
-      // =================================================
-      // CHECK DIMENSIONS
-      // =================================================
-
-      if (
-        embedding.length !==
-        DIMENSIONS
-      ) {
-        throw new Error(
-          `Expected ${DIMENSIONS}-dimensional embedding but received ${embedding.length}.`
-        );
-      }
-
-      // =================================================
-      // COMPLETED
-      // =================================================
-
-      const duration =
-        Math.round(
-          performance.now() -
-            start
-        );
-
-      console.log(
-        "OPENAI EMBEDDING COMPLETED"
+      throw new Error(
+        errorMessage
       );
-
-      console.log(
-        `EMBEDDING DIMENSIONS: ${embedding.length}`
-      );
-
-      console.log(
-        `EMBEDDING TIME: ${duration}ms`
-      );
-
-      console.log(
-        "================================="
-      );
-
-      return embedding;
-    } catch (error: any) {
-      clearTimeout(timeout);
-
-      lastError = error;
-
-      console.warn(
-        `Embedding attempt ${attempt}/${MAX_RETRIES} failed.`,
-        error
-      );
-
-      // =================================================
-      // TIMEOUT
-      // =================================================
-
-      if (
-        error?.name ===
-        "AbortError"
-      ) {
-        lastError =
-          new Error(
-            "OpenAI embedding request timed out after 30 seconds."
-          );
-      }
-
-      // =================================================
-      // RETRY
-      // =================================================
-
-      if (
-        attempt <
-        MAX_RETRIES
-      ) {
-        await sleep(1000);
-      }
     }
-  }
 
-  // =====================================================
-  // ALL RETRIES FAILED
-  // =====================================================
+    // =================================================
+    // PARSE RESPONSE
+    // =================================================
 
-  console.error(
-    "================================="
-  );
+    let data: any;
 
-  console.error(
-    "OPENAI EMBEDDING FAILED"
-  );
-
-  console.error(
-    lastError
-  );
-
-  console.error(
-    "================================="
-  );
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(
-        "Embedding generation failed after all retries."
+    try {
+      data =
+        JSON.parse(
+          responseText
+        );
+    } catch {
+      throw new Error(
+        "OpenAI returned invalid JSON for embeddings."
       );
+    }
+
+    // =================================================
+    // GET EMBEDDING
+    // =================================================
+
+    const embedding =
+      data?.data?.[0]?.embedding;
+
+    if (
+      !Array.isArray(
+        embedding
+      )
+    ) {
+      console.error(
+        "OPENAI EMBEDDING RAW RESPONSE:",
+        data
+      );
+
+      throw new Error(
+        "Invalid embedding returned from OpenAI."
+      );
+    }
+
+    // =================================================
+    // EMPTY EMBEDDING
+    // =================================================
+
+    if (
+      embedding.length === 0
+    ) {
+      throw new Error(
+        "OpenAI returned an empty embedding."
+      );
+    }
+
+    // =================================================
+    // CHECK DIMENSIONS
+    // =================================================
+
+    if (
+      embedding.length !==
+      DIMENSIONS
+    ) {
+      throw new Error(
+        `Expected ${DIMENSIONS}-dimensional embedding but received ${embedding.length}.`
+      );
+    }
+
+    // =================================================
+    // FINISHED
+    // =================================================
+
+    const duration =
+      Date.now() -
+      startedAt;
+
+    console.log(
+      "OPENAI EMBEDDING COMPLETED"
+    );
+
+    console.log(
+      `EMBEDDING DIMENSIONS: ${embedding.length}`
+    );
+
+    console.log(
+      `EMBEDDING TIME: ${duration}ms`
+    );
+
+    console.log(
+      "================================="
+    );
+
+    return embedding;
+  } catch (error: any) {
+    // ---------------------------------------------------
+    // TIMEOUT
+    // ---------------------------------------------------
+
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+      console.error(
+        "OPENAI EMBEDDING TIMEOUT"
+      );
+
+      throw new Error(
+        "OpenAI embedding request timed out after 30 seconds."
+      );
+    }
+
+    // ---------------------------------------------------
+    // ERROR
+    // ---------------------------------------------------
+
+    console.error(
+      "================================="
+    );
+
+    console.error(
+      "OPENAI EMBEDDING ERROR"
+    );
+
+    console.error(
+      error
+    );
+
+    console.error(
+      "================================="
+    );
+
+    throw error;
+  } finally {
+    clearTimeout(
+      timeout
+    );
+  }
 }
 
 // =====================================================
 // CREATE MULTIPLE EMBEDDINGS
 // =====================================================
+//
+// This is used by the crawler when a page is split
+// into multiple chunks.
+//
+// Example:
+//
+// 10 chunks
+//    ↓
+// createEmbeddings()
+//    ↓
+// 10 OpenAI embeddings
+//
+// There is NO retry system here.
+//
 
 export async function createEmbeddings(
   texts: string[],
   concurrency = 6
 ): Promise<number[][]> {
+  // ---------------------------------------------------
+  // EMPTY INPUT
+  // ---------------------------------------------------
+
   if (
     texts.length === 0
   ) {
     return [];
   }
+
+  // ---------------------------------------------------
+  // RESULTS
+  // ---------------------------------------------------
 
   const results: number[][] =
     new Array(
@@ -414,7 +416,10 @@ export async function createEmbeddings(
 
   const workerCount =
     Math.min(
-      concurrency,
+      Math.max(
+        1,
+        concurrency
+      ),
       texts.length
     );
 
@@ -424,12 +429,21 @@ export async function createEmbeddings(
         length:
           workerCount,
       },
-      () => worker()
+      () =>
+        worker()
     );
+
+  // ===================================================
+  // RUN WORKERS
+  // ===================================================
 
   await Promise.all(
     workers
   );
+
+  // ===================================================
+  // COMPLETE
+  // ===================================================
 
   console.log(
     `Finished creating ${texts.length} embeddings.`

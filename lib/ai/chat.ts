@@ -7,14 +7,19 @@ const OPENAI_API_URL =
 
 const MODEL =
   process.env.OPENAI_CHAT_MODEL ??
-  "gpt-5.6-luna";
+  "gpt-5-mini";
 
 // =====================================================
 // TIMEOUT
 // =====================================================
 
-// 60 seconds
 const TIMEOUT = 60000;
+
+// =====================================================
+// OUTPUT LIMIT
+// =====================================================
+
+const MAX_OUTPUT_TOKENS = 500;
 
 // =====================================================
 // CLEAN TEXT
@@ -32,12 +37,7 @@ function cleanText(text: string) {
 // =====================================================
 
 function limitContext(context: string) {
-  const cleaned =
-    cleanText(context);
-
-  // Keep the store context reasonably small.
-  // This reduces latency and API cost.
-  return cleaned.slice(0, 6000);
+  return cleanText(context).slice(0, 6000);
 }
 
 // =====================================================
@@ -74,7 +74,7 @@ export async function chatWithAI(
   const prompt = `
 You are Sales Pilot, a professional ecommerce customer support employee.
 
-Your job is to help customers using ONLY the store information provided below.
+Answer the customer using ONLY the store information provided below.
 
 RULES:
 
@@ -105,19 +105,14 @@ RULES:
 
 6. Speak naturally like a real store employee.
 
-7. Keep answers short and useful.
-Normally 1-3 sentences.
+7. Keep the answer short and useful.
 
-8. If the information is unavailable, say:
+8. Normally answer in 1-3 sentences.
+
+9. If the customer asks what the store offers, summarize the actual products or services found in the store information.
+
+10. If the information is unavailable, say:
 "I couldn't find that information in this store's information."
-
-9. If the customer asks what the store offers, summarize the products or services that are actually present in the store information.
-
-10. If the customer asks about a specific product, only use information about that product that appears in the store information.
-
-11. Do not claim that an order was placed, cancelled, refunded, shipped, or modified unless the system explicitly provides that result.
-
-12. Do not expose internal implementation details.
 
 STORE INFORMATION:
 
@@ -175,8 +170,8 @@ ANSWER:
     );
 
     console.log(
-      "TIMEOUT:",
-      `${TIMEOUT / 1000} seconds`
+      "MAX OUTPUT TOKENS:",
+      MAX_OUTPUT_TOKENS
     );
 
     // =================================================
@@ -207,7 +202,15 @@ ANSWER:
 
             store: false,
 
-            max_output_tokens: 200,
+            // Keep reasoning small so the model
+            // has enough tokens to produce the
+            // actual customer-facing answer.
+            reasoning: {
+              effort: "low",
+            },
+
+            max_output_tokens:
+              MAX_OUTPUT_TOKENS,
           }),
         }
       );
@@ -215,14 +218,14 @@ ANSWER:
     clearTimeout(timeout);
 
     // =================================================
-    // READ RESPONSE BODY
+    // READ RESPONSE
     // =================================================
 
     const responseText =
       await response.text();
 
     // =================================================
-    // OPENAI ERROR
+    // API ERROR
     // =================================================
 
     if (!response.ok) {
@@ -246,8 +249,7 @@ ANSWER:
           );
 
         errorMessage =
-          errorData?.error
-            ?.message ||
+          errorData?.error?.message ||
           errorMessage;
       } catch {
         // Response was not JSON.
@@ -271,7 +273,25 @@ ANSWER:
         );
     } catch {
       throw new Error(
-        "OpenAI returned an invalid JSON response."
+        "OpenAI returned invalid JSON."
+      );
+    }
+
+    // =================================================
+    // LOG RESPONSE STATUS
+    // =================================================
+
+    console.log(
+      "OPENAI STATUS:",
+      data?.status
+    );
+
+    if (
+      data?.incomplete_details
+    ) {
+      console.warn(
+        "OPENAI INCOMPLETE:",
+        data.incomplete_details
       );
     }
 
@@ -281,11 +301,7 @@ ANSWER:
 
     let result = "";
 
-    // Responses API normally exposes
-    // output_text in the SDK.
-    //
-    // With the raw HTTP API we safely extract
-    // the generated text from output[].content[].
+    // Preferred Responses API field.
 
     if (
       typeof data?.output_text ===
@@ -294,6 +310,10 @@ ANSWER:
       result =
         data.output_text.trim();
     }
+
+    // =================================================
+    // FALLBACK OUTPUT EXTRACTION
+    // =================================================
 
     if (
       !result &&
@@ -306,7 +326,7 @@ ANSWER:
 
       for (
         const outputItem of
-        data.output
+          data.output
       ) {
         if (
           !Array.isArray(
@@ -318,11 +338,13 @@ ANSWER:
 
         for (
           const contentItem of
-          outputItem.content
+            outputItem.content
         ) {
           if (
+            contentItem?.type ===
+              "output_text" &&
             typeof contentItem?.text ===
-            "string"
+              "string"
           ) {
             textParts.push(
               contentItem.text
@@ -336,6 +358,10 @@ ANSWER:
           .join("\n")
           .trim();
     }
+
+    // =================================================
+    // DURATION
+    // =================================================
 
     const duration =
       Date.now() -
@@ -363,6 +389,22 @@ ANSWER:
     );
 
     // =================================================
+    // INCOMPLETE RESPONSE
+    // =================================================
+
+    if (
+      data?.status ===
+        "incomplete" &&
+      data?.incomplete_details
+        ?.reason ===
+        "max_output_tokens"
+    ) {
+      throw new Error(
+        "OpenAI response reached the output token limit before producing an answer."
+      );
+    }
+
+    // =================================================
     // EMPTY RESPONSE
     // =================================================
 
@@ -378,6 +420,7 @@ ANSWER:
     }
 
     return result;
+
   } catch (error: any) {
     clearTimeout(timeout);
 
@@ -406,7 +449,7 @@ ANSWER:
       "AbortError"
     ) {
       throw new Error(
-        "AI response timed out after 60 seconds."
+        "OpenAI response timed out after 60 seconds."
       );
     }
 

@@ -16,25 +16,53 @@ import {
 // SUPABASE ADMIN CLIENT
 // =====================================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const supabaseServiceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (
+  !supabaseUrl ||
+  !supabaseServiceRoleKey
+) {
+  console.error(
+    "Supabase environment variables are missing."
+  );
+}
+
+const supabaseAdmin =
+  createClient(
+    supabaseUrl!,
+    supabaseServiceRoleKey!
+  );
+
+// =====================================================
+// CONFIG
+// =====================================================
+
+const KNOWLEDGE_MATCH_COUNT = 5;
+
+const MAX_CONTEXT_MATCHES = 5;
+
+const MAX_HISTORY_MESSAGES = 6;
 
 // =====================================================
 // BILLING ACCESS CHECK
 // =====================================================
 //
-// This runs only when a NEW conversation needs to be
-// created.
+// Billing is currently disabled for demo/development.
 //
-// Existing conversations are allowed to continue even
-// when the merchant has reached the conversation limit.
+// Keep this function available so billing can be
+// enabled later without rebuilding the entire API.
 //
 // =====================================================
 
-async function checkBillingAccess(profileId: string) {
-  const now = new Date();
+async function checkBillingAccess(
+  profileId: string
+) {
+  const now =
+    new Date();
 
   // -----------------------------------------------------
   // GET SUBSCRIPTION
@@ -43,23 +71,29 @@ async function checkBillingAccess(profileId: string) {
   const {
     data: subscription,
     error: subscriptionError,
-  } = await supabaseAdmin
-    .from("subscriptions")
-    .select(
-      `
-        id,
-        user_id,
-        plan_id,
-        status,
-        billing_cycle,
-        current_period_start,
-        current_period_end
-      `
-    )
-    .eq("user_id", profileId)
-    .maybeSingle();
+  } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select(
+        `
+          id,
+          user_id,
+          plan_id,
+          status,
+          billing_cycle,
+          current_period_start,
+          current_period_end
+        `
+      )
+      .eq(
+        "user_id",
+        profileId
+      )
+      .maybeSingle();
 
-  if (subscriptionError) {
+  if (
+    subscriptionError
+  ) {
     console.error(
       "BILLING SUBSCRIPTION ERROR:",
       subscriptionError
@@ -75,24 +109,8 @@ async function checkBillingAccess(profileId: string) {
   // -----------------------------------------------------
   // NO SUBSCRIPTION
   // -----------------------------------------------------
-  //
-  // We do NOT create subscriptions from the public
-  // customer chat endpoint.
-  //
-  // A subscription should already exist from the
-  // authenticated merchant account creation flow.
-  //
-  // This prevents an anonymous website visitor from
-  // creating billing records.
-  //
-  // -----------------------------------------------------
 
   if (!subscription) {
-    console.error(
-      "NO BILLING SUBSCRIPTION FOR PROFILE:",
-      profileId
-    );
-
     return {
       allowed: false,
       error:
@@ -106,34 +124,38 @@ async function checkBillingAccess(profileId: string) {
 
   const planId: BillingPlanId =
     subscription.plan_id &&
-    subscription.plan_id in BILLING_PLANS
+    subscription.plan_id in
+      BILLING_PLANS
       ? (subscription.plan_id as BillingPlanId)
       : "starter";
 
-  const plan = BILLING_PLANS[planId];
+  const plan =
+    BILLING_PLANS[
+      planId
+    ];
 
   // -----------------------------------------------------
   // BILLING PERIOD
   // -----------------------------------------------------
 
-  const periodStart = subscription.current_period_start
-    ? new Date(subscription.current_period_start)
-    : null;
+  const periodStart =
+    subscription.current_period_start
+      ? new Date(
+          subscription.current_period_start
+        )
+      : null;
 
-  const periodEnd = subscription.current_period_end
-    ? new Date(subscription.current_period_end)
-    : null;
+  const periodEnd =
+    subscription.current_period_end
+      ? new Date(
+          subscription.current_period_end
+        )
+      : null;
 
-  // -----------------------------------------------------
-  // INVALID BILLING PERIOD
-  // -----------------------------------------------------
-
-  if (!periodStart || !periodEnd) {
-    console.error(
-      "INVALID BILLING PERIOD:",
-      subscription
-    );
-
+  if (
+    !periodStart ||
+    !periodEnd
+  ) {
     return {
       allowed: false,
       error:
@@ -142,106 +164,107 @@ async function checkBillingAccess(profileId: string) {
   }
 
   // -----------------------------------------------------
-  // BILLING PERIOD EXPIRED
+  // EXPIRED
   // -----------------------------------------------------
 
-  if (now >= periodEnd) {
+  if (
+    now >=
+    periodEnd
+  ) {
     return {
       allowed: false,
 
       error:
         "Your Sales Pilot billing period has ended. Please upgrade or renew your plan.",
 
-      code: "BILLING_PERIOD_EXPIRED",
+      code:
+        "BILLING_PERIOD_EXPIRED",
 
       planId,
 
-      planName: plan.name,
+      planName:
+        plan.name,
 
       used: 0,
 
-      limit: plan.conversations,
+      limit:
+        plan.conversations,
     };
   }
 
   // -----------------------------------------------------
-  // SUBSCRIPTION STATUS
+  // STATUS
   // -----------------------------------------------------
 
   const status =
-    String(subscription.status || "")
+    String(
+      subscription.status ||
+        ""
+    )
       .toLowerCase()
       .trim();
 
-  /*
-   * Active:
-   *      Normal paid subscription.
-   *
-   * Trialing:
-   *      Development/free trial.
-   *
-   * Past due:
-   *      We allow access until current_period_end.
-   *      Later we can introduce a grace period.
-   *
-   * Canceled:
-   *      The merchant can continue using the service
-   *      until current_period_end.
-   *
-   * Incomplete:
-   *      Payment/subscription setup wasn't completed.
-   */
-
-  if (status === "incomplete") {
+  if (
+    status ===
+    "incomplete"
+  ) {
     return {
       allowed: false,
 
       error:
         "Your Sales Pilot subscription setup is incomplete. Please complete billing to continue.",
 
-      code: "SUBSCRIPTION_INCOMPLETE",
+      code:
+        "SUBSCRIPTION_INCOMPLETE",
 
       planId,
 
-      planName: plan.name,
+      planName:
+        plan.name,
 
       used: 0,
 
-      limit: plan.conversations,
+      limit:
+        plan.conversations,
     };
   }
 
   // -----------------------------------------------------
-  // COUNT REAL CONVERSATIONS
-  // -----------------------------------------------------
-  //
-  // conversations.user_id is the merchant/user ID.
-  //
-  // created_at allows us to count only conversations
-  // from the current billing period.
-  //
+  // COUNT CONVERSATIONS
   // -----------------------------------------------------
 
   const {
-    count: conversationCount,
-    error: conversationCountError,
-  } = await supabaseAdmin
-    .from("conversations")
-    .select("id", {
-      count: "exact",
-      head: true,
-    })
-    .eq("user_id", profileId)
-    .gte(
-      "created_at",
-      periodStart.toISOString()
-    )
-    .lt(
-      "created_at",
-      periodEnd.toISOString()
-    );
+    count:
+      conversationCount,
+    error:
+      conversationCountError,
+  } =
+    await supabaseAdmin
+      .from("conversations")
+      .select(
+        "id",
+        {
+          count:
+            "exact",
+          head: true,
+        }
+      )
+      .eq(
+        "user_id",
+        profileId
+      )
+      .gte(
+        "created_at",
+        periodStart.toISOString()
+      )
+      .lt(
+        "created_at",
+        periodEnd.toISOString()
+      );
 
-  if (conversationCountError) {
+  if (
+    conversationCountError
+  ) {
     console.error(
       "BILLING CONVERSATION COUNT ERROR:",
       conversationCountError
@@ -256,27 +279,33 @@ async function checkBillingAccess(profileId: string) {
   }
 
   const used =
-    conversationCount ?? 0;
+    conversationCount ??
+    0;
 
   const limit =
     plan.conversations;
 
   // -----------------------------------------------------
-  // LIMIT REACHED
+  // LIMIT
   // -----------------------------------------------------
 
-  if (used >= limit) {
+  if (
+    used >=
+    limit
+  ) {
     return {
       allowed: false,
 
       error:
         `Your ${plan.name} plan has reached its limit of ${limit.toLocaleString()} AI conversations for this billing period. Please upgrade your plan to continue.`,
 
-      code: "CONVERSATION_LIMIT_REACHED",
+      code:
+        "CONVERSATION_LIMIT_REACHED",
 
       planId,
 
-      planName: plan.name,
+      planName:
+        plan.name,
 
       used,
 
@@ -293,7 +322,8 @@ async function checkBillingAccess(profileId: string) {
 
     planId,
 
-    planName: plan.name,
+    planName:
+      plan.name,
 
     used,
 
@@ -308,12 +338,21 @@ async function checkBillingAccess(profileId: string) {
 // FAST RESPONSE
 // =====================================================
 
-function getFastResponse(message: string) {
-  const text = message
-    .toLowerCase()
-    .trim()
-    .replace(/[!?.,]/g, "")
-    .replace(/\s+/g, " ");
+function getFastResponse(
+  message: string
+) {
+  const text =
+    message
+      .toLowerCase()
+      .trim()
+      .replace(
+        /[!?.,]/g,
+        ""
+      )
+      .replace(
+        /\s+/g,
+        " "
+      );
 
   const greetings = [
     "hi",
@@ -327,7 +366,11 @@ function getFastResponse(message: string) {
     "good evening",
   ];
 
-  if (greetings.includes(text)) {
+  if (
+    greetings.includes(
+      text
+    )
+  ) {
     return "Hi! 👋 How can I help you today?";
   }
 
@@ -339,7 +382,11 @@ function getFastResponse(message: string) {
     "thx",
   ];
 
-  if (thanks.includes(text)) {
+  if (
+    thanks.includes(
+      text
+    )
+  ) {
     return "You're welcome! 😊";
   }
 
@@ -350,7 +397,11 @@ function getFastResponse(message: string) {
     "see you later",
   ];
 
-  if (goodbye.includes(text)) {
+  if (
+    goodbye.includes(
+      text
+    )
+  ) {
     return "Goodbye! 👋 Have a great day!";
   }
 
@@ -371,8 +422,11 @@ function getFastResponse(message: string) {
 // DETECT INTENT
 // =====================================================
 
-function detectIntent(question: string) {
-  const text = question.toLowerCase();
+function detectIntent(
+  question: string
+) {
+  const text =
+    question.toLowerCase();
 
   if (
     [
@@ -386,7 +440,12 @@ function detectIntent(question: string) {
       "warranty",
       "payment",
       "returns",
-    ].some((word) => text.includes(word))
+    ].some(
+      (word) =>
+        text.includes(
+          word
+        )
+    )
   ) {
     return "policy";
   }
@@ -424,7 +483,12 @@ function detectIntent(question: string) {
       "bags",
       "watch",
       "watches",
-    ].some((word) => text.includes(word))
+    ].some(
+      (word) =>
+        text.includes(
+          word
+        )
+    )
   ) {
     return "product";
   }
@@ -436,7 +500,9 @@ function detectIntent(question: string) {
 // BUILD KNOWLEDGE CONTEXT
 // =====================================================
 
-function buildContext(matches: any[]) {
+function buildContext(
+  matches: any[]
+) {
   if (
     !matches ||
     matches.length === 0
@@ -445,29 +511,52 @@ function buildContext(matches: any[]) {
   }
 
   return matches
-    .slice(0, 3)
-    .map((item, index) => {
-      const title = String(
-        item.page_title ||
-          item.title ||
-          ""
-      ).slice(0, 150);
+    .slice(
+      0,
+      MAX_CONTEXT_MATCHES
+    )
+    .map(
+      (
+        item,
+        index
+      ) => {
+        const title =
+          String(
+            item.page_title ||
+              item.title ||
+              ""
+          ).slice(
+            0,
+            150
+          );
 
-      const sourceUrl = String(
-        item.source_url ||
-          item.page_url ||
-          item.url ||
-          ""
-      ).slice(0, 500);
+        const sourceUrl =
+          String(
+            item.source_url ||
+              item.page_url ||
+              item.url ||
+              ""
+          ).slice(
+            0,
+            500
+          );
 
-      const content = String(
-        item.content || ""
-      )
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 800);
+        const content =
+          String(
+            item.content ||
+              ""
+          )
+            .replace(
+              /\s+/g,
+              " "
+            )
+            .trim()
+            .slice(
+              0,
+              1000
+            );
 
-      return `
+        return `
 RESULT ${index + 1}
 
 TITLE:
@@ -479,7 +568,8 @@ ${sourceUrl}
 CONTENT:
 ${content}
 `;
-    })
+      }
+    )
     .join("\n");
 }
 
@@ -498,27 +588,40 @@ function buildConversationHistory(
   }
 
   return messages
-    .slice(-4)
-    .map((item) => {
-      const sender =
-        item.sender === "customer"
-          ? "Customer"
-          : "AI";
+    .slice(
+      -MAX_HISTORY_MESSAGES
+    )
+    .map(
+      (item) => {
+        const sender =
+          item.sender ===
+          "customer"
+            ? "Customer"
+            : "AI";
 
-      const content = String(
-        item.content || ""
-      )
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 500);
+        const content =
+          String(
+            item.content ||
+              ""
+          )
+            .replace(
+              /\s+/g,
+              " "
+            )
+            .trim()
+            .slice(
+              0,
+              500
+            );
 
-      return `${sender}: ${content}`;
-    })
+        return `${sender}: ${content}`;
+      }
+    )
     .join("\n");
 }
 
 // =====================================================
-// GET RECENT CONVERSATION
+// GET CONVERSATION HISTORY
 // =====================================================
 
 async function getConversationHistory(
@@ -527,21 +630,32 @@ async function getConversationHistory(
   const {
     data,
     error,
-  } = await supabaseAdmin
-    .from("conversation_messages")
-    .select(
-      "sender, content, created_at"
-    )
-    .eq(
-      "conversation_id",
-      conversationId
-    )
-    .order("created_at", {
-      ascending: false,
-    })
-    .limit(6);
+  } =
+    await supabaseAdmin
+      .from(
+        "conversation_messages"
+      )
+      .select(
+        "sender, content, created_at"
+      )
+      .eq(
+        "conversation_id",
+        conversationId
+      )
+      .order(
+        "created_at",
+        {
+          ascending:
+            false,
+        }
+      )
+      .limit(
+        MAX_HISTORY_MESSAGES
+      );
 
-  if (error) {
+  if (
+    error
+  ) {
     console.error(
       "CONVERSATION HISTORY ERROR:",
       error
@@ -550,7 +664,9 @@ async function getConversationHistory(
     return [];
   }
 
-  if (!data) {
+  if (
+    !data
+  ) {
     return [];
   }
 
@@ -558,7 +674,7 @@ async function getConversationHistory(
 }
 
 // =====================================================
-// REPLACE AI PRODUCT URL PLACEHOLDER
+// PRODUCT URL PLACEHOLDER
 // =====================================================
 
 function addProductUrl(
@@ -586,29 +702,39 @@ function addProductUrl(
     userMessage.toLowerCase();
 
   let selected =
-    matches.find((item: any) => {
-      const title = String(
-        item.page_title ||
-          item.title ||
-          ""
-      ).toLowerCase();
+    matches.find(
+      (item: any) => {
+        const title =
+          String(
+            item.page_title ||
+              item.title ||
+              ""
+          ).toLowerCase();
 
-      return (
-        title &&
-        question.includes(title)
-      );
-    });
-
-  if (!selected) {
-    selected = matches.find(
-      (item: any) =>
-        item.source_url ||
-        item.page_url ||
-        item.url
+        return (
+          title &&
+          question.includes(
+            title
+          )
+        );
+      }
     );
+
+  if (
+    !selected
+  ) {
+    selected =
+      matches.find(
+        (item: any) =>
+          item.source_url ||
+          item.page_url ||
+          item.url
+      );
   }
 
-  if (!selected) {
+  if (
+    !selected
+  ) {
     return response;
   }
 
@@ -618,7 +744,9 @@ function addProductUrl(
     selected.url ||
     "";
 
-  if (!productUrl) {
+  if (
+    !productUrl
+  ) {
     return response;
   }
 
@@ -687,30 +815,61 @@ export async function POST(
 
     if (
       !message ||
-      typeof message !== "string"
+      typeof message !==
+        "string"
     ) {
       return NextResponse.json(
         {
+          success:
+            false,
+
           error:
             "Message required",
         },
         {
-          status: 400,
+          status:
+            400,
         }
       );
     }
 
     if (
       !profileId ||
-      typeof profileId !== "string"
+      typeof profileId !==
+        "string"
     ) {
       return NextResponse.json(
         {
+          success:
+            false,
+
           error:
             "Profile missing",
         },
         {
-          status: 400,
+          status:
+            400,
+        }
+      );
+    }
+
+    const cleanMessage =
+      message.trim();
+
+    if (
+      !cleanMessage
+    ) {
+      return NextResponse.json(
+        {
+          success:
+            false,
+
+          error:
+            "Message cannot be empty.",
+        },
+        {
+          status:
+            400,
         }
       );
     }
@@ -718,74 +877,77 @@ export async function POST(
     // =================================================
     // FIND EXISTING CONVERSATION
     // =================================================
-    //
-    // We check this BEFORE billing.
-    //
-    // Existing conversations are allowed to continue
-    // even after the merchant reaches their monthly
-    // conversation limit.
-    //
-    // Only NEW conversations consume a conversation slot.
-    //
-    // =================================================
 
     let conversation:
       | any
-      | null = null;
+      | null =
+      null;
 
-    if (visitorSessionId) {
+    if (
+      visitorSessionId
+    ) {
       const {
         data,
         error,
-      } = await supabaseAdmin
-        .from("conversations")
-        .select(
-          "id, profile_id, user_id, visitor_session_id"
-        )
-        .eq(
-          "visitor_session_id",
-          visitorSessionId
-        )
-        .eq(
-          "profile_id",
-          profileId
-        )
-        .maybeSingle();
+      } =
+        await supabaseAdmin
+          .from(
+            "conversations"
+          )
+          .select(
+            "id, profile_id, user_id, visitor_session_id"
+          )
+          .eq(
+            "visitor_session_id",
+            visitorSessionId
+          )
+          .eq(
+            "profile_id",
+            profileId
+          )
+          .maybeSingle();
 
-      if (error) {
+      if (
+        error
+      ) {
         console.error(
           "CONVERSATION LOOKUP ERROR:",
           error
         );
       }
 
-      conversation = data;
+      conversation =
+        data;
     }
 
-   // =================================================
-// BILLING CHECK
-// =================================================
-//
-// TEMPORARILY DISABLED FOR DEVELOPMENT / DEMO.
-//
-// Sales Pilot currently allows conversations without
-// requiring an active billing subscription.
-//
-// Billing code remains in this file and can be enabled
-// later when Stripe/payment functionality is ready.
-//
+    // =================================================
+    // BILLING
+    // =================================================
+    //
+    // DEMO MODE:
+    //
+    // Billing is intentionally skipped.
+    //
+    // When Stripe/billing is ready, replace this section
+    // with checkBillingAccess(profileId).
+    //
+    // =================================================
 
-if (!conversation) {
-  console.log(
-    "NEW CONVERSATION - BILLING CHECK SKIPPED (DEMO MODE)"
-  );
-}
+    if (
+      !conversation
+    ) {
+      console.log(
+        "NEW CONVERSATION - BILLING CHECK SKIPPED (DEMO MODE)"
+      );
+    }
 
     // =================================================
     // CREATE CONVERSATION
     // =================================================
 
-    if (!conversation) {
+    if (
+      !conversation
+    ) {
       console.log(
         "CREATING CONVERSATION"
       );
@@ -797,51 +959,53 @@ if (!conversation) {
       const {
         data,
         error,
-      } = await supabaseAdmin
-        .from("conversations")
-        .insert({
-          profile_id:
-            profileId,
+      } =
+        await supabaseAdmin
+          .from(
+            "conversations"
+          )
+          .insert({
+            profile_id:
+              profileId,
 
-          /*
-           * IMPORTANT:
-           *
-           * Your billing system counts conversations
-           * using user_id.
-           *
-           * Previously this field was missing, which
-           * caused Billing to show 0 conversations.
-           */
-          user_id:
-            profileId,
+            user_id:
+              profileId,
 
-          visitor_session_id:
-            session,
+            visitor_session_id:
+              session,
 
-          customer_name:
-            customerName ||
-            "Website Visitor",
+            customer_name:
+              customerName ||
+              "Website Visitor",
 
-          customer_email:
-            customerEmail ||
-            null,
+            customer_email:
+              customerEmail ||
+              null,
 
-          assigned_to:
-            "ai",
+            assigned_to:
+              "ai",
 
-          status:
-            "open",
-        })
-        .select(
-          "id, profile_id, user_id, visitor_session_id"
-        )
-        .single();
+            status:
+              "open",
+          })
+          .select(
+            "id, profile_id, user_id, visitor_session_id"
+          )
+          .single();
 
-      if (error) {
+      if (
+        error
+      ) {
+        console.error(
+          "CONVERSATION CREATE ERROR:",
+          error
+        );
+
         throw error;
       }
 
-      conversation = data;
+      conversation =
+        data;
     }
 
     // =================================================
@@ -864,10 +1028,12 @@ if (!conversation) {
             "customer",
 
           content:
-            message,
+            cleanMessage,
         });
 
-    if (customerMessageError) {
+    if (
+      customerMessageError
+    ) {
       console.error(
         "CUSTOMER MESSAGE ERROR:",
         customerMessageError
@@ -877,29 +1043,19 @@ if (!conversation) {
     // =================================================
     // FAST RESPONSE
     // =================================================
-    //
-    // IMPORTANT:
-    // Fast responses happen AFTER the conversation has
-    // been created and counted.
-    //
-    // Therefore:
-    //
-    // "Hi"
-    //
-    // can correctly start a billable conversation.
-    //
-    // =================================================
 
     const fastResponse =
-      getFastResponse(message);
+      getFastResponse(
+        cleanMessage
+      );
 
-    if (fastResponse) {
+    if (
+      fastResponse
+    ) {
       console.log(
         "FAST RESPONSE:",
         fastResponse
       );
-
-      // Save the fast AI response too.
 
       const {
         error:
@@ -920,22 +1076,18 @@ if (!conversation) {
               fastResponse,
           });
 
-      if (fastMessageError) {
+      if (
+        fastMessageError
+      ) {
         console.error(
           "FAST AI MESSAGE ERROR:",
           fastMessageError
         );
       }
 
-      console.log(
-        `FAST RESPONSE TIME: ${
-          Date.now() -
-          requestStartedAt
-        }ms`
-      );
-
       return NextResponse.json({
-        success: true,
+        success:
+          true,
 
         response:
           fastResponse,
@@ -943,13 +1095,17 @@ if (!conversation) {
         visitorSessionId:
           conversation.visitor_session_id,
 
-        intent: "general",
+        intent:
+          "general",
 
-        matches: 0,
+        matches:
+          0,
 
-        action: null,
+        action:
+          null,
 
-        actionExecuted: false,
+        actionExecuted:
+          false,
       });
     }
 
@@ -970,9 +1126,13 @@ if (!conversation) {
     );
 
     let actionRequest =
-      detectAction(message);
+      detectAction(
+        cleanMessage
+      );
 
-    if (actionRequest) {
+    if (
+      actionRequest
+    ) {
       actionRequest = {
         ...actionRequest,
 
@@ -989,10 +1149,12 @@ if (!conversation) {
     }
 
     // =================================================
-    // ACTION
+    // EXECUTE ACTION
     // =================================================
 
-    if (actionRequest) {
+    if (
+      actionRequest
+    ) {
       console.log(
         "================================="
       );
@@ -1109,30 +1271,37 @@ if (!conversation) {
         }
       }
 
-      await supabaseAdmin
-        .from(
-          "conversation_messages"
-        )
-        .insert({
-          conversation_id:
-            conversation.id,
+      const {
+        error:
+          actionMessageError,
+      } =
+        await supabaseAdmin
+          .from(
+            "conversation_messages"
+          )
+          .insert({
+            conversation_id:
+              conversation.id,
 
-          sender:
-            "ai",
+            sender:
+              "ai",
 
-          content:
-            actionResponse,
-        });
+            content:
+              actionResponse,
+          });
 
-      console.log(
-        `TOTAL ACTION REQUEST TIME: ${
-          Date.now() -
-          requestStartedAt
-        }ms`
-      );
+      if (
+        actionMessageError
+      ) {
+        console.error(
+          "ACTION AI MESSAGE ERROR:",
+          actionMessageError
+        );
+      }
 
       return NextResponse.json({
-        success: true,
+        success:
+          true,
 
         response:
           actionResponse,
@@ -1178,19 +1347,54 @@ if (!conversation) {
       );
 
     // =================================================
-    // CREATE QUERY EMBEDDING
+    // CREATE OPENAI QUERY EMBEDDING
     // =================================================
 
     const embeddingStartedAt =
       Date.now();
 
-    const embedding =
-      await createEmbedding(
-        message
+    let embedding:
+      number[];
+
+    try {
+      embedding =
+        await createEmbedding(
+          cleanMessage
+        );
+    } catch (
+      embeddingError
+    ) {
+      console.error(
+        "================================="
       );
+
+      console.error(
+        "OPENAI EMBEDDING ERROR"
+      );
+
+      console.error(
+        embeddingError
+      );
+
+      console.error(
+        "================================="
+      );
+
+      throw new Error(
+        embeddingError instanceof
+          Error
+          ? embeddingError.message
+          : "Unable to create the customer question embedding."
+      );
+    }
 
     console.log(
       "EMBEDDING CREATED"
+    );
+
+    console.log(
+      "EMBEDDING DIMENSIONS:",
+      embedding.length
     );
 
     console.log(
@@ -1205,7 +1409,9 @@ if (!conversation) {
     // =================================================
 
     const intent =
-      detectIntent(message);
+      detectIntent(
+        cleanMessage
+      );
 
     console.log(
       "INTENT:",
@@ -1214,6 +1420,18 @@ if (!conversation) {
 
     // =================================================
     // USER-SCOPED KNOWLEDGE SEARCH
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // This RPC must use:
+    //
+    // query_embedding vector
+    // match_count integer
+    // filter_user_id uuid
+    //
+    // And knowledge_chunks.embedding must be vector(768).
+    //
     // =================================================
 
     const knowledgeStartedAt =
@@ -1231,24 +1449,44 @@ if (!conversation) {
             embedding,
 
           match_count:
-            3,
+            KNOWLEDGE_MATCH_COUNT,
 
           filter_user_id:
             profileId,
         }
       );
 
-    if (searchError) {
+    if (
+      searchError
+    ) {
       console.error(
-        "KNOWLEDGE SEARCH ERROR:",
+        "================================="
+      );
+
+      console.error(
+        "KNOWLEDGE SEARCH ERROR"
+      );
+
+      console.error(
         searchError
       );
 
-      throw searchError;
+      console.error(
+        "================================="
+      );
+
+      throw new Error(
+        searchError.message ||
+        "Knowledge search failed."
+      );
     }
 
     const knowledgeMatches =
-      matches || [];
+      Array.isArray(
+        matches
+      )
+        ? matches
+        : [];
 
     console.log(
       "USER-SCOPED KNOWLEDGE MATCHES:",
@@ -1263,7 +1501,7 @@ if (!conversation) {
     );
 
     // =================================================
-    // BUILD CONTEXT
+    // BUILD KNOWLEDGE CONTEXT
     // =================================================
 
     const knowledgeContext =
@@ -1271,13 +1509,18 @@ if (!conversation) {
         knowledgeMatches
       );
 
+    // =================================================
+    // BUILD FINAL CONTEXT
+    // =================================================
+
     let finalContext =
       "";
 
     if (
       historyContext.trim()
     ) {
-      finalContext += `
+      finalContext +=
+        `
 RECENT CONVERSATION:
 ${historyContext}
 
@@ -1287,7 +1530,8 @@ ${historyContext}
     if (
       knowledgeContext.trim()
     ) {
-      finalContext += `
+      finalContext +=
+        `
 STORE KNOWLEDGE:
 ${knowledgeContext}
 
@@ -1304,25 +1548,26 @@ ${knowledgeContext}
     const aiStartedAt =
       Date.now();
 
+    // -------------------------------------------------
+    // NO KNOWLEDGE + NO HISTORY
+    // -------------------------------------------------
+
     if (
-      !knowledgeContext.trim() &&
-      historyContext.trim()
-    ) {
-      aiResponse =
-        await chatWithAI(
-          message,
-          finalContext
-        );
-    } else if (
       !knowledgeContext.trim() &&
       !historyContext.trim()
     ) {
       aiResponse =
-        "I couldn't find that information in this store's knowledge base.";
-    } else {
+        "I couldn't find that information in this store's information.";
+    }
+
+    // -------------------------------------------------
+    // KNOWLEDGE OR HISTORY EXISTS
+    // -------------------------------------------------
+
+    else {
       aiResponse =
         await chatWithAI(
-          message,
+          cleanMessage,
           finalContext
         );
     }
@@ -1335,16 +1580,19 @@ ${knowledgeContext}
     );
 
     // =================================================
-    // CLEAN RESPONSE
+    // CLEAN AI RESPONSE
     // =================================================
 
     aiResponse =
       String(
-        aiResponse || ""
+        aiResponse ||
+          ""
       )
         .trim();
 
-    if (!aiResponse) {
+    if (
+      !aiResponse
+    ) {
       aiResponse =
         "I'm sorry, I couldn't generate a response.";
     }
@@ -1357,8 +1605,12 @@ ${knowledgeContext}
       addProductUrl(
         aiResponse,
         knowledgeMatches,
-        message
+        cleanMessage
       );
+
+    // =================================================
+    // REMOVE UNUSED PLACEHOLDER
+    // =================================================
 
     aiResponse =
       aiResponse.replace(
@@ -1405,7 +1657,9 @@ ${knowledgeContext}
             aiResponse,
         });
 
-    if (aiMessageError) {
+    if (
+      aiMessageError
+    ) {
       console.error(
         "AI MESSAGE ERROR:",
         aiMessageError
@@ -1434,6 +1688,16 @@ ${knowledgeContext}
     );
 
     console.log(
+      "MATCHES:",
+      knowledgeMatches.length
+    );
+
+    console.log(
+      "INTENT:",
+      intent
+    );
+
+    console.log(
       `TOTAL CHAT TIME: ${totalTime}ms`
     );
 
@@ -1442,7 +1706,8 @@ ${knowledgeContext}
     );
 
     return NextResponse.json({
-      success: true,
+      success:
+        true,
 
       response:
         aiResponse,
@@ -1462,14 +1727,28 @@ ${knowledgeContext}
       actionExecuted:
         false,
     });
-  } catch (error: any) {
+  } catch (
+    error: any
+  ) {
+    const totalTime =
+      Date.now() -
+      requestStartedAt;
+
     console.error(
       "================================="
     );
 
     console.error(
-      "CHAT API ERROR:",
+      "CHAT API ERROR"
+    );
+
+    console.error(
+      "ERROR:",
       error
+    );
+
+    console.error(
+      `TOTAL TIME: ${totalTime}ms`
     );
 
     console.error(
@@ -1478,114 +1757,138 @@ ${knowledgeContext}
 
     return NextResponse.json(
       {
-        success: false,
+        success:
+          false,
 
         error:
           error?.message ||
-          "Server error",
+          "Server error. Please try again.",
       },
       {
-        status: 500,
+        status:
+          500,
       }
     );
   }
 }
 
 // =====================================================
-// PRODUCT HELPERS
+// PRODUCT DESCRIPTION
 // =====================================================
 
 function cleanProductDescription(
   description: string,
   productName: string
 ) {
-  if (!description) {
+  if (
+    !description
+  ) {
     return "";
   }
 
   let clean =
-    String(description);
+    String(
+      description
+    );
 
-  clean = clean.replace(
-    /https?:\/\/\S+/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /https?:\/\/\S+/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /[•▪●]/g,
-    ""
-  );
+  clean =
+    clean.replace(
+      /[•▪●]/g,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bSales Pilot\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bSales Pilot\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bAI Sales & Customer Support Employee\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bAI Sales & Customer Support Employee\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bAI Customer Support\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bAI Customer Support\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bAcme Store\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bAcme Store\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bTest website for Sales Pilot AI\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bTest website for Sales Pilot AI\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bSales Pilot Widget Test\b/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bSales Pilot Widget Test\b/gi,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bShipping & Returns\b[\s\S]*$/i,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bShipping & Returns\b[\s\S]*$/i,
+      ""
+    );
 
-  clean = clean.replace(
-    /\bKnowledge Base\b[\s\S]*$/i,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\bKnowledge Base\b[\s\S]*$/i,
+      ""
+    );
 
-  if (productName) {
+  if (
+    productName
+  ) {
     const escapedName =
       productName.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
 
-    clean = clean.replace(
-      new RegExp(
-        escapedName,
-        "gi"
-      ),
-      ""
-    );
+    clean =
+      clean.replace(
+        new RegExp(
+          escapedName,
+          "gi"
+        ),
+        ""
+      );
   }
 
-  clean = clean.replace(
-    /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
-    ""
-  );
+  clean =
+    clean.replace(
+      /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
+      ""
+    );
 
   clean =
     clean
-      .replace(/\s+/g, " ")
+      .replace(
+        /\s+/g,
+        " "
+      )
       .trim();
 
-  clean = clean.replace(
-    /^[,.:;!?-]+\s*/,
-    ""
-  );
+  clean =
+    clean.replace(
+      /^[,.:;!?-]+\s*/,
+      ""
+    );
 
   const MAX_LENGTH =
     140;
@@ -1608,7 +1911,8 @@ function cleanProductDescription(
       );
 
     if (
-      lastSpace > 80
+      lastSpace >
+      80
     ) {
       clean =
         clean.slice(
@@ -1617,7 +1921,8 @@ function cleanProductDescription(
         );
     }
 
-    clean += "...";
+    clean +=
+      "...";
   }
 
   return clean;
@@ -1630,12 +1935,19 @@ function cleanProductDescription(
 function cleanProductName(
   name: string
 ) {
-  if (!name) {
+  if (
+    !name
+  ) {
     return "this product";
   }
 
-  return String(name)
-    .replace(/\s+/g, " ")
+  return String(
+    name
+  )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
@@ -1653,8 +1965,13 @@ function cleanProductPrice(
     return "";
   }
 
-  return String(price)
-    .replace(/\s+/g, " ")
+  return String(
+    price
+  )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
@@ -1671,11 +1988,15 @@ function cleanProductUrl(
     product?.product_url ||
     "";
 
-  if (!url) {
+  if (
+    !url
+  ) {
     return "";
   }
 
-  return String(url).trim();
+  return String(
+    url
+  ).trim();
 }
 
 // =====================================================
@@ -1712,19 +2033,25 @@ function formatSingleProduct(
   let response =
     `We have the ${name}`;
 
-  if (description) {
+  if (
+    description
+  ) {
     response +=
       ` — ${description}`;
   }
 
   response += ".";
 
-  if (price) {
+  if (
+    price
+  ) {
     response +=
       ` It's ${price}.`;
   }
 
-  if (url) {
+  if (
+    url
+  ) {
     response +=
       `\n🔗 View product: ${url}`;
   }
@@ -1741,7 +2068,8 @@ function formatProductResults(
 ) {
   if (
     !products ||
-    products.length === 0
+    products.length ===
+      0
   ) {
     return "I couldn't find a matching product. What type of product are you looking for?";
   }
@@ -1751,21 +2079,26 @@ function formatProductResults(
       .filter(
         (product) =>
           product &&
-          (product.name ||
-            product.title)
+          (
+            product.name ||
+            product.title
+          )
       )
-      .slice(0, 3);
+      .slice(
+        0,
+        3
+      );
 
   if (
     selectedProducts.length ===
-    0
+      0
   ) {
     return "I couldn't find a matching product.";
   }
 
   if (
     selectedProducts.length ===
-    1
+      1
   ) {
     return formatSingleProduct(
       selectedProducts[0]
@@ -1774,7 +2107,9 @@ function formatProductResults(
 
   const formatted =
     selectedProducts.map(
-      (product: any) =>
+      (
+        product: any
+      ) =>
         formatSingleProduct(
           product
         )
