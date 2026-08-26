@@ -52,6 +52,23 @@ export async function POST(request: Request) {
     const planId = body.planId as PlanId;
 
     // =====================================================
+    // STARTER ONLY
+    // =====================================================
+
+    if (planId !== "starter") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Only the Starter plan is currently available.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =====================================================
     // VALIDATE PLAN
     // =====================================================
 
@@ -91,6 +108,21 @@ export async function POST(request: Request) {
     // =====================================================
     // CREATE SAFEPAY PAYMENT SESSION
     // =====================================================
+    //
+    // IMPORTANT:
+    //
+    // Safepay only receives supported metadata.
+    //
+    // DO NOT send:
+    //   user_id
+    //   plan_id
+    //   userId
+    //   planId
+    //
+    // We store the Sales Pilot user/plan in our own
+    // billing_transactions table below.
+    //
+    // =====================================================
 
     const session =
       await safepayCore.payments.session.setup({
@@ -107,11 +139,8 @@ export async function POST(request: Request) {
         amount: plan.price,
 
         metadata: {
-  order_id: orderId,
-  user_id: user.id,
-  plan_id: planId,
-  source: "sales-pilot",
-},
+          order_id: orderId,
+        },
       });
 
     console.log(
@@ -148,10 +177,6 @@ export async function POST(request: Request) {
     // =====================================================
     //
     // This uses @sfpy/node-sdk.
-    //
-    // The node-sdk exposes:
-    //
-    // safepayV1.authorization.create()
     //
     // =====================================================
 
@@ -228,6 +253,18 @@ export async function POST(request: Request) {
     // =====================================================
     // SAVE PENDING TRANSACTION
     // =====================================================
+    //
+    // THIS is where we associate:
+    //
+    // Sales Pilot user
+    //       +
+    // Starter plan
+    //       +
+    // Safepay tracker
+    //       +
+    // internal order ID
+    //
+    // =====================================================
 
     const {
       error: transactionError,
@@ -248,14 +285,35 @@ export async function POST(request: Request) {
         provider: "safepay",
 
         provider_payment_id: tracker,
+
+        reference: orderId,
+
+        metadata: {
+          plan_id: planId,
+
+          order_id: orderId,
+        },
       });
 
-    if (transactionError) {
-      console.error(
-        "Billing transaction insert error:",
-        transactionError
-      );
+   if (transactionError) {
+  console.error(
+    "Billing transaction insert error:",
+    transactionError
+  );
+
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        transactionError.message ||
+        "Unable to create the pending billing transaction.",
+      details: transactionError,
+    },
+    {
+      status: 500,
     }
+  );
+}
 
     // =====================================================
     // RESPONSE

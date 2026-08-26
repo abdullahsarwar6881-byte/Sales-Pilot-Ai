@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 import { createClient } from "@/lib/supabase/server";
-import { safepay } from "@/lib/billing/safepay";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+
+import { safepayCore } from "@/lib/billing/safepay-core";
+import { safepayV1 } from "@/lib/billing/safepay-v1";
+
 import {
   PLANS,
   type PlanId,
@@ -11,18 +15,61 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  try {
-    // =====================================================
-    // AUTHENTICATED USER
-    // =====================================================
+// =====================================================
+// SUPABASE ADMIN CLIENT
+// =====================================================
 
-    const supabase = await createClient();
+function getSupabaseAdmin() {
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL is not configured."
+    );
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is not configured."
+    );
+  }
+
+  return createSupabaseAdmin(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
+
+// =====================================================
+// POST
+// =====================================================
+
+export async function POST(
+  request: Request
+) {
+  try {
+    // ===================================================
+    // AUTHENTICATED USER
+    // ===================================================
+
+    const supabase =
+      await createClient();
 
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser();
+    } =
+      await supabase.auth.getUser();
 
     if (userError) {
       throw userError;
@@ -32,134 +79,343 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "You must be logged in.",
+          error:
+            "You must be logged in.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    // =====================================================
+    // ===================================================
     // REQUEST
-    // =====================================================
+    // ===================================================
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const planId = body.planId as PlanId;
+    const planId =
+      body.planId as PlanId;
 
-    // =====================================================
+    // ===================================================
+    // STARTER ONLY
+    // ===================================================
+
+    if (planId !== "starter") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Only the Starter plan is currently available.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ===================================================
     // VALIDATE PLAN
-    // =====================================================
+    // ===================================================
 
     if (!(planId in PLANS)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid billing plan.",
+          error:
+            "Invalid billing plan.",
         },
-        { status: 400 }
-      );
-    }
-
-    const plan = PLANS[planId];
-
-    // =====================================================
-    // DON'T ALLOW SAME PLAN
-    // =====================================================
-
-    const {
-      data: existingSubscription,
-      error: subscriptionError,
-    } = await supabase
-      .from("subscriptions")
-      .select("plan_id,status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (subscriptionError) {
-      throw subscriptionError;
-    }
-
-    if (
-      existingSubscription?.plan_id === planId &&
-      existingSubscription.status === "active"
-    ) {
-      return NextResponse.json(
         {
-          success: false,
-          error: "You are already on this plan.",
-        },
-        { status: 400 }
+          status: 400,
+        }
       );
     }
 
-    // =====================================================
-    // UNIQUE INTERNAL REFERENCE
-    // =====================================================
+    const plan =
+      PLANS[planId];
 
-    const reference = crypto.randomUUID();
+    // ===================================================
+    // SAFEPAY PUBLIC KEY
+    // ===================================================
 
-    // =====================================================
-    // CREATE SAFE PAY SUBSCRIPTION URL
-    // =====================================================
+    const merchantApiKey =
+      process.env.SAFEPAY_PUBLIC_KEY;
+
+    if (!merchantApiKey) {
+      throw new Error(
+        "SAFEPAY_PUBLIC_KEY is not configured."
+      );
+    }
+
+    // ===================================================
+    // INTERNAL ORDER ID
+    // ===================================================
+
+    const orderId =
+      crypto.randomUUID();
+
+    /*
+     * Keep the plan in our own internal reference.
+     *
+     * We do NOT send user_id or plan_id as Safepay
+     * metadata because Safepay rejects unsupported
+     * metadata keys.
+     */
+    const reference =
+      `starter_${orderId}`;
+
+    // ===================================================
+    // CREATE SAFEPAY PAYMENT SESSION
+    // ===================================================
+
+    const session =
+      await safepayCore.payments.session.setup(
+        {
+          merchant_api_key:
+            merchantApiKey,
+
+          intent:
+            "CYBERSOURCE",
+
+          mode:
+            "payment",
+
+          entry_mode:
+            "raw",
+
+          currency:
+            plan.currency,
+
+          amount:
+            plan.price,
+
+          /*
+           * Safepay-supported metadata.
+           *
+           * IMPORTANT:
+           * Do not add user_id or plan_id here.
+           */
+          metadata: {
+            order_id:
+              orderId,
+          },
+        }
+      );
+
+    console.log(
+      "Safepay payment session:",
+      session
+    );
+
+    // ===================================================
+    // GET TRACKER
+    // ===================================================
+
+    const tracker =
+      session?.data?.tracker?.token ??
+      session?.tracker?.token;
+
+    if (!tracker) {
+      console.error(
+        "Safepay session response:",
+        session
+      );
+
+      throw new Error(
+        "Safepay did not return a tracker token."
+      );
+    }
+
+    console.log(
+      "Safepay tracker:",
+      tracker
+    );
+
+    // ===================================================
+    // CREATE TEMPORARY AUTH TOKEN
+    // ===================================================
+
+    const tbt =
+      await safepayV1.authorization.create();
+
+    console.log(
+      "Safepay authorization token created:",
+      Boolean(tbt)
+    );
+
+    if (!tbt) {
+      throw new Error(
+        "Safepay did not return an authorization token."
+      );
+    }
+
+    // ===================================================
+    // APP URL
+    // ===================================================
 
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
       "https://sales-pilot-ai-1d51.vercel.app";
 
+    // ===================================================
+    // ENVIRONMENT
+    // ===================================================
+
+    const environment =
+      process.env.SAFEPAY_ENVIRONMENT ===
+      "production"
+        ? "production"
+        : "sandbox";
+
+    // ===================================================
+    // CREATE HOSTED CHECKOUT URL
+    // ===================================================
+
     const checkoutUrl =
-      await safepay.checkout.createSubscription({
-        planId: plan.safepayPlanId,
+      safepayCore.checkout.createCheckoutUrl(
+        {
+          env:
+            environment,
+
+          tbt,
+
+          tracker,
+
+          source:
+            "hosted",
+
+          order_id:
+            orderId,
+
+          cancel_url:
+            `${baseUrl}/dashboard/billing?payment=cancelled`,
+
+          redirect_url:
+            `${baseUrl}/dashboard/billing?payment=success`,
+        }
+      );
+
+    console.log(
+      "Safepay checkout URL:",
+      checkoutUrl
+    );
+
+    if (!checkoutUrl) {
+      throw new Error(
+        "Safepay did not return a checkout URL."
+      );
+    }
+
+    // ===================================================
+    // SAVE PENDING BILLING TRANSACTION
+    // ===================================================
+    //
+    // IMPORTANT:
+    //
+    // billing_transactions has RLS enabled.
+    // Therefore use the Supabase service-role client
+    // for this server-side billing operation.
+    // ===================================================
+
+    const supabaseAdmin =
+      getSupabaseAdmin();
+
+    const {
+      error:
+        transactionError,
+    } =
+      await supabaseAdmin
+        .from(
+          "billing_transactions"
+        )
+        .insert(
+          {
+            user_id:
+              user.id,
+
+            reference:
+              reference,
+
+            amount:
+              plan.price,
+
+            currency:
+              plan.currency,
+
+            status:
+              "pending",
+
+            description:
+              "Pending Starter subscription",
+
+            provider:
+              "safepay",
+
+            provider_payment_id:
+              tracker,
+          }
+        );
+
+    if (transactionError) {
+      console.error(
+        "Billing transaction insert error:",
+        transactionError
+      );
+
+      throw new Error(
+        "Unable to create the pending billing transaction."
+      );
+    }
+
+    console.log(
+      "Pending Starter transaction created:",
+      {
+        userId:
+          user.id,
 
         reference,
 
-        cancelUrl:
-          `${baseUrl}/dashboard/billing?payment=cancelled`,
+        tracker,
 
-        redirectUrl:
-          `${baseUrl}/dashboard/billing?payment=success`,
-      });
+        amount:
+          plan.price,
 
-    // =====================================================
-    // STORE PENDING SUBSCRIPTION REFERENCE
-    // =====================================================
-    //
-    // We don't activate the plan yet.
-    //
-    // The webhook will activate it after Safepay
-    // confirms the payment/subscription.
-    //
-    // For now we store the reference in description.
-    //
+        currency:
+          plan.currency,
+      }
+    );
 
-    await supabase
-      .from("billing_transactions")
-      .insert({
-        user_id: user.id,
+    // ===================================================
+    // RESPONSE
+    // ===================================================
 
-        amount: plan.price,
+    return NextResponse.json(
+      {
+        success: true,
 
-        currency: plan.currency,
+        checkoutUrl,
 
-        status: "pending",
+        tracker,
 
-        description:
-          `Pending ${plan.name} subscription`,
+        orderId,
 
-        provider: "safepay",
+        reference,
 
-        provider_payment_id: reference,
-      });
+        planId:
 
-    return NextResponse.json({
-      success: true,
+          "starter",
 
-      checkoutUrl,
+        amount:
+          plan.price,
 
-      reference,
-
-      planId,
-    });
-  } catch (error: unknown) {
+        currency:
+          plan.currency,
+      }
+    );
+  } catch (
+    error: unknown
+  ) {
     console.error(
       "Safepay checkout error:",
       error
@@ -168,6 +424,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
+
         error:
           error instanceof Error
             ? error.message

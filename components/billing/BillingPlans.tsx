@@ -25,25 +25,38 @@ export default function BillingPlans({
   ) {
     try {
       setError(null);
-
       setLoadingPlan(planId);
 
-      const response =
-        await fetch(
-          "/api/billing/checkout",
-          {
-            method: "POST",
+      // =====================================================
+      // STARTER ONLY
+      // =====================================================
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              planId,
-            }),
-          }
+      if (planId !== "starter") {
+        throw new Error(
+          "Only the Starter plan is currently available."
         );
+      }
+
+      // =====================================================
+      // CREATE STARTER SAFEPAY CHECKOUT
+      // =====================================================
+
+      const response = await fetch(
+        "/api/billing/checkout",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            planId: "starter",
+            billingCycle,
+          }),
+        }
+      );
 
       const data =
         await response.json();
@@ -54,7 +67,7 @@ export default function BillingPlans({
       ) {
         throw new Error(
           data.error ||
-            "Unable to start checkout."
+            "Unable to start Starter checkout."
         );
       }
 
@@ -64,19 +77,24 @@ export default function BillingPlans({
         );
       }
 
-      // Redirect to Safepay
+      // =====================================================
+      // REDIRECT TO SAFEPAY HOSTED CHECKOUT
+      // =====================================================
+
       window.location.href =
         data.checkoutUrl;
-    } catch (error: unknown) {
+    } catch (
+      error: unknown
+    ) {
       console.error(
-        "Billing checkout error:",
+        "Starter billing checkout error:",
         error
       );
 
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to start checkout."
+          : "Unable to start Starter checkout."
       );
 
       setLoadingPlan(null);
@@ -93,7 +111,7 @@ export default function BillingPlans({
 
       {loadingPlan && (
         <div className="mb-5 rounded-xl border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Preparing your Safepay checkout...
+          Preparing your Starter Safepay checkout...
         </div>
       )}
 

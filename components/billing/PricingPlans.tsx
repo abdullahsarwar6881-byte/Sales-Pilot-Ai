@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Sparkles, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 import {
   PLANS,
@@ -26,19 +26,26 @@ const FEATURE_LABELS: Record<
   basicAnalytics: "Basic analytics",
 
   shopifyIntegration: "Shopify integration",
-  productInventoryKnowledge: "Product & inventory knowledge",
+  productInventoryKnowledge:
+    "Product & inventory knowledge",
   orderTracking: "Order tracking",
   aiCustomerActions: "AI customer actions",
   advancedWidget: "Advanced widget customization",
   advancedAnalytics: "Advanced analytics",
 
   advancedShopify: "Advanced Shopify automation",
-  productRecommendations: "Product recommendations",
-  returnRefundInfo: "Return & refund information",
-  multipleKnowledgeSources: "Multiple knowledge sources",
+  productRecommendations:
+    "Product recommendations",
+  returnRefundInfo:
+    "Return & refund information",
+  multipleKnowledgeSources:
+    "Multiple knowledge sources",
 };
 
-const PLAN_DESCRIPTIONS: Record<PlanId, string> = {
+const PLAN_DESCRIPTIONS: Record<
+  PlanId,
+  string
+> = {
   starter:
     "For small businesses getting started with AI support.",
 
@@ -48,8 +55,6 @@ const PLAN_DESCRIPTIONS: Record<PlanId, string> = {
   business:
     "For businesses with higher support volume and automation needs.",
 };
-
-const POPULAR_PLAN: PlanId = "growth";
 
 export default function PricingPlans({
   currentPlan = "starter",
@@ -64,16 +69,28 @@ export default function PricingPlans({
   const [error, setError] =
     useState<string | null>(null);
 
-  async function handleUpgrade(planId: PlanId) {
-    if (planId === currentPlan) return;
+  async function handleUpgrade(
+    planId: PlanId
+  ) {
+    // =====================================================
+    // ONLY STARTER IS AVAILABLE RIGHT NOW
+    // =====================================================
+
+    if (planId !== "starter") {
+      setError(
+        "Growth and Business plans are coming soon."
+      );
+
+      return;
+    }
 
     setError(null);
     setLoadingPlan(planId);
 
     try {
       /*
-       * If parent supplied its own handler,
-       * use it.
+       * BillingPlans supplies the working
+       * Starter Safepay checkout handler.
        */
       if (onSelectPlan) {
         onSelectPlan(planId);
@@ -81,28 +98,36 @@ export default function PricingPlans({
       }
 
       /*
-       * Create Safepay checkout.
+       * Fallback:
+       * Directly call the working Starter
+       * Safepay endpoint.
        */
       const response = await fetch(
-        "/api/billing/checkout",
+        "/api/billing/test-payment",
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
-            planId,
-            billingCycle,
+            planId: "starter",
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      if (!response.ok || !data.success) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         throw new Error(
           data.error ||
-            "Unable to create checkout."
+            "Unable to create Starter checkout."
         );
       }
 
@@ -113,20 +138,20 @@ export default function PricingPlans({
       }
 
       /*
-       * Redirect directly to Safepay.
+       * Redirect to Safepay hosted checkout.
        */
       window.location.href =
         data.checkoutUrl;
     } catch (err) {
       console.error(
-        "Upgrade error:",
+        "Starter checkout error:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to start checkout."
+          : "Unable to start Starter checkout."
       );
 
       setLoadingPlan(null);
@@ -141,8 +166,9 @@ export default function PricingPlans({
         </h2>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose the plan that fits your business and upgrade
-          whenever you need more.
+          Start with Starter and upgrade to
+          additional plans when they become
+          available.
         </p>
       </div>
 
@@ -154,11 +180,11 @@ export default function PricingPlans({
 
       <div className="grid gap-5 lg:grid-cols-3">
         {plans.map((plan) => {
+          const isStarter =
+            plan.id === "starter";
+
           const isCurrent =
             plan.id === currentPlan;
-
-          const isPopular =
-            plan.id === POPULAR_PLAN;
 
           const monthlyPrice =
             plan.price;
@@ -187,33 +213,50 @@ export default function PricingPlans({
           const isLoading =
             loadingPlan === plan.id;
 
+          /*
+           * Only Starter is available.
+           */
+          const isAvailable =
+            isStarter;
+
           return (
             <div
               key={plan.id}
               className={`relative flex flex-col rounded-2xl border bg-card p-6 shadow-sm transition-all duration-200 ${
-                isPopular
+                isStarter
                   ? "border-foreground/30 shadow-md"
-                  : "border-border"
+                  : "border-border opacity-75"
               }`}
             >
-              {isPopular && (
-                <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Most Popular
-                </div>
-              )}
+              {/* =================================================
+                  PLAN
+              ================================================= */}
 
               <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  {plan.name}
-                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {plan.name}
+                  </h3>
+
+                  {!isStarter && (
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
 
                 <p className="mt-2 min-h-[40px] text-sm leading-5 text-muted-foreground">
-                  {PLAN_DESCRIPTIONS[
-                    plan.id
-                  ]}
+                  {
+                    PLAN_DESCRIPTIONS[
+                      plan.id
+                    ]
+                  }
                 </p>
               </div>
+
+              {/* =================================================
+                  PRICE
+              ================================================= */}
 
               <div className="mt-6">
                 <div className="flex items-end gap-1">
@@ -234,11 +277,15 @@ export default function PricingPlans({
                 {billingCycle ===
                   "annual" && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Save 2 months with
-                    annual billing
+                    Save 2 months with annual
+                    billing
                   </p>
                 )}
               </div>
+
+              {/* =================================================
+                  LIMITS
+              ================================================= */}
 
               <div className="mt-5 flex flex-wrap gap-2">
                 <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
@@ -262,6 +309,10 @@ export default function PricingPlans({
 
               <div className="my-6 h-px bg-border" />
 
+              {/* =================================================
+                  FEATURES
+              ================================================= */}
+
               <ul className="flex flex-1 flex-col gap-3">
                 {enabledFeatures.map(
                   ([feature]) => (
@@ -283,10 +334,14 @@ export default function PricingPlans({
                 )}
               </ul>
 
+              {/* =================================================
+                  BUTTON
+              ================================================= */}
+
               <button
                 type="button"
                 disabled={
-                  isCurrent ||
+                  !isAvailable ||
                   loadingPlan !== null
                 }
                 onClick={() =>
@@ -295,11 +350,9 @@ export default function PricingPlans({
                   )
                 }
                 className={`mt-7 flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${
-                  isCurrent
-                    ? "cursor-default border border-border bg-muted text-muted-foreground"
-                    : isPopular
-                      ? "bg-foreground text-background hover:opacity-90"
-                      : "border border-border bg-background text-foreground hover:bg-muted"
+                  !isAvailable
+                    ? "cursor-not-allowed border border-border bg-muted text-muted-foreground"
+                    : "bg-foreground text-background hover:opacity-90"
                 }`}
               >
                 {isLoading ? (
@@ -307,10 +360,12 @@ export default function PricingPlans({
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Opening checkout...
                   </>
+                ) : !isAvailable ? (
+                  "Coming Soon"
                 ) : isCurrent ? (
-                  "Current Plan"
+                  "Pay for Starter"
                 ) : (
-                  "Upgrade"
+                  "Upgrade to Starter"
                 )}
               </button>
             </div>
