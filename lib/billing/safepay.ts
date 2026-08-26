@@ -1,10 +1,5 @@
-import {
-  Safepay,
-} from "@sfpy/node-sdk";
-
-import {
-  Environment,
-} from "@sfpy/node-sdk/dist/utils";
+import { Safepay } from "@sfpy/node-sdk";
+import { Environment } from "@sfpy/node-sdk/dist/utils";
 
 // =====================================================
 // ENVIRONMENT
@@ -20,10 +15,7 @@ const safepayEnvironment =
 // =====================================================
 
 const apiKey =
-  process.env.SAFEPAY_API_KEY;
-
-const v1Secret =
-  process.env.SAFEPAY_V1_SECRET;
+  process.env.SAFEPAY_SECRET_KEY;
 
 const webhookSecret =
   process.env.SAFEPAY_WEBHOOK_SECRET;
@@ -34,13 +26,7 @@ const webhookSecret =
 
 if (!apiKey) {
   throw new Error(
-    "SAFEPAY_API_KEY is not configured."
-  );
-}
-
-if (!v1Secret) {
-  throw new Error(
-    "SAFEPAY_V1_SECRET is not configured."
+    "SAFEPAY_SECRET_KEY is not configured."
   );
 }
 
@@ -54,14 +40,15 @@ if (!webhookSecret) {
 // SAFEPAY CLIENT
 // =====================================================
 
-export const safepay =
-  new Safepay({
-    environment:
-      safepayEnvironment,
+export const safepay = new Safepay({
+  environment: safepayEnvironment,
 
-    apiKey,
+  apiKey,
 
-    v1Secret,
+  // SDK 3.0.2 requires this field.
+  // We do not have a separate V1 secret in your
+  // Safepay dashboard, so use the Secret Key here.
+  v1Secret: apiKey,
 
-    webhookSecret,
-  });
+  webhookSecret,
+});
