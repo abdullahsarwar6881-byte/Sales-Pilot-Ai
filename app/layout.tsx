@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "Sales Pilot | Your AI Sales & Customer Support Employee",
@@ -17,15 +18,24 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Shopify App Bridge */}
+        {/* =====================================================
+            SHOPIFY APP BRIDGE
+            ===================================================== */}
+
         <meta
           name="shopify-api-key"
           content={shopifyApiKey}
         />
 
-        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+        <Script
+          src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+          strategy="beforeInteractive"
+        />
 
-        {/* Fonts */}
+        {/* =====================================================
+            FONTS
+            ===================================================== */}
+
         <link
           rel="preconnect"
           href="https://fonts.googleapis.com"

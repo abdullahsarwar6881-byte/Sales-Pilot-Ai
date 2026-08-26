@@ -7,13 +7,11 @@ import { chatWithAI } from "@/lib/ai/chat";
 import { detectAction } from "@/lib/actions/detectAction";
 import { executeAction } from "@/lib/actions/actionRouter";
 
-import type {
-  ActionRequest,
-} from "@/lib/actions/types";
+import type { ActionRequest } from "@/lib/actions/types";
 
 import {
-  BILLING_PLANS,
-  type BillingPlanId,
+  PLANS,
+  type PlanId,
 } from "@/lib/billing/plans";
 
 // =====================================================
@@ -26,73 +24,62 @@ const supabaseUrl =
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (
-  !supabaseUrl ||
-  !supabaseServiceRoleKey
-) {
+if (!supabaseUrl || !supabaseServiceRoleKey) {
   console.error(
     "Supabase environment variables are missing."
   );
 }
 
-const supabaseAdmin =
-  createClient(
-    supabaseUrl!,
-    supabaseServiceRoleKey!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+const supabaseAdmin = createClient(
+  supabaseUrl!,
+  supabaseServiceRoleKey!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 // =====================================================
 // CONFIG
 // =====================================================
 
 const KNOWLEDGE_MATCH_COUNT = 5;
-
 const MAX_CONTEXT_MATCHES = 5;
-
 const MAX_HISTORY_MESSAGES = 6;
 
 // =====================================================
 // BILLING ACCESS CHECK
 // =====================================================
 
-async function checkBillingAccess(
-  profileId: string
-) {
-  const now =
-    new Date();
+async function checkBillingAccess(profileId: string) {
+  const now = new Date();
+
+  // ---------------------------------------------------
+  // GET SUBSCRIPTION
+  // ---------------------------------------------------
 
   const {
     data: subscription,
     error: subscriptionError,
-  } =
-    await supabaseAdmin
-      .from("subscriptions")
-      .select(
-        `
-          id,
-          user_id,
-          plan_id,
-          status,
-          billing_cycle,
-          current_period_start,
-          current_period_end
-        `
-      )
-      .eq(
-        "user_id",
-        profileId
-      )
-      .maybeSingle();
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select(
+      `
+        id,
+        user_id,
+        plan_id,
+        status,
+        billing_cycle,
+        current_period_start,
+        current_period_end
+      `
+    )
+    .eq("user_id", profileId)
+    .maybeSingle();
 
-  if (
-    subscriptionError
-  ) {
+  if (subscriptionError) {
     console.error(
       "BILLING SUBSCRIPTION ERROR:",
       subscriptionError
@@ -102,30 +89,72 @@ async function checkBillingAccess(
       allowed: false,
       error:
         "Unable to verify your Sales Pilot subscription.",
+      code: "BILLING_CHECK_FAILED",
     };
   }
 
-  if (
-    !subscription
-  ) {
+  // ---------------------------------------------------
+  // NO SUBSCRIPTION
+  // ---------------------------------------------------
+
+  if (!subscription) {
     return {
       allowed: false,
       error:
-        "This Sales Pilot account does not have an active billing subscription.",
+        "This Sales Pilot account does not have an active subscription.",
+      code: "NO_SUBSCRIPTION",
     };
   }
 
-  const planId: BillingPlanId =
+  // ---------------------------------------------------
+  // PLAN
+  // ---------------------------------------------------
+
+  const planId: PlanId =
     subscription.plan_id &&
-    subscription.plan_id in
-      BILLING_PLANS
-      ? (subscription.plan_id as BillingPlanId)
+    subscription.plan_id in PLANS
+      ? (subscription.plan_id as PlanId)
       : "starter";
 
-  const plan =
-    BILLING_PLANS[
-      planId
-    ];
+  const plan = PLANS[planId];
+
+  // ---------------------------------------------------
+  // SUBSCRIPTION STATUS
+  // ---------------------------------------------------
+
+  const status = String(
+    subscription.status || ""
+  )
+    .toLowerCase()
+    .trim();
+
+  const allowedStatuses = [
+    "active",
+    "trialing",
+  ];
+
+  if (!allowedStatuses.includes(status)) {
+    return {
+      allowed: false,
+
+      error:
+        "Your Sales Pilot subscription is not active. Please renew or upgrade your plan.",
+
+      code: "SUBSCRIPTION_NOT_ACTIVE",
+
+      planId,
+
+      planName: plan.name,
+
+      used: 0,
+
+      limit: plan.limits.conversations,
+    };
+  }
+
+  // ---------------------------------------------------
+  // BILLING PERIOD
+  // ---------------------------------------------------
 
   const periodStart =
     subscription.current_period_start
@@ -141,107 +170,87 @@ async function checkBillingAccess(
         )
       : null;
 
-  if (
-    !periodStart ||
-    !periodEnd
-  ) {
+  if (!periodStart || !periodEnd) {
     return {
       allowed: false,
+
       error:
         "Your Sales Pilot billing period is not configured correctly.",
+
+      code: "BILLING_PERIOD_INVALID",
+
+      planId,
+
+      planName: plan.name,
+
+      used: 0,
+
+      limit: plan.limits.conversations,
     };
   }
 
-  if (
-    now >=
-    periodEnd
-  ) {
+  // ---------------------------------------------------
+  // CHECK BILLING PERIOD
+  // ---------------------------------------------------
+
+  if (now >= periodEnd) {
     return {
       allowed: false,
 
       error:
-        "Your Sales Pilot billing period has ended. Please upgrade or renew your plan.",
+        "Your Sales Pilot billing period has ended. Please renew or upgrade your plan.",
 
-      code:
-        "BILLING_PERIOD_EXPIRED",
-
-      planId,
-
-      planName:
-        plan.name,
-
-      used: 0,
-
-      limit:
-        plan.conversations,
-    };
-  }
-
-  const status =
-    String(
-      subscription.status ||
-        ""
-    )
-      .toLowerCase()
-      .trim();
-
-  if (
-    status ===
-    "incomplete"
-  ) {
-    return {
-      allowed: false,
-
-      error:
-        "Your Sales Pilot subscription setup is incomplete. Please complete billing to continue.",
-
-      code:
-        "SUBSCRIPTION_INCOMPLETE",
+      code: "BILLING_PERIOD_EXPIRED",
 
       planId,
 
-      planName:
-        plan.name,
+      planName: plan.name,
 
       used: 0,
 
-      limit:
-        plan.conversations,
+      limit: plan.limits.conversations,
     };
   }
+
+  // ---------------------------------------------------
+  // COUNT CONVERSATIONS
+  // ---------------------------------------------------
+  //
+  // IMPORTANT:
+  //
+  // We count conversations, NOT messages.
+  //
+  // Starter:
+  // 50 conversations
+  //
+  // Growth:
+  // 300 conversations
+  //
+  // Business:
+  // 1000 conversations
+  //
+  // ---------------------------------------------------
 
   const {
-    count:
-      conversationCount,
-    error:
-      conversationCountError,
-  } =
-    await supabaseAdmin
-      .from("conversations")
-      .select(
-        "id",
-        {
-          count:
-            "exact",
-          head: true,
-        }
-      )
-      .eq(
-        "user_id",
-        profileId
-      )
-      .gte(
-        "created_at",
-        periodStart.toISOString()
-      )
-      .lt(
-        "created_at",
-        periodEnd.toISOString()
-      );
+    count: conversationCount,
+    error: conversationCountError,
+  } = await supabaseAdmin
+    .from("conversations")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("user_id", profileId)
+    .gte(
+      "created_at",
+      periodStart.toISOString()
+    )
+    .lt(
+      "created_at",
+      periodEnd.toISOString()
+    );
 
-  if (
-    conversationCountError
-  ) {
+  if (conversationCountError) {
     console.error(
       "BILLING CONVERSATION COUNT ERROR:",
       conversationCountError
@@ -251,55 +260,57 @@ async function checkBillingAccess(
       allowed: false,
 
       error:
-        "Unable to verify conversation usage.",
+        "Unable to verify your conversation usage.",
+
+      code: "USAGE_CHECK_FAILED",
     };
   }
 
-  const used =
-    conversationCount ??
-    0;
+  const used = conversationCount ?? 0;
 
-  const limit =
-    plan.conversations;
+  const limit = plan.limits.conversations;
 
-  if (
-    used >=
-    limit
-  ) {
+  // ---------------------------------------------------
+  // CONVERSATION LIMIT
+  // ---------------------------------------------------
+
+  if (used >= limit) {
     return {
       allowed: false,
 
       error:
         `Your ${plan.name} plan has reached its limit of ${limit.toLocaleString()} AI conversations for this billing period. Please upgrade your plan to continue.`,
 
-      code:
-        "CONVERSATION_LIMIT_REACHED",
+      code: "CONVERSATION_LIMIT_REACHED",
 
       planId,
 
-      planName:
-        plan.name,
+      planName: plan.name,
 
       used,
 
       limit,
+
+      remaining: 0,
     };
   }
+
+  // ---------------------------------------------------
+  // ALLOWED
+  // ---------------------------------------------------
 
   return {
     allowed: true,
 
     planId,
 
-    planName:
-      plan.name,
+    planName: plan.name,
 
     used,
 
     limit,
 
-    remaining:
-      limit - used,
+    remaining: limit - used,
   };
 }
 
@@ -307,21 +318,12 @@ async function checkBillingAccess(
 // FAST RESPONSE
 // =====================================================
 
-function getFastResponse(
-  message: string
-) {
-  const text =
-    message
-      .toLowerCase()
-      .trim()
-      .replace(
-        /[!?.,]/g,
-        ""
-      )
-      .replace(
-        /\s+/g,
-        " "
-      );
+function getFastResponse(message: string) {
+  const text = message
+    .toLowerCase()
+    .trim()
+    .replace(/[!?.,]/g, "")
+    .replace(/\s+/g, " ");
 
   const greetings = [
     "hi",
@@ -335,11 +337,7 @@ function getFastResponse(
     "good evening",
   ];
 
-  if (
-    greetings.includes(
-      text
-    )
-  ) {
+  if (greetings.includes(text)) {
     return "Hi! 👋 How can I help you today?";
   }
 
@@ -351,11 +349,7 @@ function getFastResponse(
     "thx",
   ];
 
-  if (
-    thanks.includes(
-      text
-    )
-  ) {
+  if (thanks.includes(text)) {
     return "You're welcome! 😊";
   }
 
@@ -366,11 +360,7 @@ function getFastResponse(
     "see you later",
   ];
 
-  if (
-    goodbye.includes(
-      text
-    )
-  ) {
+  if (goodbye.includes(text)) {
     return "Goodbye! 👋 Have a great day!";
   }
 
@@ -391,11 +381,8 @@ function getFastResponse(
 // DETECT INTENT
 // =====================================================
 
-function detectIntent(
-  question: string
-) {
-  const text =
-    question.toLowerCase();
+function detectIntent(question: string) {
+  const text = question.toLowerCase();
 
   if (
     [
@@ -409,12 +396,7 @@ function detectIntent(
       "warranty",
       "payment",
       "returns",
-    ].some(
-      (word) =>
-        text.includes(
-          word
-        )
-    )
+    ].some((word) => text.includes(word))
   ) {
     return "policy";
   }
@@ -452,12 +434,7 @@ function detectIntent(
       "bags",
       "watch",
       "watches",
-    ].some(
-      (word) =>
-        text.includes(
-          word
-        )
-    )
+    ].some((word) => text.includes(word))
   ) {
     return "product";
   }
@@ -469,63 +446,35 @@ function detectIntent(
 // BUILD KNOWLEDGE CONTEXT
 // =====================================================
 
-function buildContext(
-  matches: any[]
-) {
-  if (
-    !matches ||
-    matches.length === 0
-  ) {
+function buildContext(matches: any[]) {
+  if (!matches || matches.length === 0) {
     return "";
   }
 
   return matches
-    .slice(
-      0,
-      MAX_CONTEXT_MATCHES
-    )
-    .map(
-      (
-        item,
-        index
-      ) => {
-        const title =
-          String(
-            item.page_title ||
-              item.title ||
-              ""
-          ).slice(
-            0,
-            150
-          );
+    .slice(0, MAX_CONTEXT_MATCHES)
+    .map((item, index) => {
+      const title = String(
+        item.page_title ||
+          item.title ||
+          ""
+      ).slice(0, 150);
 
-        const sourceUrl =
-          String(
-            item.source_url ||
-              item.page_url ||
-              item.url ||
-              ""
-          ).slice(
-            0,
-            500
-          );
+      const sourceUrl = String(
+        item.source_url ||
+          item.page_url ||
+          item.url ||
+          ""
+      ).slice(0, 500);
 
-        const content =
-          String(
-            item.content ||
-              ""
-          )
-            .replace(
-              /\s+/g,
-              " "
-            )
-            .trim()
-            .slice(
-              0,
-              1000
-            );
+      const content = String(
+        item.content || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 1000);
 
-        return `
+      return `
 RESULT ${index + 1}
 
 TITLE:
@@ -537,8 +486,7 @@ ${sourceUrl}
 CONTENT:
 ${content}
 `;
-      }
-    )
+    })
     .join("\n");
 }
 
@@ -546,46 +494,28 @@ ${content}
 // BUILD CONVERSATION HISTORY
 // =====================================================
 
-function buildConversationHistory(
-  messages: any[]
-) {
-  if (
-    !messages ||
-    messages.length === 0
-  ) {
+function buildConversationHistory(messages: any[]) {
+  if (!messages || messages.length === 0) {
     return "";
   }
 
   return messages
-    .slice(
-      -MAX_HISTORY_MESSAGES
-    )
-    .map(
-      (item) => {
-        const sender =
-          item.sender ===
-          "customer"
-            ? "Customer"
-            : "AI";
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((item) => {
+      const sender =
+        item.sender === "customer"
+          ? "Customer"
+          : "AI";
 
-        const content =
-          String(
-            item.content ||
-              ""
-          )
-            .replace(
-              /\s+/g,
-              " "
-            )
-            .trim()
-            .slice(
-              0,
-              500
-            );
+      const content = String(
+        item.content || ""
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 500);
 
-        return `${sender}: ${content}`;
-      }
-    )
+      return `${sender}: ${content}`;
+    })
     .join("\n");
 }
 
@@ -599,32 +529,21 @@ async function getConversationHistory(
   const {
     data,
     error,
-  } =
-    await supabaseAdmin
-      .from(
-        "conversation_messages"
-      )
-      .select(
-        "sender, content, created_at"
-      )
-      .eq(
-        "conversation_id",
-        conversationId
-      )
-      .order(
-        "created_at",
-        {
-          ascending:
-            false,
-        }
-      )
-      .limit(
-        MAX_HISTORY_MESSAGES
-      );
+  } = await supabaseAdmin
+    .from("conversation_messages")
+    .select(
+      "sender, content, created_at"
+    )
+    .eq(
+      "conversation_id",
+      conversationId
+    )
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(MAX_HISTORY_MESSAGES);
 
-  if (
-    error
-  ) {
+  if (error) {
     console.error(
       "CONVERSATION HISTORY ERROR:",
       error
@@ -633,9 +552,7 @@ async function getConversationHistory(
     return [];
   }
 
-  if (
-    !data
-  ) {
+  if (!data) {
     return [];
   }
 
@@ -646,124 +563,56 @@ async function getConversationHistory(
 // EXTRACT ORDER NUMBER
 // =====================================================
 
-function extractOrderNumber(
-  message: string
-) {
-  const text =
-    message
-      .trim()
-      .replace(
-        /\s+/g,
-        " "
-      );
+function extractOrderNumber(message: string) {
+  const text = message
+    .trim()
+    .replace(/\s+/g, " ");
 
-  // ---------------------------------------------------
-  // #1001
-  // ---------------------------------------------------
+  const hashMatch = text.match(
+    /#\s*(\d{1,12})\b/
+  );
 
-  const hashMatch =
-    text.match(
-      /#\s*(\d{1,12})\b/
-    );
-
-  if (
-    hashMatch
-  ) {
+  if (hashMatch) {
     return hashMatch[1];
   }
 
-  // ---------------------------------------------------
-  // order 1001
-  // order #1001
-  // order number 1001
-  // order no 1001
-  // ---------------------------------------------------
+  const orderMatch = text.match(
+    /\border\s*(?:number|no\.?|#)?\s*(\d{1,12})\b/i
+  );
 
-  const orderMatch =
-    text.match(
-      /\border\s*(?:number|no\.?|#)?\s*(\d{1,12})\b/i
-    );
-
-  if (
-    orderMatch
-  ) {
+  if (orderMatch) {
     return orderMatch[1];
   }
 
-  // ---------------------------------------------------
-  // order number is 1001
-  // order is 1001
-  // order = 1001
-  // order: 1001
-  // ---------------------------------------------------
+  const orderIsMatch = text.match(
+    /\border\s*(?:number|no\.?)?\s*(?:is|was|=|:)\s*#?\s*(\d{1,12})\b/i
+  );
 
-  const orderIsMatch =
-    text.match(
-      /\border\s*(?:number|no\.?)?\s*(?:is|was|=|:)\s*#?\s*(\d{1,12})\b/i
-    );
-
-  if (
-    orderIsMatch
-  ) {
+  if (orderIsMatch) {
     return orderIsMatch[1];
   }
 
-  // ---------------------------------------------------
-  // its number 1001
-  // it's number 1001
-  // its order number 1001
-  // it's order number 1001
-  // ---------------------------------------------------
+  const itsNumberMatch = text.match(
+    /\b(?:its|it's)\s+(?:order\s+)?number\s+(?:is\s+)?#?\s*(\d{1,12})\b/i
+  );
 
-  const itsNumberMatch =
-    text.match(
-      /\b(?:its|it's)\s+(?:order\s+)?number\s+(?:is\s+)?#?\s*(\d{1,12})\b/i
-    );
-
-  if (
-    itsNumberMatch
-  ) {
+  if (itsNumberMatch) {
     return itsNumberMatch[1];
   }
 
-  // ---------------------------------------------------
-  // number 1001
-  // ---------------------------------------------------
+  const numberMatch = text.match(
+    /\bnumber\s*(?:is|=|:)?\s*#?\s*(\d{1,12})\b/i
+  );
 
-  const numberMatch =
-    text.match(
-      /\bnumber\s*(?:is|=|:)?\s*#?\s*(\d{1,12})\b/i
-    );
-
-  if (
-    numberMatch
-  ) {
+  if (numberMatch) {
     return numberMatch[1];
   }
 
-  // ---------------------------------------------------
-  // STANDALONE NUMBER
-  // ---------------------------------------------------
-  //
-  // Example:
-  //
-  // 1001
-  // #1001
-  //
-  // This is especially important after:
-  //
-  // "Please provide your order number."
-  //
-  // ---------------------------------------------------
+  const standaloneNumber = text.match(
+    /^#?\s*(\d{1,12})\s*[.!]?$/
+  );
 
-  const standaloneNumber =
-    text.match(
-      /^#?\s*(\d{1,12})\s*[.!]?$/
-    );
-
-  if (
-    standaloneNumber
-  ) {
+  if (standaloneNumber) {
     return standaloneNumber[1];
   }
 
@@ -774,37 +623,24 @@ function extractOrderNumber(
 // CHECK IF AI REQUESTED ORDER NUMBER
 // =====================================================
 
-function aiRequestedOrderNumber(
-  messages: any[]
-) {
-  if (
-    !messages ||
-    messages.length === 0
-  ) {
+function aiRequestedOrderNumber(messages: any[]) {
+  if (!messages || messages.length === 0) {
     return false;
   }
 
-  const reversed =
-    [...messages].reverse();
+  const reversed = [...messages].reverse();
 
-  const latestAI =
-    reversed.find(
-      (item) =>
-        item.sender ===
-        "ai"
-    );
+  const latestAI = reversed.find(
+    (item) => item.sender === "ai"
+  );
 
-  if (
-    !latestAI
-  ) {
+  if (!latestAI) {
     return false;
   }
 
-  const content =
-    String(
-      latestAI.content ||
-        ""
-    ).toLowerCase();
+  const content = String(
+    latestAI.content || ""
+  ).toLowerCase();
 
   const requestPhrases = [
     "order number",
@@ -824,35 +660,12 @@ function aiRequestedOrderNumber(
   ];
 
   return requestPhrases.some(
-    (phrase) =>
-      content.includes(
-        phrase
-      )
+    (phrase) => content.includes(phrase)
   );
 }
 
 // =====================================================
 // DETECT CONTEXTUAL ORDER ACTION
-// =====================================================
-//
-// Handles:
-//
-// Customer:
-// Where is my order?
-//
-// AI:
-// Please provide your order number.
-//
-// Customer:
-// 1001
-//
-// Result:
-//
-// get_order_status
-// {
-//   orderNumber: "1001"
-// }
-//
 // =====================================================
 
 function detectContextualOrderAction(
@@ -860,24 +673,14 @@ function detectContextualOrderAction(
   history: any[]
 ): ActionRequest | null {
   const orderNumber =
-    extractOrderNumber(
-      message
-    );
+    extractOrderNumber(message);
 
-  if (
-    !orderNumber
-  ) {
+  if (!orderNumber) {
     return null;
   }
 
-  // ---------------------------------------------------
-  // FIRST: TRY DIRECT ACTION DETECTION
-  // ---------------------------------------------------
-
   const directAction =
-    detectAction(
-      message
-    );
+    detectAction(message);
 
   if (
     directAction &&
@@ -891,25 +694,16 @@ function detectContextualOrderAction(
     return directAction;
   }
 
-  // ---------------------------------------------------
-  // CONTEXTUAL ORDER NUMBER
-  // ---------------------------------------------------
-
   if (
-    aiRequestedOrderNumber(
-      history
-    )
+    aiRequestedOrderNumber(history)
   ) {
-    const actionRequest: ActionRequest =
-      {
-        action:
-          "get_order_status",
+    const actionRequest: ActionRequest = {
+      action: "get_order_status",
 
-        parameters: {
-          orderNumber:
-            orderNumber,
-        },
-      };
+      parameters: {
+        orderNumber,
+      },
+    };
 
     return actionRequest;
   }
@@ -945,40 +739,31 @@ function addProductUrl(
   const question =
     userMessage.toLowerCase();
 
-  let selected =
-    matches.find(
-      (item: any) => {
-        const title =
-          String(
-            item.page_title ||
-              item.title ||
-              ""
-          ).toLowerCase();
+  let selected = matches.find(
+    (item: any) => {
+      const title = String(
+        item.page_title ||
+          item.title ||
+          ""
+      ).toLowerCase();
 
-        return (
-          title &&
-          question.includes(
-            title
-          )
-        );
-      }
-    );
-
-  if (
-    !selected
-  ) {
-    selected =
-      matches.find(
-        (item: any) =>
-          item.source_url ||
-          item.page_url ||
-          item.url
+      return (
+        title &&
+        question.includes(title)
       );
+    }
+  );
+
+  if (!selected) {
+    selected = matches.find(
+      (item: any) =>
+        item.source_url ||
+        item.page_url ||
+        item.url
+    );
   }
 
-  if (
-    !selected
-  ) {
+  if (!selected) {
     return response;
   }
 
@@ -988,9 +773,7 @@ function addProductUrl(
     selected.url ||
     "";
 
-  if (
-    !productUrl
-  ) {
+  if (!productUrl) {
     return response;
   }
 
@@ -1004,20 +787,15 @@ function addProductUrl(
 // CHAT API
 // =====================================================
 
-export async function POST(
-  req: Request
-) {
-  const requestStartedAt =
-    Date.now();
+export async function POST(req: Request) {
+  const requestStartedAt = Date.now();
 
   try {
     console.log(
       "================================="
     );
 
-    console.log(
-      "CHAT API START"
-    );
+    console.log("CHAT API START");
 
     console.log(
       "================================="
@@ -1027,8 +805,7 @@ export async function POST(
     // REQUEST BODY
     // =================================================
 
-    const body =
-      await req.json();
+    const body = await req.json();
 
     const {
       message,
@@ -1059,40 +836,30 @@ export async function POST(
 
     if (
       !message ||
-      typeof message !==
-        "string"
+      typeof message !== "string"
     ) {
       return NextResponse.json(
         {
-          success:
-            false,
-
-          error:
-            "Message required",
+          success: false,
+          error: "Message required",
         },
         {
-          status:
-            400,
+          status: 400,
         }
       );
     }
 
     if (
       !profileId ||
-      typeof profileId !==
-        "string"
+      typeof profileId !== "string"
     ) {
       return NextResponse.json(
         {
-          success:
-            false,
-
-          error:
-            "Profile missing",
+          success: false,
+          error: "Profile missing",
         },
         {
-          status:
-            400,
+          status: 400,
         }
       );
     }
@@ -1100,20 +867,15 @@ export async function POST(
     const cleanMessage =
       message.trim();
 
-    if (
-      !cleanMessage
-    ) {
+    if (!cleanMessage) {
       return NextResponse.json(
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Message cannot be empty.",
         },
         {
-          status:
-            400,
+          status: 400,
         }
       );
     }
@@ -1124,66 +886,113 @@ export async function POST(
 
     let conversation:
       | any
-      | null =
-      null;
+      | null = null;
 
-    if (
-      visitorSessionId
-    ) {
+    if (visitorSessionId) {
       const {
         data,
         error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .select(
-            "id, profile_id, user_id, visitor_session_id"
-          )
-          .eq(
-            "visitor_session_id",
-            visitorSessionId
-          )
-          .eq(
-            "profile_id",
-            profileId
-          )
-          .maybeSingle();
+      } = await supabaseAdmin
+        .from("conversations")
+        .select(
+          "id, profile_id, user_id, visitor_session_id"
+        )
+        .eq(
+          "visitor_session_id",
+          visitorSessionId
+        )
+        .eq(
+          "profile_id",
+          profileId
+        )
+        .maybeSingle();
 
-      if (
-        error
-      ) {
+      if (error) {
         console.error(
           "CONVERSATION LOOKUP ERROR:",
           error
         );
       }
 
-      conversation =
-        data;
+      conversation = data;
     }
 
     // =================================================
     // BILLING
     // =================================================
     //
-    // DEMO MODE:
+    // IMPORTANT:
     //
-    // Billing is currently skipped.
+    // We check billing BEFORE creating a new
+    // conversation.
     //
-    // Later:
+    // Existing conversations are allowed to continue.
     //
-    // const billing =
-    //   await checkBillingAccess(profileId);
+    // New conversations consume one conversation
+    // from the plan.
     //
     // =================================================
 
-    if (
-      !conversation
-    ) {
+    if (!conversation) {
       console.log(
-        "NEW CONVERSATION - BILLING CHECK SKIPPED (DEMO MODE)"
+        "NEW CONVERSATION - CHECKING BILLING"
+      );
+
+      const billing =
+        await checkBillingAccess(
+          profileId
+        );
+
+      console.log(
+        "BILLING RESULT:",
+        billing
+      );
+
+      if (!billing.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+
+            error:
+              billing.error,
+
+            code:
+              billing.code ||
+              "BILLING_ACCESS_DENIED",
+
+            planId:
+              "planId" in billing
+                ? billing.planId
+                : undefined,
+
+            planName:
+              "planName" in billing
+                ? billing.planName
+                : undefined,
+
+            used:
+              "used" in billing
+                ? billing.used
+                : undefined,
+
+            limit:
+              "limit" in billing
+                ? billing.limit
+                : undefined,
+
+            remaining:
+              "remaining" in billing
+                ? billing.remaining
+                : undefined,
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+    } else {
+      console.log(
+        "EXISTING CONVERSATION - BILLING CHECK PASSED"
       );
     }
 
@@ -1191,9 +1000,7 @@ export async function POST(
     // CREATE CONVERSATION
     // =================================================
 
-    if (
-      !conversation
-    ) {
+    if (!conversation) {
       console.log(
         "CREATING CONVERSATION"
       );
@@ -1205,43 +1012,33 @@ export async function POST(
       const {
         data,
         error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .insert({
-            profile_id:
-              profileId,
+      } = await supabaseAdmin
+        .from("conversations")
+        .insert({
+          profile_id: profileId,
 
-            user_id:
-              profileId,
+          user_id: profileId,
 
-            visitor_session_id:
-              session,
+          visitor_session_id: session,
 
-            customer_name:
-              customerName ||
-              "Website Visitor",
+          customer_name:
+            customerName ||
+            "Website Visitor",
 
-            customer_email:
-              customerEmail ||
-              null,
+          customer_email:
+            customerEmail ||
+            null,
 
-            assigned_to:
-              "ai",
+          assigned_to: "ai",
 
-            status:
-              "open",
-          })
-          .select(
-            "id, profile_id, user_id, visitor_session_id"
-          )
-          .single();
+          status: "open",
+        })
+        .select(
+          "id, profile_id, user_id, visitor_session_id"
+        )
+        .single();
 
-      if (
-        error
-      ) {
+      if (error) {
         console.error(
           "CONVERSATION CREATE ERROR:",
           error
@@ -1250,8 +1047,7 @@ export async function POST(
         throw error;
       }
 
-      conversation =
-        data;
+      conversation = data;
     }
 
     // =================================================
@@ -1261,25 +1057,18 @@ export async function POST(
     const {
       error:
         customerMessageError,
-    } =
-      await supabaseAdmin
-        .from(
-          "conversation_messages"
-        )
-        .insert({
-          conversation_id:
-            conversation.id,
+    } = await supabaseAdmin
+      .from("conversation_messages")
+      .insert({
+        conversation_id:
+          conversation.id,
 
-          sender:
-            "customer",
+        sender: "customer",
 
-          content:
-            cleanMessage,
-        });
+        content: cleanMessage,
+      });
 
-    if (
-      customerMessageError
-    ) {
+    if (customerMessageError) {
       console.error(
         "CUSTOMER MESSAGE ERROR:",
         customerMessageError
@@ -1324,9 +1113,7 @@ export async function POST(
         cleanMessage
       );
 
-    if (
-      fastResponse
-    ) {
+    if (fastResponse) {
       console.log(
         "FAST RESPONSE:",
         fastResponse
@@ -1335,25 +1122,20 @@ export async function POST(
       const {
         error:
           fastMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
+      } = await supabaseAdmin
+        .from(
+          "conversation_messages"
+        )
+        .insert({
+          conversation_id:
+            conversation.id,
 
-            sender:
-              "ai",
+          sender: "ai",
 
-            content:
-              fastResponse,
-          });
+          content: fastResponse,
+        });
 
-      if (
-        fastMessageError
-      ) {
+      if (fastMessageError) {
         console.error(
           "FAST AI MESSAGE ERROR:",
           fastMessageError
@@ -1361,26 +1143,20 @@ export async function POST(
       }
 
       return NextResponse.json({
-        success:
-          true,
+        success: true,
 
-        response:
-          fastResponse,
+        response: fastResponse,
 
         visitorSessionId:
           conversation.visitor_session_id,
 
-        intent:
-          "general",
+        intent: "general",
 
-        matches:
-          0,
+        matches: 0,
 
-        action:
-          null,
+        action: null,
 
-        actionExecuted:
-          false,
+        actionExecuted: false,
       });
     }
 
@@ -1401,19 +1177,14 @@ export async function POST(
     );
 
     let actionRequest:
-      ActionRequest | null =
+      | ActionRequest
+      | null =
       detectContextualOrderAction(
         cleanMessage,
         conversationHistory
       );
 
-    // -------------------------------------------------
-    // FALL BACK TO NORMAL ACTION DETECTION
-    // -------------------------------------------------
-
-    if (
-      !actionRequest
-    ) {
+    if (!actionRequest) {
       actionRequest =
         detectAction(
           cleanMessage
@@ -1424,21 +1195,16 @@ export async function POST(
     // ADD PROFILE CONTEXT
     // =================================================
 
-    if (
-      actionRequest
-    ) {
-      const parameters:
-        Record<
-          string,
-          unknown
-        > = {
+    if (actionRequest) {
+      const parameters: Record<
+        string,
+        unknown
+      > = {
         ...actionRequest.parameters,
 
-        userId:
-          profileId,
+        userId: profileId,
 
-        profileId:
-          profileId,
+        profileId: profileId,
       };
 
       actionRequest = {
@@ -1453,9 +1219,7 @@ export async function POST(
     // EXECUTE ACTION
     // =================================================
 
-    if (
-      actionRequest
-    ) {
+    if (actionRequest) {
       console.log(
         "================================="
       );
@@ -1495,16 +1259,13 @@ export async function POST(
         actionResult
       );
 
-      let actionResponse =
-        "";
+      let actionResponse = "";
 
       // =================================================
       // ACTION FAILED
       // =================================================
 
-      if (
-        !actionResult.success
-      ) {
+      if (!actionResult.success) {
         actionResponse =
           actionResult.error ||
           "I'm unable to complete that request right now.";
@@ -1518,10 +1279,6 @@ export async function POST(
         switch (
           actionRequest.action
         ) {
-          // =============================================
-          // PRODUCT SEARCH
-          // =============================================
-
           case "search_products": {
             const products =
               (
@@ -1538,20 +1295,12 @@ export async function POST(
             break;
           }
 
-          // =============================================
-          // HUMAN HANDOFF
-          // =============================================
-
           case "handoff_to_human": {
             actionResponse =
               "Absolutely. I'll connect you with a member of our support team.";
 
             break;
           }
-
-          // =============================================
-          // ORDER STATUS
-          // =============================================
 
           case "get_order_status": {
             const result =
@@ -1609,19 +1358,13 @@ export async function POST(
                 "being processed"
               }.`;
 
-            if (
-              financial
-            ) {
+            if (financial) {
               actionResponse +=
                 ` Payment status: ${financial}.`;
             }
 
             break;
           }
-
-          // =============================================
-          // ORDER DETAILS
-          // =============================================
 
           case "get_order_details": {
             const result =
@@ -1670,25 +1413,15 @@ export async function POST(
                 result.orderNumber
               } is ${fulfillment}.`;
 
-            if (
-              items.length >
-              0
-            ) {
+            if (items.length > 0) {
               const itemText =
                 items
-                  .slice(
-                    0,
-                    5
-                  )
+                  .slice(0, 5)
                   .map(
-                    (
-                      item: any
-                    ) =>
+                    (item: any) =>
                       `${item.quantity} × ${item.title}`
                   )
-                  .join(
-                    ", "
-                  );
+                  .join(", ");
 
               actionResponse +=
                 ` Items: ${itemText}.`;
@@ -1710,20 +1443,12 @@ export async function POST(
             break;
           }
 
-          // =============================================
-          // PRODUCT STOCK
-          // =============================================
-
           case "check_product_stock": {
             actionResponse =
               "I checked the product availability.";
 
             break;
           }
-
-          // =============================================
-          // PRODUCT DETAILS
-          // =============================================
 
           case "get_product_details": {
             actionResponse =
@@ -1732,10 +1457,6 @@ export async function POST(
             break;
           }
 
-          // =============================================
-          // SHIPPING POLICY
-          // =============================================
-
           case "get_shipping_policy": {
             actionResponse =
               "I found the store's shipping information.";
@@ -1743,20 +1464,12 @@ export async function POST(
             break;
           }
 
-          // =============================================
-          // RETURN POLICY
-          // =============================================
-
           case "get_return_policy": {
             actionResponse =
               "I found the store's return information.";
 
             break;
           }
-
-          // =============================================
-          // DEFAULT
-          // =============================================
 
           default: {
             actionResponse =
@@ -1774,41 +1487,30 @@ export async function POST(
       const {
         error:
           actionMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
+      } = await supabaseAdmin
+        .from(
+          "conversation_messages"
+        )
+        .insert({
+          conversation_id:
+            conversation.id,
 
-            sender:
-              "ai",
+          sender: "ai",
 
-            content:
-              actionResponse,
-          });
+          content: actionResponse,
+        });
 
-      if (
-        actionMessageError
-      ) {
+      if (actionMessageError) {
         console.error(
           "ACTION AI MESSAGE ERROR:",
           actionMessageError
         );
       }
 
-      // =================================================
-      // ACTION RESPONSE
-      // =================================================
-
       return NextResponse.json({
-        success:
-          true,
+        success: true,
 
-        response:
-          actionResponse,
+        response: actionResponse,
 
         visitorSessionId:
           conversation.visitor_session_id,
@@ -1828,17 +1530,14 @@ export async function POST(
     const embeddingStartedAt =
       Date.now();
 
-    let embedding:
-      number[];
+    let embedding: number[];
 
     try {
       embedding =
         await createEmbedding(
           cleanMessage
         );
-    } catch (
-      embeddingError
-    ) {
+    } catch (embeddingError) {
       console.error(
         "================================="
       );
@@ -1919,9 +1618,7 @@ export async function POST(
         }
       );
 
-    if (
-      searchError
-    ) {
+    if (searchError) {
       console.error(
         "================================="
       );
@@ -1945,9 +1642,7 @@ export async function POST(
     }
 
     const knowledgeMatches =
-      Array.isArray(
-        matches
-      )
+      Array.isArray(matches)
         ? matches
         : [];
 
@@ -1976,25 +1671,18 @@ export async function POST(
     // BUILD FINAL CONTEXT
     // =================================================
 
-    let finalContext =
-      "";
+    let finalContext = "";
 
-    if (
-      historyContext.trim()
-    ) {
-      finalContext +=
-        `
+    if (historyContext.trim()) {
+      finalContext += `
 RECENT CONVERSATION:
 ${historyContext}
 
 `;
     }
 
-    if (
-      knowledgeContext.trim()
-    ) {
-      finalContext +=
-        `
+    if (knowledgeContext.trim()) {
+      finalContext += `
 STORE KNOWLEDGE:
 ${knowledgeContext}
 
@@ -2005,8 +1693,7 @@ ${knowledgeContext}
     // GENERATE AI RESPONSE
     // =================================================
 
-    let aiResponse =
-      "";
+    let aiResponse = "";
 
     const aiStartedAt =
       Date.now();
@@ -2038,14 +1725,10 @@ ${knowledgeContext}
 
     aiResponse =
       String(
-        aiResponse ||
-          ""
-      )
-        .trim();
+        aiResponse || ""
+      ).trim();
 
-    if (
-      !aiResponse
-    ) {
+    if (!aiResponse) {
       aiResponse =
         "I'm sorry, I couldn't generate a response.";
     }
@@ -2094,25 +1777,20 @@ ${knowledgeContext}
     const {
       error:
         aiMessageError,
-    } =
-      await supabaseAdmin
-        .from(
-          "conversation_messages"
-        )
-        .insert({
-          conversation_id:
-            conversation.id,
+    } = await supabaseAdmin
+      .from(
+        "conversation_messages"
+      )
+      .insert({
+        conversation_id:
+          conversation.id,
 
-          sender:
-            "ai",
+        sender: "ai",
 
-          content:
-            aiResponse,
-        });
+        content: aiResponse,
+      });
 
-    if (
-      aiMessageError
-    ) {
+    if (aiMessageError) {
       console.error(
         "AI MESSAGE ERROR:",
         aiMessageError
@@ -2159,11 +1837,9 @@ ${knowledgeContext}
     );
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
-      response:
-        aiResponse,
+      response: aiResponse,
 
       visitorSessionId:
         conversation
@@ -2174,15 +1850,11 @@ ${knowledgeContext}
       matches:
         knowledgeMatches.length,
 
-      action:
-        null,
+      action: null,
 
-      actionExecuted:
-        false,
+      actionExecuted: false,
     });
-  } catch (
-    error: any
-  ) {
+  } catch (error: any) {
     const totalTime =
       Date.now() -
       requestStartedAt;
@@ -2210,16 +1882,14 @@ ${knowledgeContext}
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
         error:
           error?.message ||
           "Server error. Please try again.",
       },
       {
-        status:
-          500,
+        status: 500,
       }
     );
   }
@@ -2233,149 +1903,110 @@ function cleanProductDescription(
   description: string,
   productName: string
 ) {
-  if (
-    !description
-  ) {
+  if (!description) {
     return "";
   }
 
-  let clean =
-    String(
-      description
-    );
+  let clean = String(description);
 
-  clean =
-    clean.replace(
-      /https?:\/\/\S+/gi,
-      ""
-    );
+  clean = clean.replace(
+    /https?:\/\/\S+/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /[•▪●]/g,
-      ""
-    );
+  clean = clean.replace(
+    /[•▪●]/g,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bSales Pilot\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bSales Pilot\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bAI Sales & Customer Support Employee\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bAI Sales & Customer Support Employee\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bAI Customer Support\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bAI Customer Support\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bAcme Store\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bAcme Store\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bTest website for Sales Pilot AI\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bTest website for Sales Pilot AI\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bSales Pilot Widget Test\b/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\bSales Pilot Widget Test\b/gi,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bShipping & Returns\b[\s\S]*$/i,
-      ""
-    );
+  clean = clean.replace(
+    /\bShipping & Returns\b[\s\S]*$/i,
+    ""
+  );
 
-  clean =
-    clean.replace(
-      /\bKnowledge Base\b[\s\S]*$/i,
-      ""
-    );
+  clean = clean.replace(
+    /\bKnowledge Base\b[\s\S]*$/i,
+    ""
+  );
 
-  if (
-    productName
-  ) {
+  if (productName) {
     const escapedName =
       productName.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
 
-    clean =
-      clean.replace(
-        new RegExp(
-          escapedName,
-          "gi"
-        ),
-        ""
-      );
+    clean = clean.replace(
+      new RegExp(
+        escapedName,
+        "gi"
+      ),
+      ""
+    );
   }
 
-  clean =
-    clean.replace(
-      /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
-      ""
-    );
+  clean = clean.replace(
+    /\b(price|sku|url|product url|view product)\s*:\s*[^\n]*/gi,
+    ""
+  );
 
-  clean =
-    clean
-      .replace(
-        /\s+/g,
-        " "
-      )
+  clean = clean
+    .replace(/\s+/g, " ")
+    .trim();
+
+  clean = clean.replace(
+    /^[,.:;!?-]+\s*/,
+    ""
+  );
+
+  const MAX_LENGTH = 140;
+
+  if (clean.length > MAX_LENGTH) {
+    clean = clean
+      .slice(0, MAX_LENGTH)
       .trim();
 
-  clean =
-    clean.replace(
-      /^[,.:;!?-]+\s*/,
-      ""
-    );
-
-  const MAX_LENGTH =
-    140;
-
-  if (
-    clean.length >
-    MAX_LENGTH
-  ) {
-    clean =
-      clean
-        .slice(
-          0,
-          MAX_LENGTH
-        )
-        .trim();
-
     const lastSpace =
-      clean.lastIndexOf(
-        " "
-      );
+      clean.lastIndexOf(" ");
 
-    if (
-      lastSpace >
-      80
-    ) {
-      clean =
-        clean.slice(
-          0,
-          lastSpace
-        );
+    if (lastSpace > 80) {
+      clean = clean.slice(
+        0,
+        lastSpace
+      );
     }
 
-    clean +=
-      "...";
+    clean += "...";
   }
 
   return clean;
@@ -2385,22 +2016,13 @@ function cleanProductDescription(
 // PRODUCT NAME
 // =====================================================
 
-function cleanProductName(
-  name: string
-) {
-  if (
-    !name
-  ) {
+function cleanProductName(name: string) {
+  if (!name) {
     return "this product";
   }
 
-  return String(
-    name
-  )
-    .replace(
-      /\s+/g,
-      " "
-    )
+  return String(name)
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -2408,9 +2030,7 @@ function cleanProductName(
 // PRODUCT PRICE
 // =====================================================
 
-function cleanProductPrice(
-  price: unknown
-) {
+function cleanProductPrice(price: unknown) {
   if (
     price === null ||
     price === undefined
@@ -2418,13 +2038,8 @@ function cleanProductPrice(
     return "";
   }
 
-  return String(
-    price
-  )
-    .replace(
-      /\s+/g,
-      " "
-    )
+  return String(price)
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -2432,24 +2047,18 @@ function cleanProductPrice(
 // PRODUCT URL
 // =====================================================
 
-function cleanProductUrl(
-  product: any
-) {
+function cleanProductUrl(product: any) {
   const url =
     product?.url ||
     product?.page_url ||
     product?.product_url ||
     "";
 
-  if (
-    !url
-  ) {
+  if (!url) {
     return "";
   }
 
-  return String(
-    url
-  ).trim();
+  return String(url).trim();
 }
 
 // =====================================================
@@ -2479,32 +2088,24 @@ function formatSingleProduct(
     );
 
   const url =
-    cleanProductUrl(
-      product
-    );
+    cleanProductUrl(product);
 
   let response =
     `We have the ${name}`;
 
-  if (
-    description
-  ) {
+  if (description) {
     response +=
       ` — ${description}`;
   }
 
   response += ".";
 
-  if (
-    price
-  ) {
+  if (price) {
     response +=
       ` It's ${price}.`;
   }
 
-  if (
-    url
-  ) {
+  if (url) {
     response +=
       `\n🔗 View product: ${url}`;
   }
@@ -2521,8 +2122,7 @@ function formatProductResults(
 ) {
   if (
     !products ||
-    products.length ===
-      0
+    products.length === 0
   ) {
     return "I couldn't find a matching product. What type of product are you looking for?";
   }
@@ -2537,21 +2137,16 @@ function formatProductResults(
             product.title
           )
       )
-      .slice(
-        0,
-        3
-      );
+      .slice(0, 3);
 
   if (
-    selectedProducts.length ===
-      0
+    selectedProducts.length === 0
   ) {
     return "I couldn't find a matching product.";
   }
 
   if (
-    selectedProducts.length ===
-      1
+    selectedProducts.length === 1
   ) {
     return formatSingleProduct(
       selectedProducts[0]
@@ -2560,9 +2155,7 @@ function formatProductResults(
 
   const formatted =
     selectedProducts.map(
-      (
-        product: any
-      ) =>
+      (product: any) =>
         formatSingleProduct(
           product
         )
@@ -2570,8 +2163,6 @@ function formatProductResults(
 
   return (
     "Here are a few options:\n\n" +
-    formatted.join(
-      "\n\n"
-    )
+    formatted.join("\n\n")
   );
 }

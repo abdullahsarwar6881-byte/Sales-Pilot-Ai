@@ -8,12 +8,12 @@ import {
 } from "lucide-react";
 
 import {
-  getBillingPlan,
-  type BillingPlanId,
+  PLANS,
+  type PlanId,
 } from "@/lib/billing/plans";
 
 interface CurrentPlanProps {
-  planId: BillingPlanId;
+  planId: PlanId;
   status: string;
   billingCycle: "monthly" | "annual";
   currentPeriodEnd: string | null;
@@ -25,20 +25,30 @@ export default function CurrentPlan({
   billingCycle,
   currentPeriodEnd,
 }: CurrentPlanProps) {
-  const plan = getBillingPlan(planId);
+  // =====================================================
+  // GET PLAN
+  // =====================================================
 
-  const price =
-    billingCycle === "annual"
-      ? plan.annualPrice
-      : plan.monthlyPrice;
+  const plan = PLANS[planId];
 
-  /*
-   * =========================================================
-   * STATUS
-   * =========================================================
-   */
+  // =====================================================
+  // PRICE
+  // =====================================================
+  //
+  // The current plans.ts contains one price value.
+  // Annual pricing can be added later when we implement
+  // the real payment/checkout system.
+  //
+  // =====================================================
 
-  const normalizedStatus = status?.toLowerCase() || "active";
+  const price = plan.price;
+
+  // =====================================================
+  // STATUS
+  // =====================================================
+
+  const normalizedStatus =
+    status?.toLowerCase() || "active";
 
   const statusConfig = {
     active: {
@@ -76,6 +86,20 @@ export default function CurrentPlan({
         "border-amber-200 bg-amber-50 text-amber-700",
     },
 
+    unpaid: {
+      label: "Payment Required",
+      icon: AlertCircle,
+      className:
+        "border-red-200 bg-red-50 text-red-700",
+    },
+
+    paused: {
+      label: "Paused",
+      icon: AlertCircle,
+      className:
+        "border-amber-200 bg-amber-50 text-amber-700",
+    },
+
     default: {
       label: "No Subscription",
       icon: CreditCard,
@@ -91,14 +115,14 @@ export default function CurrentPlan({
 
   const StatusIcon = config.icon;
 
-  /*
-   * =========================================================
-   * RENEWAL DATE
-   * =========================================================
-   */
+  // =====================================================
+  // RENEWAL DATE
+  // =====================================================
 
   const renewalDate = currentPeriodEnd
-    ? new Date(currentPeriodEnd).toLocaleDateString(
+    ? new Date(
+        currentPeriodEnd
+      ).toLocaleDateString(
         "en-PK",
         {
           day: "numeric",
@@ -108,32 +132,42 @@ export default function CurrentPlan({
       )
     : null;
 
-  /*
-   * =========================================================
-   * BILLING CYCLE LABEL
-   * =========================================================
-   */
+  // =====================================================
+  // BILLING CYCLE LABEL
+  // =====================================================
 
   const billingCycleLabel =
     billingCycle === "annual"
       ? "Annual billing"
       : "Monthly billing";
 
-  /*
-   * =========================================================
-   * RENDER
-   * =========================================================
-   */
+  // =====================================================
+  // PLAN LIMITS
+  // =====================================================
+
+  const websiteLimit =
+    plan.limits.websites;
+
+  const conversationLimit =
+    plan.limits.conversations;
+
+  const knowledgePageLimit =
+    plan.limits.knowledgePages;
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
 
-        {/* ===================================================
+        {/* =================================================
             LEFT SIDE
-        =================================================== */}
+        ================================================= */}
 
         <div className="min-w-0">
+
           <div className="mb-2 flex flex-wrap items-center gap-2">
 
             <h2 className="text-lg font-semibold text-foreground">
@@ -147,76 +181,97 @@ export default function CurrentPlan({
 
               {config.label}
             </span>
+
           </div>
+
+          {/* PLAN NAME */}
 
           <h3 className="text-3xl font-bold tracking-tight text-foreground">
             {plan.name}
           </h3>
 
+          {/* PLAN DESCRIPTION */}
+
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            {plan.description}
+            {getPlanDescription(planId)}
           </p>
 
-          {/* Plan quick information */}
+          {/* PLAN QUICK INFORMATION */}
 
           <div className="mt-4 flex flex-wrap gap-2">
 
+            {/* WEBSITE LIMIT */}
+
             <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
-              {plan.websites}{" "}
-              {plan.websites === 1
+              {websiteLimit}{" "}
+              {websiteLimit === 1
                 ? "website"
                 : "websites"}
             </span>
 
+            {/* CONVERSATION LIMIT */}
+
             <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
-              {plan.conversations.toLocaleString()}{" "}
+              {conversationLimit.toLocaleString()}{" "}
               AI conversations/month
             </span>
 
+            {/* KNOWLEDGE PAGE LIMIT */}
+
             <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
-              {plan.knowledgePages.toLocaleString()}{" "}
+              {knowledgePageLimit.toLocaleString()}{" "}
               knowledge pages
             </span>
 
           </div>
         </div>
 
-        {/* ===================================================
+        {/* =================================================
             RIGHT SIDE
-        =================================================== */}
+        ================================================= */}
 
         <div className="shrink-0 md:text-right">
 
-          {/* Price */}
+          {/* PRICE */}
 
           <div className="text-2xl font-bold text-foreground">
-            Rs. {price.toLocaleString()}
+            {plan.currency === "PKR"
+              ? "Rs."
+              : plan.currency}{" "}
+            {price.toLocaleString()}
 
             <span className="text-sm font-normal text-muted-foreground">
               {" "}
-              / {billingCycle === "annual"
+              /{" "}
+              {billingCycle === "annual"
                 ? "year"
                 : "month"}
             </span>
           </div>
 
-          {/* Billing cycle */}
+          {/* BILLING CYCLE */}
 
           <div className="mt-1 text-xs font-medium text-muted-foreground">
             {billingCycleLabel}
           </div>
 
-          {/* Renewal */}
+          {/* RENEWAL */}
 
           {renewalDate ? (
             <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground md:justify-end">
+
               <CalendarDays className="h-4 w-4 shrink-0" />
 
               <span>
-                {normalizedStatus === "trialing"
+                {normalizedStatus ===
+                "trialing"
                   ? `Trial ends ${renewalDate}`
-                  : `Renews ${renewalDate}`}
+                  : normalizedStatus ===
+                      "canceled"
+                    ? `Access ends ${renewalDate}`
+                    : `Renews ${renewalDate}`}
               </span>
+
             </div>
           ) : (
             <div className="mt-3 text-sm text-muted-foreground">
@@ -228,4 +283,26 @@ export default function CurrentPlan({
       </div>
     </section>
   );
+}
+
+// =====================================================
+// PLAN DESCRIPTION
+// =====================================================
+
+function getPlanDescription(
+  planId: PlanId
+): string {
+  switch (planId) {
+    case "starter":
+      return "For small businesses getting started with AI support.";
+
+    case "growth":
+      return "For growing businesses that need more automation.";
+
+    case "business":
+      return "For businesses with higher support volume and automation needs.";
+
+    default:
+      return "AI customer support for your business.";
+  }
 }

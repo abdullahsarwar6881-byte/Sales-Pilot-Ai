@@ -1,61 +1,172 @@
 "use client";
 
 import { Check, Sparkles } from "lucide-react";
+
 import {
-  BILLING_PLANS,
-  type BillingPlanId,
+  PLANS,
+  type PlanId,
 } from "@/lib/billing/plans";
 
 interface PricingPlansProps {
-  currentPlan?: BillingPlanId;
+  currentPlan?: PlanId;
   billingCycle?: "monthly" | "annual";
-  onSelectPlan?: (planId: BillingPlanId) => void;
+  onSelectPlan?: (planId: PlanId) => void;
 }
+
+// =====================================================
+// FEATURE LABELS
+// =====================================================
+
+const FEATURE_LABELS: Record<
+  keyof (typeof PLANS)[PlanId]["features"],
+  string
+> = {
+  aiCustomerSupport: "AI customer support",
+  websiteCrawler: "Website crawler",
+  knowledgeBase: "Knowledge Base",
+  documentTraining: "PDF, DOCX & TXT training",
+  basicWidget: "Basic widget customization",
+  basicAnalytics: "Basic analytics",
+
+  shopifyIntegration: "Shopify integration",
+  productInventoryKnowledge: "Product & inventory knowledge",
+  orderTracking: "Order tracking",
+  aiCustomerActions: "AI customer actions",
+  advancedWidget: "Advanced widget customization",
+  advancedAnalytics: "Advanced analytics",
+
+  advancedShopify: "Advanced Shopify automation",
+  productRecommendations: "Product recommendations",
+  returnRefundInfo: "Return & refund information",
+  multipleKnowledgeSources: "Multiple knowledge sources",
+};
+
+// =====================================================
+// PLAN DESCRIPTIONS
+// =====================================================
+
+const PLAN_DESCRIPTIONS: Record<PlanId, string> = {
+  starter:
+    "For small businesses getting started with AI support.",
+
+  growth:
+    "For growing businesses that need more automation.",
+
+  business:
+    "For businesses with higher support volume and automation needs.",
+};
+
+// =====================================================
+// POPULAR PLAN
+// =====================================================
+
+const POPULAR_PLAN: PlanId = "growth";
+
+// =====================================================
+// COMPONENT
+// =====================================================
 
 export default function PricingPlans({
   currentPlan = "starter",
   billingCycle = "monthly",
   onSelectPlan,
 }: PricingPlansProps) {
-  const plans = Object.values(BILLING_PLANS);
+  const plans = Object.values(PLANS);
 
   return (
     <section>
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div className="mb-6">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Choose your plan
         </h2>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose the plan that fits your business and upgrade whenever you
-          need more.
+          Choose the plan that fits your business and upgrade
+          whenever you need more.
         </p>
       </div>
 
+      {/* =================================================
+          PLANS
+      ================================================= */}
+
       <div className="grid gap-5 lg:grid-cols-3">
         {plans.map((plan) => {
-          const isCurrent = plan.id === currentPlan;
+          const isCurrent =
+            plan.id === currentPlan;
+
+          const isPopular =
+            plan.id === POPULAR_PLAN;
+
+          /*
+           * Annual billing:
+           *
+           * Monthly:
+           * Rs. 2,000 × 12 = Rs. 24,000
+           *
+           * Annual:
+           * Rs. 2,000 × 10 = Rs. 20,000
+           *
+           * This gives the customer 2 months free.
+           */
+
+          const monthlyPrice =
+            plan.price;
+
+          const annualPrice =
+            monthlyPrice * 10;
 
           const price =
             billingCycle === "annual"
-              ? plan.annualPrice
-              : plan.monthlyPrice;
+              ? annualPrice
+              : monthlyPrice;
+
+          /*
+           * Only show features that are enabled
+           * for this plan.
+           */
+
+          const enabledFeatures =
+            (
+              Object.entries(
+                plan.features
+              ) as [
+                keyof typeof plan.features,
+                boolean,
+              ][]
+            ).filter(
+              ([, enabled]) =>
+                enabled
+            );
 
           return (
             <div
               key={plan.id}
               className={`relative flex flex-col rounded-2xl border bg-card p-6 shadow-sm transition-all duration-200 ${
-                plan.popular
+                isPopular
                   ? "border-foreground/30 shadow-md"
                   : "border-border"
               }`}
             >
-              {plan.popular && (
+              {/* =================================================
+                  POPULAR BADGE
+              ================================================= */}
+
+              {isPopular && (
                 <div className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground">
                   <Sparkles className="h-3.5 w-3.5" />
+
                   Most Popular
                 </div>
               )}
+
+              {/* =================================================
+                  PLAN NAME
+              ================================================= */}
 
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
@@ -63,55 +174,119 @@ export default function PricingPlans({
                 </h3>
 
                 <p className="mt-2 min-h-[40px] text-sm leading-5 text-muted-foreground">
-                  {plan.description}
+                  {PLAN_DESCRIPTIONS[
+                    plan.id
+                  ]}
                 </p>
               </div>
+
+              {/* =================================================
+                  PRICE
+              ================================================= */}
 
               <div className="mt-6">
                 <div className="flex items-end gap-1">
                   <span className="text-3xl font-bold tracking-tight text-foreground">
-                    Rs. {price.toLocaleString()}
+                    Rs.{" "}
+                    {price.toLocaleString()}
                   </span>
 
                   <span className="mb-1 text-sm text-muted-foreground">
-                    / {billingCycle === "annual" ? "year" : "month"}
+                    /{" "}
+                    {billingCycle ===
+                    "annual"
+                      ? "year"
+                      : "month"}
                   </span>
                 </div>
 
-                {billingCycle === "annual" && (
+                {billingCycle ===
+                  "annual" && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Save 2 months with annual billing
+                    Save 2 months with
+                    annual billing
                   </p>
                 )}
               </div>
 
+              {/* =================================================
+                  LIMITS
+              ================================================= */}
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
+                  {plan.limits.websites}{" "}
+                  {plan.limits.websites ===
+                  1
+                    ? "website"
+                    : "websites"}
+                </span>
+
+                <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
+                  {plan.limits.conversations.toLocaleString()}{" "}
+                  AI conversations/month
+                </span>
+
+                <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
+                  {plan.limits.knowledgePages.toLocaleString()}{" "}
+                  knowledge pages
+                </span>
+              </div>
+
+              {/* =================================================
+                  DIVIDER
+              ================================================= */}
+
               <div className="my-6 h-px bg-border" />
 
+              {/* =================================================
+                  FEATURES
+              ================================================= */}
+
               <ul className="flex flex-1 flex-col gap-3">
-                {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-start gap-2.5 text-sm text-foreground"
-                  >
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
+                {enabledFeatures.map(
+                  ([feature]) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2.5 text-sm text-foreground"
+                    >
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
+
+                      <span>
+                        {
+                          FEATURE_LABELS[
+                            feature
+                          ]
+                        }
+                      </span>
+                    </li>
+                  )
+                )}
               </ul>
+
+              {/* =================================================
+                  BUTTON
+              ================================================= */}
 
               <button
                 type="button"
                 disabled={isCurrent}
-                onClick={() => onSelectPlan?.(plan.id)}
+                onClick={() =>
+                  onSelectPlan?.(
+                    plan.id
+                  )
+                }
                 className={`mt-7 flex h-11 w-full items-center justify-center rounded-xl px-4 text-sm font-semibold transition-colors ${
                   isCurrent
                     ? "cursor-default border border-border bg-muted text-muted-foreground"
-                    : plan.popular
+                    : isPopular
                       ? "bg-foreground text-background hover:opacity-90"
                       : "border border-border bg-background text-foreground hover:bg-muted"
                 }`}
               >
-                {isCurrent ? "Current Plan" : "Upgrade"}
+                {isCurrent
+                  ? "Current Plan"
+                  : "Upgrade"}
               </button>
             </div>
           );
