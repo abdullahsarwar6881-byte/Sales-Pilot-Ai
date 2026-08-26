@@ -71,11 +71,6 @@ export async function getBillingData() {
 
   // =========================================================
   // REAL CONVERSATIONS
-  //
-  // conversations.user_id = authenticated user
-  //
-  // Only conversations created during the current
-  // billing period are counted.
   // =========================================================
 
   const {
@@ -97,12 +92,6 @@ export async function getBillingData() {
 
   // =========================================================
   // REAL WEBSITE SOURCES
-  //
-  // knowledge_urls.user_id = authenticated user
-  //
-  // NOTE:
-  // This currently counts knowledge URL records.
-  // We will later make this count unique domains properly.
   // =========================================================
 
   const {
@@ -122,8 +111,6 @@ export async function getBillingData() {
 
   // =========================================================
   // REAL KNOWLEDGE PAGES
-  //
-  // knowledge_pages.user_id = authenticated user
   // =========================================================
 
   const {
@@ -143,8 +130,6 @@ export async function getBillingData() {
 
   // =========================================================
   // REAL BILLING TRANSACTIONS
-  //
-  // This stays empty until an actual payment is made.
   // =========================================================
 
   const {
@@ -177,7 +162,8 @@ export async function getBillingData() {
 
           status: subscription.status,
 
-          billingCycle: subscription.billing_cycle,
+          billingCycle:
+            subscription.billing_cycle,
 
           currentPeriodStart:
             subscription.current_period_start,
@@ -189,20 +175,38 @@ export async function getBillingData() {
 
     plan,
 
+    // =======================================================
+    // USAGE
+    //
+    // IMPORTANT:
+    // Plan limits are now stored under plan.limits
+    // =======================================================
+
     usage: {
-      conversations: conversationCount ?? 0,
+      conversations:
+        conversationCount ?? 0,
 
-      conversationLimit: plan.conversations,
+      conversationLimit:
+        plan.limits.conversations,
 
-      websites: websiteCount ?? 0,
+      websites:
+        websiteCount ?? 0,
 
-      websiteLimit: plan.websites,
+      websiteLimit:
+        plan.limits.websites,
 
-      knowledgePages: knowledgePageCount ?? 0,
+      knowledgePages:
+        knowledgePageCount ?? 0,
 
-      knowledgePageLimit: plan.knowledgePages,
+      knowledgePageLimit:
+        plan.limits.knowledgePages,
     },
 
-    transactions: transactions ?? [],
+    // =======================================================
+    // TRANSACTIONS
+    // =======================================================
+
+    transactions:
+      transactions ?? [],
   };
 }
