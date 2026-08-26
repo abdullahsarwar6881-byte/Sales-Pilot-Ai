@@ -7,6 +7,14 @@ import {
   searchProducts,
 } from "./searchProducts";
 
+import {
+  getOrder,
+} from "./getOrder";
+
+// =====================================================
+// EXECUTE ACTION
+// =====================================================
+
 export async function executeAction(
   action: ActionName,
   parameters: Record<string, unknown>
@@ -29,10 +37,12 @@ export async function executeAction(
     "================================="
   );
 
-  switch (action) {
-    // --------------------------------
+  switch (
+    action
+  ) {
+    // =================================================
     // SEARCH PRODUCTS
-    // --------------------------------
+    // =================================================
 
     case "search_products": {
       const profileId =
@@ -41,57 +51,31 @@ export async function executeAction(
       const query =
         parameters.query;
 
-      // --------------------------------
-      // VALIDATE PROFILE ID
-      // --------------------------------
-
       if (
-        typeof profileId !== "string" ||
+        typeof profileId !==
+          "string" ||
         !profileId.trim()
       ) {
-        console.error(
-          "PRODUCT SEARCH FAILED: PROFILE ID MISSING"
-        );
-
         return {
           success: false,
+
           error:
             "Profile information is missing.",
         };
       }
 
-      // --------------------------------
-      // VALIDATE QUERY
-      // --------------------------------
-
       if (
-        typeof query !== "string" ||
+        typeof query !==
+          "string" ||
         !query.trim()
       ) {
-        console.error(
-          "PRODUCT SEARCH FAILED: QUERY MISSING"
-        );
-
         return {
           success: false,
+
           error:
             "Product search query is missing.",
         };
       }
-
-      console.log(
-        "USING PROFILE ID:",
-        profileId
-      );
-
-      console.log(
-        "SEARCH QUERY:",
-        query
-      );
-
-      // --------------------------------
-      // SEARCH PRODUCTS
-      // --------------------------------
 
       try {
         const products =
@@ -99,49 +83,6 @@ export async function executeAction(
             profileId,
             query
           );
-
-        console.log(
-          "================================="
-        );
-
-        console.log(
-          "PRODUCT SEARCH COMPLETED"
-        );
-
-        console.log(
-          "PRODUCTS FOUND:",
-          products.length
-        );
-
-        console.log(
-          "PRODUCTS:",
-          products
-        );
-
-        console.log(
-          "================================="
-        );
-
-        // --------------------------------
-        // NO PRODUCTS
-        // --------------------------------
-
-        if (
-          products.length === 0
-        ) {
-          return {
-            success: true,
-
-            data: {
-              products: [],
-              query,
-            },
-          };
-        }
-
-        // --------------------------------
-        // PRODUCTS FOUND
-        // --------------------------------
 
         return {
           success: true,
@@ -151,7 +92,9 @@ export async function executeAction(
             query,
           },
         };
-      } catch (error: any) {
+      } catch (
+        error: any
+      ) {
         console.error(
           "PRODUCT SEARCH ERROR:",
           error
@@ -167,33 +110,175 @@ export async function executeAction(
       }
     }
 
-    // --------------------------------
+    // =================================================
     // ORDER STATUS
-    // --------------------------------
+    // =================================================
 
-    case "get_order_status":
-      return {
-        success: false,
+    case "get_order_status": {
+      const profileId =
+        parameters.profileId;
 
-        error:
-          "Order status is not connected yet.",
-      };
+      const orderNumber =
+        parameters.orderNumber;
 
-    // --------------------------------
+      if (
+        typeof profileId !==
+          "string" ||
+        !profileId.trim()
+      ) {
+        return {
+          success: false,
+
+          error:
+            "Profile information is missing.",
+        };
+      }
+
+      if (
+        typeof orderNumber !==
+          "string" ||
+        !orderNumber.trim()
+      ) {
+        return {
+          success: false,
+
+          error:
+            "Please provide your order number, for example #1001.",
+        };
+      }
+
+      try {
+        const order =
+          await getOrder(
+            profileId,
+            orderNumber
+          );
+
+        if (!order) {
+          return {
+            success: true,
+
+            data: {
+              found: false,
+
+              orderNumber,
+            },
+          };
+        }
+
+        return {
+          success: true,
+
+          data: {
+            found: true,
+
+            order,
+          },
+        };
+      } catch (
+        error: any
+      ) {
+        console.error(
+          "ORDER STATUS ERROR:",
+          error
+        );
+
+        return {
+          success: false,
+
+          error:
+            error?.message ||
+            "Unable to retrieve your order status.",
+        };
+      }
+    }
+
+    // =================================================
     // ORDER DETAILS
-    // --------------------------------
+    // =================================================
 
-    case "get_order_details":
-      return {
-        success: false,
+    case "get_order_details": {
+      const profileId =
+        parameters.profileId;
 
-        error:
-          "Order details are not connected yet.",
-      };
+      const orderNumber =
+        parameters.orderNumber;
 
-    // --------------------------------
+      if (
+        typeof profileId !==
+          "string" ||
+        !profileId.trim()
+      ) {
+        return {
+          success: false,
+
+          error:
+            "Profile information is missing.",
+        };
+      }
+
+      if (
+        typeof orderNumber !==
+          "string" ||
+        !orderNumber.trim()
+      ) {
+        return {
+          success: false,
+
+          error:
+            "Please provide your order number, for example #1001.",
+        };
+      }
+
+      try {
+        const order =
+          await getOrder(
+            profileId,
+            orderNumber
+          );
+
+        if (!order) {
+          return {
+            success: true,
+
+            data: {
+              found: false,
+
+              orderNumber,
+            },
+          };
+        }
+
+        return {
+          success: true,
+
+          data: {
+            found: true,
+
+            order,
+          },
+        };
+      } catch (
+        error: any
+      ) {
+        console.error(
+          "ORDER DETAILS ERROR:",
+          error
+        );
+
+        return {
+          success: false,
+
+          error:
+            error?.message ||
+            "Unable to retrieve your order details.",
+        };
+      }
+    }
+
+    // =================================================
     // PRODUCT STOCK
-    // --------------------------------
+    // =================================================
 
     case "check_product_stock":
       return {
@@ -203,9 +288,9 @@ export async function executeAction(
           "Product inventory is not connected yet.",
       };
 
-    // --------------------------------
+    // =================================================
     // PRODUCT DETAILS
-    // --------------------------------
+    // =================================================
 
     case "get_product_details":
       return {
@@ -215,9 +300,9 @@ export async function executeAction(
           "Product details are not connected yet.",
       };
 
-    // --------------------------------
+    // =================================================
     // SHIPPING POLICY
-    // --------------------------------
+    // =================================================
 
     case "get_shipping_policy":
       return {
@@ -227,9 +312,9 @@ export async function executeAction(
           "Shipping policy action is not connected yet.",
       };
 
-    // --------------------------------
+    // =================================================
     // RETURN POLICY
-    // --------------------------------
+    // =================================================
 
     case "get_return_policy":
       return {
@@ -239,9 +324,9 @@ export async function executeAction(
           "Return policy action is not connected yet.",
       };
 
-    // --------------------------------
+    // =================================================
     // HUMAN HANDOFF
-    // --------------------------------
+    // =================================================
 
     case "handoff_to_human":
       return {
@@ -253,9 +338,9 @@ export async function executeAction(
         },
       };
 
-    // --------------------------------
-    // UNKNOWN ACTION
-    // --------------------------------
+    // =================================================
+    // UNKNOWN
+    // =================================================
 
     default:
       return {

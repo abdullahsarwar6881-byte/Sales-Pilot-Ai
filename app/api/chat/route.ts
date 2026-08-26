@@ -7,6 +7,10 @@ import { chatWithAI } from "@/lib/ai/chat";
 import { detectAction } from "@/lib/actions/detectAction";
 import { executeAction } from "@/lib/actions/actionRouter";
 
+import type {
+  ActionRequest,
+} from "@/lib/actions/types";
+
 import {
   BILLING_PLANS,
   type BillingPlanId,
@@ -34,7 +38,13 @@ if (
 const supabaseAdmin =
   createClient(
     supabaseUrl!,
-    supabaseServiceRoleKey!
+    supabaseServiceRoleKey!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
   );
 
 // =====================================================
@@ -50,23 +60,12 @@ const MAX_HISTORY_MESSAGES = 6;
 // =====================================================
 // BILLING ACCESS CHECK
 // =====================================================
-//
-// Billing is currently disabled for demo/development.
-//
-// Keep this function available so billing can be
-// enabled later without rebuilding the entire API.
-//
-// =====================================================
 
 async function checkBillingAccess(
   profileId: string
 ) {
   const now =
     new Date();
-
-  // -----------------------------------------------------
-  // GET SUBSCRIPTION
-  // -----------------------------------------------------
 
   const {
     data: subscription,
@@ -106,21 +105,15 @@ async function checkBillingAccess(
     };
   }
 
-  // -----------------------------------------------------
-  // NO SUBSCRIPTION
-  // -----------------------------------------------------
-
-  if (!subscription) {
+  if (
+    !subscription
+  ) {
     return {
       allowed: false,
       error:
         "This Sales Pilot account does not have an active billing subscription.",
     };
   }
-
-  // -----------------------------------------------------
-  // PLAN
-  // -----------------------------------------------------
 
   const planId: BillingPlanId =
     subscription.plan_id &&
@@ -133,10 +126,6 @@ async function checkBillingAccess(
     BILLING_PLANS[
       planId
     ];
-
-  // -----------------------------------------------------
-  // BILLING PERIOD
-  // -----------------------------------------------------
 
   const periodStart =
     subscription.current_period_start
@@ -163,10 +152,6 @@ async function checkBillingAccess(
     };
   }
 
-  // -----------------------------------------------------
-  // EXPIRED
-  // -----------------------------------------------------
-
   if (
     now >=
     periodEnd
@@ -191,10 +176,6 @@ async function checkBillingAccess(
         plan.conversations,
     };
   }
-
-  // -----------------------------------------------------
-  // STATUS
-  // -----------------------------------------------------
 
   const status =
     String(
@@ -228,10 +209,6 @@ async function checkBillingAccess(
         plan.conversations,
     };
   }
-
-  // -----------------------------------------------------
-  // COUNT CONVERSATIONS
-  // -----------------------------------------------------
 
   const {
     count:
@@ -285,10 +262,6 @@ async function checkBillingAccess(
   const limit =
     plan.conversations;
 
-  // -----------------------------------------------------
-  // LIMIT
-  // -----------------------------------------------------
-
   if (
     used >=
     limit
@@ -312,10 +285,6 @@ async function checkBillingAccess(
       limit,
     };
   }
-
-  // -----------------------------------------------------
-  // ALLOWED
-  // -----------------------------------------------------
 
   return {
     allowed: true,
@@ -674,6 +643,281 @@ async function getConversationHistory(
 }
 
 // =====================================================
+// EXTRACT ORDER NUMBER
+// =====================================================
+
+function extractOrderNumber(
+  message: string
+) {
+  const text =
+    message
+      .trim()
+      .replace(
+        /\s+/g,
+        " "
+      );
+
+  // ---------------------------------------------------
+  // #1001
+  // ---------------------------------------------------
+
+  const hashMatch =
+    text.match(
+      /#\s*(\d{1,12})\b/
+    );
+
+  if (
+    hashMatch
+  ) {
+    return hashMatch[1];
+  }
+
+  // ---------------------------------------------------
+  // order 1001
+  // order #1001
+  // order number 1001
+  // order no 1001
+  // ---------------------------------------------------
+
+  const orderMatch =
+    text.match(
+      /\border\s*(?:number|no\.?|#)?\s*(\d{1,12})\b/i
+    );
+
+  if (
+    orderMatch
+  ) {
+    return orderMatch[1];
+  }
+
+  // ---------------------------------------------------
+  // order number is 1001
+  // order is 1001
+  // order = 1001
+  // order: 1001
+  // ---------------------------------------------------
+
+  const orderIsMatch =
+    text.match(
+      /\border\s*(?:number|no\.?)?\s*(?:is|was|=|:)\s*#?\s*(\d{1,12})\b/i
+    );
+
+  if (
+    orderIsMatch
+  ) {
+    return orderIsMatch[1];
+  }
+
+  // ---------------------------------------------------
+  // its number 1001
+  // it's number 1001
+  // its order number 1001
+  // it's order number 1001
+  // ---------------------------------------------------
+
+  const itsNumberMatch =
+    text.match(
+      /\b(?:its|it's)\s+(?:order\s+)?number\s+(?:is\s+)?#?\s*(\d{1,12})\b/i
+    );
+
+  if (
+    itsNumberMatch
+  ) {
+    return itsNumberMatch[1];
+  }
+
+  // ---------------------------------------------------
+  // number 1001
+  // ---------------------------------------------------
+
+  const numberMatch =
+    text.match(
+      /\bnumber\s*(?:is|=|:)?\s*#?\s*(\d{1,12})\b/i
+    );
+
+  if (
+    numberMatch
+  ) {
+    return numberMatch[1];
+  }
+
+  // ---------------------------------------------------
+  // STANDALONE NUMBER
+  // ---------------------------------------------------
+  //
+  // Example:
+  //
+  // 1001
+  // #1001
+  //
+  // This is especially important after:
+  //
+  // "Please provide your order number."
+  //
+  // ---------------------------------------------------
+
+  const standaloneNumber =
+    text.match(
+      /^#?\s*(\d{1,12})\s*[.!]?$/
+    );
+
+  if (
+    standaloneNumber
+  ) {
+    return standaloneNumber[1];
+  }
+
+  return null;
+}
+
+// =====================================================
+// CHECK IF AI REQUESTED ORDER NUMBER
+// =====================================================
+
+function aiRequestedOrderNumber(
+  messages: any[]
+) {
+  if (
+    !messages ||
+    messages.length === 0
+  ) {
+    return false;
+  }
+
+  const reversed =
+    [...messages].reverse();
+
+  const latestAI =
+    reversed.find(
+      (item) =>
+        item.sender ===
+        "ai"
+    );
+
+  if (
+    !latestAI
+  ) {
+    return false;
+  }
+
+  const content =
+    String(
+      latestAI.content ||
+        ""
+    ).toLowerCase();
+
+  const requestPhrases = [
+    "order number",
+    "order no",
+    "order #",
+    "provide your order",
+    "provide the order",
+    "give me your order",
+    "give me the order",
+    "enter your order",
+    "enter the order",
+    "confirm your order",
+    "confirm the order",
+    "please provide your",
+    "please enter your",
+    "please provide the",
+  ];
+
+  return requestPhrases.some(
+    (phrase) =>
+      content.includes(
+        phrase
+      )
+  );
+}
+
+// =====================================================
+// DETECT CONTEXTUAL ORDER ACTION
+// =====================================================
+//
+// Handles:
+//
+// Customer:
+// Where is my order?
+//
+// AI:
+// Please provide your order number.
+//
+// Customer:
+// 1001
+//
+// Result:
+//
+// get_order_status
+// {
+//   orderNumber: "1001"
+// }
+//
+// =====================================================
+
+function detectContextualOrderAction(
+  message: string,
+  history: any[]
+): ActionRequest | null {
+  const orderNumber =
+    extractOrderNumber(
+      message
+    );
+
+  if (
+    !orderNumber
+  ) {
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // FIRST: TRY DIRECT ACTION DETECTION
+  // ---------------------------------------------------
+
+  const directAction =
+    detectAction(
+      message
+    );
+
+  if (
+    directAction &&
+    (
+      directAction.action ===
+        "get_order_status" ||
+      directAction.action ===
+        "get_order_details"
+    )
+  ) {
+    return directAction;
+  }
+
+  // ---------------------------------------------------
+  // CONTEXTUAL ORDER NUMBER
+  // ---------------------------------------------------
+
+  if (
+    aiRequestedOrderNumber(
+      history
+    )
+  ) {
+    const actionRequest: ActionRequest =
+      {
+        action:
+          "get_order_status",
+
+        parameters: {
+          orderNumber:
+            orderNumber,
+        },
+      };
+
+    return actionRequest;
+  }
+
+  return null;
+}
+
+// =====================================================
 // PRODUCT URL PLACEHOLDER
 // =====================================================
 
@@ -926,10 +1170,12 @@ export async function POST(
     //
     // DEMO MODE:
     //
-    // Billing is intentionally skipped.
+    // Billing is currently skipped.
     //
-    // When Stripe/billing is ready, replace this section
-    // with checkBillingAccess(profileId).
+    // Later:
+    //
+    // const billing =
+    //   await checkBillingAccess(profileId);
     //
     // =================================================
 
@@ -1041,6 +1287,35 @@ export async function POST(
     }
 
     // =================================================
+    // LOAD CONVERSATION HISTORY
+    // =================================================
+
+    const historyStartedAt =
+      Date.now();
+
+    const conversationHistory =
+      await getConversationHistory(
+        conversation.id
+      );
+
+    console.log(
+      "CONVERSATION HISTORY:",
+      conversationHistory.length
+    );
+
+    console.log(
+      `HISTORY TIME: ${
+        Date.now() -
+        historyStartedAt
+      }ms`
+    );
+
+    const historyContext =
+      buildConversationHistory(
+        conversationHistory
+      );
+
+    // =================================================
     // FAST RESPONSE
     // =================================================
 
@@ -1125,26 +1400,52 @@ export async function POST(
       "================================="
     );
 
-    let actionRequest =
-      detectAction(
-        cleanMessage
+    let actionRequest:
+      ActionRequest | null =
+      detectContextualOrderAction(
+        cleanMessage,
+        conversationHistory
       );
+
+    // -------------------------------------------------
+    // FALL BACK TO NORMAL ACTION DETECTION
+    // -------------------------------------------------
+
+    if (
+      !actionRequest
+    ) {
+      actionRequest =
+        detectAction(
+          cleanMessage
+        );
+    }
+
+    // =================================================
+    // ADD PROFILE CONTEXT
+    // =================================================
 
     if (
       actionRequest
     ) {
+      const parameters:
+        Record<
+          string,
+          unknown
+        > = {
+        ...actionRequest.parameters,
+
+        userId:
+          profileId,
+
+        profileId:
+          profileId,
+      };
+
       actionRequest = {
-        ...actionRequest,
+        action:
+          actionRequest.action,
 
-        parameters: {
-          ...actionRequest.parameters,
-
-          userId:
-            profileId,
-
-          profileId:
-            profileId,
-        },
+        parameters,
       };
     }
 
@@ -1162,6 +1463,11 @@ export async function POST(
       console.log(
         "ACTION DETECTED:",
         actionRequest.action
+      );
+
+      console.log(
+        "ACTION PARAMETERS:",
+        actionRequest.parameters
       );
 
       console.log(
@@ -1184,8 +1490,17 @@ export async function POST(
         }ms`
       );
 
+      console.log(
+        "ACTION RESULT:",
+        actionResult
+      );
+
       let actionResponse =
         "";
+
+      // =================================================
+      // ACTION FAILED
+      // =================================================
 
       if (
         !actionResult.success
@@ -1193,10 +1508,20 @@ export async function POST(
         actionResponse =
           actionResult.error ||
           "I'm unable to complete that request right now.";
-      } else {
+      }
+
+      // =================================================
+      // ACTION SUCCESS
+      // =================================================
+
+      else {
         switch (
           actionRequest.action
         ) {
+          // =============================================
+          // PRODUCT SEARCH
+          // =============================================
+
           case "search_products": {
             const products =
               (
@@ -1213,6 +1538,10 @@ export async function POST(
             break;
           }
 
+          // =============================================
+          // HUMAN HANDOFF
+          // =============================================
+
           case "handoff_to_human": {
             actionResponse =
               "Absolutely. I'll connect you with a member of our support team.";
@@ -1220,19 +1549,170 @@ export async function POST(
             break;
           }
 
+          // =============================================
+          // ORDER STATUS
+          // =============================================
+
           case "get_order_status": {
+            const result =
+              (
+                actionResult as any
+              )?.data;
+
+            if (
+              !result?.found ||
+              !result?.order
+            ) {
+              actionResponse =
+                `I couldn't find order ${
+                  result?.orderNumber
+                    ? `#${result.orderNumber}`
+                    : "with that number"
+                }. Please check the order number and try again.`;
+
+              break;
+            }
+
+            const order =
+              result.order;
+
+            const orderNumber =
+              order.orderNumber ||
+              result.orderNumber ||
+              "your order";
+
+            const fulfillment =
+              String(
+                order.fulfillmentStatus ||
+                  ""
+              )
+                .toLowerCase()
+                .replace(
+                  /_/g,
+                  " "
+                );
+
+            const financial =
+              String(
+                order.financialStatus ||
+                  ""
+              )
+                .toLowerCase()
+                .replace(
+                  /_/g,
+                  " "
+                );
+
             actionResponse =
-              "I found your order information.";
+              `Order ${orderNumber} is currently ${
+                fulfillment ||
+                "being processed"
+              }.`;
+
+            if (
+              financial
+            ) {
+              actionResponse +=
+                ` Payment status: ${financial}.`;
+            }
 
             break;
           }
+
+          // =============================================
+          // ORDER DETAILS
+          // =============================================
 
           case "get_order_details": {
+            const result =
+              (
+                actionResult as any
+              )?.data;
+
+            if (
+              !result?.found ||
+              !result?.order
+            ) {
+              actionResponse =
+                `I couldn't find order ${
+                  result?.orderNumber
+                    ? `#${result.orderNumber}`
+                    : "with that number"
+                }. Please check the order number and try again.`;
+
+              break;
+            }
+
+            const order =
+              result.order;
+
+            const items =
+              Array.isArray(
+                order?.data?.lineItems
+              )
+                ? order.data.lineItems
+                : [];
+
+            const fulfillment =
+              String(
+                order.fulfillmentStatus ||
+                  "being processed"
+              )
+                .toLowerCase()
+                .replace(
+                  /_/g,
+                  " "
+                );
+
             actionResponse =
-              "I found your order details.";
+              `Order ${
+                order.orderNumber ||
+                result.orderNumber
+              } is ${fulfillment}.`;
+
+            if (
+              items.length >
+              0
+            ) {
+              const itemText =
+                items
+                  .slice(
+                    0,
+                    5
+                  )
+                  .map(
+                    (
+                      item: any
+                    ) =>
+                      `${item.quantity} × ${item.title}`
+                  )
+                  .join(
+                    ", "
+                  );
+
+              actionResponse +=
+                ` Items: ${itemText}.`;
+            }
+
+            if (
+              order.totalPrice !==
+                null &&
+              order.totalPrice !==
+                undefined
+            ) {
+              actionResponse +=
+                ` Total: ${order.totalPrice} ${
+                  order.currency ||
+                  ""
+                }.`;
+            }
 
             break;
           }
+
+          // =============================================
+          // PRODUCT STOCK
+          // =============================================
 
           case "check_product_stock": {
             actionResponse =
@@ -1241,12 +1721,20 @@ export async function POST(
             break;
           }
 
+          // =============================================
+          // PRODUCT DETAILS
+          // =============================================
+
           case "get_product_details": {
             actionResponse =
               "I found the product details.";
 
             break;
           }
+
+          // =============================================
+          // SHIPPING POLICY
+          // =============================================
 
           case "get_shipping_policy": {
             actionResponse =
@@ -1255,12 +1743,20 @@ export async function POST(
             break;
           }
 
+          // =============================================
+          // RETURN POLICY
+          // =============================================
+
           case "get_return_policy": {
             actionResponse =
               "I found the store's return information.";
 
             break;
           }
+
+          // =============================================
+          // DEFAULT
+          // =============================================
 
           default: {
             actionResponse =
@@ -1270,6 +1766,10 @@ export async function POST(
           }
         }
       }
+
+      // =================================================
+      // SAVE ACTION RESPONSE
+      // =================================================
 
       const {
         error:
@@ -1299,6 +1799,10 @@ export async function POST(
         );
       }
 
+      // =================================================
+      // ACTION RESPONSE
+      // =================================================
+
       return NextResponse.json({
         success:
           true,
@@ -1316,35 +1820,6 @@ export async function POST(
           actionResult.success,
       });
     }
-
-    // =================================================
-    // CONVERSATION HISTORY
-    // =================================================
-
-    const historyStartedAt =
-      Date.now();
-
-    const conversationHistory =
-      await getConversationHistory(
-        conversation.id
-      );
-
-    console.log(
-      "CONVERSATION HISTORY:",
-      conversationHistory.length
-    );
-
-    console.log(
-      `HISTORY TIME: ${
-        Date.now() -
-        historyStartedAt
-      }ms`
-    );
-
-    const historyContext =
-      buildConversationHistory(
-        conversationHistory
-      );
 
     // =================================================
     // CREATE OPENAI QUERY EMBEDDING
@@ -1420,18 +1895,6 @@ export async function POST(
 
     // =================================================
     // USER-SCOPED KNOWLEDGE SEARCH
-    // =================================================
-    //
-    // IMPORTANT:
-    //
-    // This RPC must use:
-    //
-    // query_embedding vector
-    // match_count integer
-    // filter_user_id uuid
-    //
-    // And knowledge_chunks.embedding must be vector(768).
-    //
     // =================================================
 
     const knowledgeStartedAt =
@@ -1548,23 +2011,13 @@ ${knowledgeContext}
     const aiStartedAt =
       Date.now();
 
-    // -------------------------------------------------
-    // NO KNOWLEDGE + NO HISTORY
-    // -------------------------------------------------
-
     if (
       !knowledgeContext.trim() &&
       !historyContext.trim()
     ) {
       aiResponse =
         "I couldn't find that information in this store's information.";
-    }
-
-    // -------------------------------------------------
-    // KNOWLEDGE OR HISTORY EXISTS
-    // -------------------------------------------------
-
-    else {
+    } else {
       aiResponse =
         await chatWithAI(
           cleanMessage,
