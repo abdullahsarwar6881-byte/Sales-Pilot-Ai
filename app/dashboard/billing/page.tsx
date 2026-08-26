@@ -1,7 +1,7 @@
 import BillingHeader from "@/components/billing/BillingHeader";
 import CurrentPlan from "@/components/billing/CurrentPlan";
 import UsageCard from "@/components/billing/UsageCard";
-import PricingPlans from "@/components/billing/PricingPlans";
+import BillingPlans from "@/components/billing/BillingPlans";
 import BillingHistory from "@/components/billing/BillingHistory";
 import { getBillingData } from "@/lib/billing/getBillingData";
 
@@ -12,16 +12,12 @@ export default async function BillingPage() {
 
   const planId = subscription?.planId ?? "starter";
 
-  const billingCycle = subscription?.billingCycle ?? "monthly";
+  const billingCycle =
+    subscription?.billingCycle ?? "monthly";
 
-  const status = subscription?.status ?? "active";
+  const status =
+    subscription?.status ?? "active";
 
-  /*
-   * If there is no subscription yet, we don't want to
-   * pretend that the user has a real renewal date.
-   *
-   * CurrentPlan handles the display safely.
-   */
   const currentPeriodEnd =
     subscription?.currentPeriodEnd ?? null;
 
@@ -102,7 +98,7 @@ export default async function BillingPage() {
             </p>
           </div>
 
-          <PricingPlans
+          <BillingPlans
             currentPlan={planId}
             billingCycle={billingCycle}
           />
