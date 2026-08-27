@@ -37,6 +37,7 @@
     "react-countup": "^6.5.3",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",
+    "resend": "^6.22.1",
     "tailwind-merge": "^3.6.0",
     "uuid": "^14.0.1"
   },

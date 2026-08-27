@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
+import { sendPaymentSuccessEmail } from "@/lib/email/billing-emails";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -209,6 +211,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
+
           error:
             "Invalid webhook signature.",
         },
@@ -243,6 +246,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
+
           error:
             "Invalid JSON payload.",
         },
@@ -275,7 +279,9 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
+
         received: true,
+
         processed: false,
       });
     }
@@ -312,12 +318,16 @@ export async function POST(
       "Safepay payment:",
       {
         tracker,
+
         amount:
           payment.amount,
+
         currency:
           payment.currency,
+
         customerEmail:
           payment.customer_email,
+
         state:
           payment.state,
       }
@@ -334,24 +344,16 @@ export async function POST(
     // FIND OUR PENDING TRANSACTION
     // =================================================
     //
-    // IMPORTANT:
+    // We identify the Sales Pilot user using our own
+    // pending transaction.
     //
-    // We do NOT depend on Safepay metadata for user_id
-    // or plan_id.
-    //
-    // During checkout we saved:
-    //
-    // provider = "safepay"
-    // provider_payment_id = tracker
-    // user_id = authenticated Sales Pilot user
-    //
-    // Therefore the webhook can safely recover the
-    // Sales Pilot user from our own database.
+    // We do NOT depend on Safepay metadata for user_id.
     // =================================================
 
     const {
       data:
         pendingTransaction,
+
       error:
         transactionLookupError,
     } =
@@ -396,27 +398,20 @@ export async function POST(
       );
 
       /*
-       * IMPORTANT:
-       *
-       * Do NOT create a transaction here.
-       *
-       * Without our own pending transaction we cannot
-       * safely know which Sales Pilot user should receive
-       * the Starter subscription.
+       * Never activate a subscription without a
+       * matching Sales Pilot transaction.
        */
 
-      return NextResponse.json(
-        {
-          success: true,
+      return NextResponse.json({
+        success: true,
 
-          received: true,
+        received: true,
 
-          processed: false,
+        processed: false,
 
-          reason:
-            "No matching Sales Pilot transaction found.",
-        }
-      );
+        reason:
+          "No matching Sales Pilot transaction found.",
+      });
     }
 
     const userId =
@@ -471,7 +466,9 @@ export async function POST(
         "Safepay payment amount does not match pending transaction.",
         {
           expectedAmount,
+
           paidAmount,
+
           tracker,
         }
       );
@@ -509,7 +506,9 @@ export async function POST(
         "Safepay payment currency does not match pending transaction.",
         {
           expectedCurrency,
+
           paidCurrency,
+
           tracker,
         }
       );
@@ -552,6 +551,9 @@ export async function POST(
 
           provider_transaction_id:
             tracker,
+
+          metadata:
+            payload,
         })
         .eq(
           "id",
@@ -633,6 +635,99 @@ export async function POST(
       throw subscriptionError;
     }
 
+    console.log(
+      "Starter subscription activated:",
+      userId
+    );
+
+    // =================================================
+    // GET USER EMAIL
+    // =================================================
+
+    let customerEmail:
+      | string
+      | null = null;
+
+    try {
+      const {
+        data:
+          authUserData,
+
+        error:
+          authUserError,
+      } =
+        await supabase.auth.admin.getUserById(
+          userId
+        );
+
+      if (authUserError) {
+        throw authUserError;
+      }
+
+      customerEmail =
+        authUserData.user?.email ??
+        null;
+    } catch (emailLookupError) {
+      console.error(
+        "Unable to retrieve Sales Pilot customer email:",
+        emailLookupError
+      );
+    }
+
+    // =================================================
+    // SEND PAYMENT SUCCESS EMAIL
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // Email failure must NOT reverse a successful
+    // payment or subscription.
+    // =================================================
+
+    if (customerEmail) {
+      try {
+        await sendPaymentSuccessEmail({
+          to:
+            customerEmail,
+
+          planName:
+            "Starter",
+
+          amount:
+            pendingTransaction.amount,
+
+          currency:
+            pendingTransaction.currency,
+
+          billingCycle:
+            "monthly",
+
+          paymentDate:
+            now.toISOString(),
+
+          nextBillingDate:
+            periodEnd.toISOString(),
+        });
+
+        console.log(
+          "Sales Pilot payment confirmation email sent:",
+          customerEmail
+        );
+      } catch (emailError) {
+        console.error(
+          "Sales Pilot payment confirmation email failed:",
+          emailError
+        );
+      }
+    } else {
+      console.warn(
+        "No customer email found. Payment email was not sent.",
+        {
+          userId,
+        }
+      );
+    }
+
     // =================================================
     // SUCCESS
     // =================================================
@@ -661,6 +756,9 @@ export async function POST(
 
         transactionId:
           pendingTransaction.id,
+
+        emailSent:
+          Boolean(customerEmail),
       }
     );
 
@@ -679,6 +777,9 @@ export async function POST(
         "starter",
 
       userId,
+
+      emailSent:
+        Boolean(customerEmail),
     });
   } catch (
     error: unknown
