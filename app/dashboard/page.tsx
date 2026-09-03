@@ -107,192 +107,97 @@ export default function DashboardPage() {
 
   return (
 
-    <div className="space-y-8">
-
-
-
+    <div className="space-y-5">
       {/* Metrics */}
-
-      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-
-
+      <section className="grid gap-3.5 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Conversations"
           value={stats.conversations}
           trend="+0%"
           description="Total conversations"
-          icon={<MessageSquare size={28} />}
+          icon={<MessageSquare size={22} />}
           color="from-blue-500 to-cyan-500"
         />
-
-
 
         <MetricCard
           title="Knowledge Files"
           value={stats.documents}
           trend="+0%"
           description="Uploaded documents"
-          icon={<Database size={28} />}
+          icon={<Database size={22} />}
           color="from-violet-500 to-fuchsia-500"
         />
-
-
 
         <MetricCard
           title="Widget Installs"
           value={0}
           trend="0%"
           description="Active websites"
-          icon={<Paintbrush size={28} />}
+          icon={<Paintbrush size={22} />}
           color="from-emerald-500 to-green-500"
         />
-
-
 
         <MetricCard
           title="Website Pages"
           value={stats.pages}
           trend="+0%"
           description="Indexed pages"
-          icon={<Globe size={28} />}
+          icon={<Globe size={22} />}
           color="from-orange-500 to-amber-500"
         />
-
-
       </section>
-
-
-
-
-
 
       {/* Analytics + Performance */}
-
-      <section className="grid gap-6 xl:grid-cols-3">
-
-
+      <section className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
-
           <AnalyticsChart />
-
         </div>
-
 
         <PerformanceCard />
-
-
       </section>
-
-
-
-
-
-
 
       {/* AI Status + Conversations */}
-
-      <section className="grid gap-6 xl:grid-cols-3">
-
-
+      <section className="grid gap-4 xl:grid-cols-3">
         <AIStatusCard />
 
-
         <div className="xl:col-span-2">
-
           <RecentConversations />
-
         </div>
-
-
       </section>
 
-
-
-
-
-
-
       {/* Activity + Quick Actions */}
-
-      <section className="grid gap-6 xl:grid-cols-3">
-
-
+      <section className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
-
           <ActivityFeed />
-
         </div>
 
-
-
-
-
-        <div className="space-y-6">
-
-
-          <h2 className="text-xl font-bold text-slate-900">
+        <div className="space-y-3.5">
+          <h2 className="text-base font-bold text-foreground">
             Quick Actions
           </h2>
 
-
-
-
-
           <QuickActionCard
-
             title="Knowledge Base"
-
             description="Upload PDFs, sync your website and train your AI."
-
             href="/dashboard/knowledge"
-
             icon={Database}
-
           />
 
-
-
-
-
-
           <QuickActionCard
-
             title="Widget Studio"
-
             description="Customize your chat widget and copy the embed code."
-
             href="/dashboard/widget"
-
             icon={Paintbrush}
-
           />
-
-
-
-
-
 
           <QuickActionCard
-
             title="Conversations"
-
             description="Review customer conversations and AI replies."
-
             href="/dashboard/conversations"
-
             icon={MessageSquare}
-
           />
-
-
-
         </div>
-
-
       </section>
-
-
-
     </div>
 
   );

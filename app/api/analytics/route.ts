@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -10,45 +11,53 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     // =================================================
+    // AUTHENTICATE USER
+    // =================================================
+
+    const supabaseUser = await createServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseUser.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const merchantId = user.id;
+
+    // =================================================
     // ENVIRONMENT VARIABLES
     // =================================================
 
-    const supabaseUrl =
-      process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const supabaseServiceRoleKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl) {
-      throw new Error(
-        "NEXT_PUBLIC_SUPABASE_URL is not configured."
-      );
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      throw new Error("Supabase server environment variables are not configured.");
     }
 
-    if (!supabaseServiceRoleKey) {
-      throw new Error(
-        "SUPABASE_SERVICE_ROLE_KEY is not configured."
-      );
-    }
+    const supabaseAdmin = createSupabaseAdmin(
+      supabaseUrl,
+      supabaseServiceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
     // =================================================
-    // SUPABASE ADMIN CLIENT
-    // =================================================
-
-    const supabaseAdmin =
-      createClient(
-        supabaseUrl,
-        supabaseServiceRoleKey,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        }
-      );
-
-    // =================================================
-    // TOTAL CONVERSATIONS
+    // TOTAL CONVERSATIONS (MERCHANT-SCOPED)
     // =================================================
 
     const {
@@ -59,14 +68,15 @@ export async function GET() {
       .select("id", {
         count: "exact",
         head: true,
-      });
+      })
+      .or(`user_id.eq.${merchantId},profile_id.eq.${merchantId}`);
 
     if (totalChatsError) {
       throw totalChatsError;
     }
 
     // =================================================
-    // HUMAN TAKEOVERS
+    // HUMAN TAKEOVERS (MERCHANT-SCOPED)
     // =================================================
 
     const {
@@ -78,17 +88,15 @@ export async function GET() {
         count: "exact",
         head: true,
       })
-      .eq(
-        "assigned_to",
-        "human"
-      );
+      .or(`user_id.eq.${merchantId},profile_id.eq.${merchantId}`)
+      .eq("assigned_to", "human");
 
     if (humanTakeoversError) {
       throw humanTakeoversError;
     }
 
     // =================================================
-    // AI SOLVED
+    // AI SOLVED (MERCHANT-SCOPED)
     // =================================================
 
     const {
@@ -100,105 +108,71 @@ export async function GET() {
         count: "exact",
         head: true,
       })
-      .eq(
-        "assigned_to",
-        "ai"
-      )
-      .eq(
-        "status",
-        "resolved"
-      );
+      .or(`user_id.eq.${merchantId},profile_id.eq.${merchantId}`)
+      .eq("assigned_to", "ai")
+      .eq("status", "resolved");
 
     if (aiSolvedError) {
       throw aiSolvedError;
     }
 
     // =================================================
-    // CUSTOMER QUESTIONS
+    // CUSTOMER QUESTIONS (MERCHANT-SCOPED)
     // =================================================
 
-    const {
-      data: messages,
-      error: messagesError,
-    } = await supabaseAdmin
-      .from("conversation_messages")
-      .select("content")
-      .eq(
-        "sender",
-        "customer"
-      )
+    const { data: merchantConvs } = await supabaseAdmin
+      .from("conversations")
+      .select("id")
+      .or(`user_id.eq.${merchantId},profile_id.eq.${merchantId}`)
+      .order("created_at", { ascending: false })
       .limit(100);
 
-    if (messagesError) {
-      throw messagesError;
-    }
+    const convIds = (merchantConvs || []).map((c) => c.id);
 
-    // =================================================
-    // POPULAR QUESTIONS
-    // =================================================
+    let popularQuestions: Array<{ question: string; count: number }> = [];
 
-    const questionMap: Record<
-      string,
-      number
-    > = {};
+    if (convIds.length > 0) {
+      const {
+        data: messages,
+        error: messagesError,
+      } = await supabaseAdmin
+        .from("conversation_messages")
+        .select("content")
+        .in("conversation_id", convIds)
+        .eq("sender", "customer")
+        .limit(150);
 
-    messages?.forEach(
-      (message) => {
-        const text =
-          String(
-            message.content || ""
-          ).trim();
-
-        if (!text) {
-          return;
-        }
-
-        questionMap[text] =
-          (questionMap[text] || 0) + 1;
+      if (messagesError) {
+        throw messagesError;
       }
-    );
 
-    const popularQuestions =
-      Object.entries(
-        questionMap
-      )
-        .sort(
-          (
-            [, countA],
-            [, countB]
-          ) =>
-            countB - countA
-        )
-        .slice(
-          0,
-          5
-        )
-        .map(
-          ([
-            question,
-            count,
-          ]) => ({
-            question,
-            count,
-          })
-        );
+      const questionMap: Record<string, number> = {};
+
+      messages?.forEach((message) => {
+        const text = String(message.content || "").trim();
+        if (!text) return;
+        questionMap[text] = (questionMap[text] || 0) + 1;
+      });
+
+      popularQuestions = Object.entries(questionMap)
+        .sort(([, countA], [, countB]) => countB - countA)
+        .slice(0, 5)
+        .map(([question, count]) => ({
+          question,
+          count,
+        }));
+    }
 
     // =================================================
     // AI SOLVED PERCENTAGE
     // =================================================
 
-    const total =
-      totalChats || 0;
-
-    const solved =
-      aiSolved || 0;
+    const total = totalChats || 0;
+    const solved = aiSolved || 0;
 
     const aiSolvedPercentage =
       total > 0
-        ? Math.round(
-            (solved / total) *
-              100
-          )
+        ? Math.round((solved / total) * 100)
         : 0;
 
     // =================================================
@@ -207,21 +181,13 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-
       totalChats: total,
-
       aiSolvedPercentage,
-
-      humanTakeovers:
-        humanTakeovers || 0,
-
+      humanTakeovers: humanTakeovers || 0,
       popularQuestions,
     });
   } catch (error: unknown) {
-    console.error(
-      "ANALYTICS API ERROR:",
-      error
-    );
+    console.error("ANALYTICS API ERROR:", error);
 
     const message =
       error instanceof Error

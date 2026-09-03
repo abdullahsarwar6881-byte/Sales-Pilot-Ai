@@ -191,164 +191,67 @@ return `${hours} hour ago`;
 
 
 
-return (
-
-<motion.div
-
-whileHover={{y:-4}}
-
-transition={{duration:0.2}}
-
-className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-
->
-
-
-
-<div className="mb-6 flex items-center justify-between">
-
-
-<div>
-
-<h2 className="text-xl font-bold text-slate-900">
-
-Recent Activity
-
-</h2>
-
-
-<p className="mt-1 text-sm text-slate-500">
-
-Latest actions across your workspace.
-
-</p>
-
-
-</div>
-
-
-<CheckCircle2
-className="text-emerald-500"
-size={24}
-/>
-
-
-</div>
-
-
-
-
-
-{
-loading && (
-
-<p className="text-sm text-slate-500">
-
-Loading activity...
-
-</p>
-
-)
-
-}
-
-
-
-
-
-{
-!loading && activities.length===0 && (
-
-<p className="text-sm text-slate-500">
-
-No activity yet.
-
-</p>
-
-)
-
-}
-
-
-
-
-
-
-
-<div className="space-y-5">
-
-
-{
-activities.map((activity)=>{
-
-
-const Icon=getIcon(activity.type);
-
-
-
-return (
-
-<div
-key={activity.id}
-className="flex gap-4"
->
-
-
-<div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-
-<Icon size={20}/>
-
-</div>
-
-
-
-<div className="flex-1">
-
-
-<h3 className="font-semibold text-slate-900">
-
-{activity.title}
-
-</h3>
-
-
-
-<p className="mt-1 text-sm text-slate-500">
-
-{activity.description}
-
-</p>
-
-
-
-<p className="mt-2 text-xs text-slate-400">
-
-{timeAgo(activity.created_at)}
-
-</p>
-
-
-
-</div>
-
-
-
-</div>
-
-)
-
-})
-
-}
-
-
-</div>
-
-
-
-</motion.div>
-
-);
-
-
+  return (
+    <div className="rounded-2xl border border-theme bg-card p-4 sm:p-5 shadow-xs transition-colors">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-foreground">
+            Recent Activity
+          </h2>
+
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Latest actions across your workspace.
+          </p>
+        </div>
+
+        <CheckCircle2
+          className="text-emerald-500"
+          size={20}
+        />
+      </div>
+
+      {loading && (
+        <p className="text-xs text-muted-foreground">
+          Loading activity...
+        </p>
+      )}
+
+      {!loading && activities.length === 0 && (
+        <p className="text-xs text-muted-foreground py-4 text-center">
+          No activity yet.
+        </p>
+      )}
+
+      <div className="space-y-3.5">
+        {activities.map((activity) => {
+          const Icon = getIcon(activity.type);
+
+          return (
+            <div
+              key={activity.id}
+              className="flex gap-3 items-start"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <Icon size={16} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <h3 className="text-xs font-semibold text-foreground truncate">
+                  {activity.title}
+                </h3>
+
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                  {activity.description}
+                </p>
+
+                <p className="mt-1 text-[10px] text-muted-foreground/80">
+                  {timeAgo(activity.created_at)}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

@@ -32,6 +32,12 @@ import {
   PLANS,
   type PlanId,
 } from "@/lib/billing/plans";
+import {
+  resolveMerchantFromWidget,
+  isOriginAllowed,
+  getCorsHeaders,
+} from "@/lib/security/widgetAuth";
+import { checkRateLimit, getClientIp } from "@/lib/security/rateLimit";
 
 // =====================================================
 // SUPABASE ADMIN CLIENT
@@ -2921,6 +2927,27 @@ directly to the customer. Do not expose the data retrieval process.
 }
 
 // =====================================================
+// OPTIONS PREFLIGHT HANDLER
+// =====================================================
+
+export async function OPTIONS(req: Request) {
+  const originHeader =
+    req.headers.get("origin") || req.headers.get("referer");
+
+  const isDev = process.env.NODE_ENV !== "production";
+  const originToEcho = originHeader || (isDev ? "*" : null);
+
+  if (!originToEcho) {
+    return new NextResponse(null, { status: 403 });
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(originToEcho, "POST, OPTIONS"),
+  });
+}
+
+// =====================================================
 // CHAT API
 // =====================================================
 
@@ -2929,7 +2956,13 @@ export async function POST(
 ) {
   const requestStartedAt =
     Date.now();
-console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
+  console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
+
+  const originHeader =
+    req.headers.get("origin") || req.headers.get("referer");
+
+  let corsHeaders: Record<string, string> = {};
+
   try {
     console.log(
       "================================="
@@ -2948,11 +2981,13 @@ console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
     // =================================================
 
     const body =
-      await req.json();
+      await req.json().catch(() => ({}));
 
     const {
       message,
-      profileId,
+      profileId: rawProfileId,
+      widgetId: rawWidgetId,
+      widget_public_id: rawWidgetPublicId,
       visitorSessionId,
       customerName,
       customerEmail,
@@ -2963,6 +2998,131 @@ console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
       imageName,
       imageType,
     } = body;
+
+    const widgetIdentifier =
+      rawWidgetPublicId || rawWidgetId || rawProfileId;
+
+    if (!widgetIdentifier || typeof widgetIdentifier !== "string") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Widget identifier is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =================================================
+    // SERVER-SIDE MERCHANT RESOLUTION
+    // =================================================
+
+    const resolvedWidget =
+      await resolveMerchantFromWidget(widgetIdentifier);
+
+    if (!resolvedWidget) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Widget configuration not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    // Bind trusted merchant ID and widget ID
+    const profileId = resolvedWidget.merchantId;
+    const widgetPublicId = resolvedWidget.widgetPublicId;
+
+    // =================================================
+    // ORIGIN VALIDATION & CORS
+    // =================================================
+
+    const { allowed: isAllowedOrigin, originToEcho } = isOriginAllowed(
+      originHeader,
+      resolvedWidget.allowedDomains
+    );
+
+    if (!isAllowedOrigin || !originToEcho) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Origin not authorized for this widget.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    corsHeaders = getCorsHeaders(originToEcho, "POST, OPTIONS");
+
+    // =================================================
+    // RATE LIMITING (widget_public_id + Client IP)
+    // =================================================
+
+    const clientIp = getClientIp(req.headers);
+    const rateLimitKey = `${widgetPublicId}:${clientIp}`;
+
+    const rateLimit = checkRateLimit(rateLimitKey, {
+      maxRequests: 20,
+      windowSeconds: 60,
+      burstLimit: 6,
+      burstWindowSeconds: 5,
+    });
+
+    if (rateLimit.isRateLimited) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many requests. Please slow down and try again shortly.",
+          retryAfter: rateLimit.retryAfter,
+        },
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Retry-After": String(rateLimit.retryAfter),
+          },
+        }
+      );
+    }
+
+    // =================================================
+    // INPUT VALIDATION
+    // =================================================
+
+    if (typeof message === "string" && message.length > 2000) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Message is too long. Maximum 2000 characters.",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        }
+      );
+    }
+
+    if (
+      visitorSessionId &&
+      (typeof visitorSessionId !== "string" || visitorSessionId.length > 128)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid visitor session identifier.",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        }
+      );
+    }
 
     const imageData =
       typeof rawImageData === "string"
@@ -2977,8 +3137,13 @@ console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
     );
 
     console.log(
-      "PROFILE:",
+      "RESOLVED MERCHANT PROFILE:",
       profileId
+    );
+
+    console.log(
+      "WIDGET PUBLIC ID:",
+      widgetPublicId
     );
 
     console.log(
@@ -3029,24 +3194,7 @@ console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
         },
         {
           status: 400,
-        }
-      );
-    }
-
-    if (
-      !profileId ||
-      typeof profileId !==
-        "string"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-
-          error:
-            "Profile missing",
-        },
-        {
-          status: 400,
+          headers: corsHeaders,
         }
       );
     }
@@ -5598,6 +5746,8 @@ ${buildProfessionalAIContext()}
 
       collectionUrl:
         null,
+    }, {
+      headers: corsHeaders,
     });
   } catch (
     error: any
@@ -5640,6 +5790,7 @@ ${buildProfessionalAIContext()}
       },
       {
         status: 500,
+        headers: typeof corsHeaders !== "undefined" ? corsHeaders : {},
       }
     );
   }

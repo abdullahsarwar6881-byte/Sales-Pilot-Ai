@@ -21,41 +21,46 @@ export default function MessageInput({
   };
 
   return (
-    <div className="border-t border-slate-200 bg-white p-6">
-
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100">
-
-        <button className="text-slate-400 transition hover:text-indigo-600">
-          <Paperclip size={20} />
+    <div className="border-t border-theme bg-card p-2.5 sm:p-3 transition-colors">
+      <div className="flex items-center gap-2 rounded-xl border border-theme bg-input px-3 py-1.5 transition-all duration-150 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20">
+        <button
+          type="button"
+          aria-label="Attach file"
+          className="text-muted-foreground transition hover:text-foreground active:scale-95"
+        >
+          <Paperclip size={16} />
         </button>
 
         <input
           value={message}
-          onChange={(e) =>
-            setMessage(e.target.value)
-          }
+          onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               send();
             }
           }}
           placeholder="Type your message..."
-          className="flex-1 bg-transparent outline-none"
+          className="flex-1 bg-transparent text-xs sm:text-sm text-input-foreground placeholder:text-muted-foreground outline-none"
         />
 
-        <button className="text-slate-400 transition hover:text-indigo-600">
-          <Smile size={20} />
+        <button
+          type="button"
+          aria-label="Add emoji"
+          className="text-muted-foreground transition hover:text-foreground active:scale-95"
+        >
+          <Smile size={16} />
         </button>
 
         <button
+          type="button"
           onClick={send}
-          className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white transition hover:scale-105"
+          disabled={!message.trim()}
+          aria-label="Send message"
+          className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-xs transition-all duration-150 hover:brightness-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <SendHorizontal size={18} />
+          <SendHorizontal size={15} />
         </button>
-
       </div>
-
     </div>
   );
 }

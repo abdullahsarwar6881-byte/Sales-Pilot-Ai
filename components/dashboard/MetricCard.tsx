@@ -25,48 +25,40 @@ export default function MetricCard({
   return (
     <motion.div
       whileHover={{
-        y: -6,
-        scale: 1.02,
+        y: -3,
       }}
       transition={{
-        duration: 0.2,
+        duration: 0.15,
       }}
-      className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all"
+      className="rounded-2xl border border-theme bg-card p-4 sm:p-5 shadow-xs transition-colors active:scale-[0.99]"
     >
       <div className="flex items-center justify-between">
-
         <div>
-          <p className="text-sm font-medium text-slate-500">
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground">
             {title}
           </p>
 
-          <h2 className="mt-3 text-4xl font-bold text-slate-900">
-            <CountUp end={value} duration={1.5} />
+          <h2 className="mt-2 text-2xl sm:text-3xl font-bold text-foreground">
+            <CountUp end={value} duration={1.2} />
           </h2>
         </div>
 
         <div
-          className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${color} text-white shadow-lg`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${color} text-white shadow-xs`}
         >
           {icon}
         </div>
-
       </div>
 
-      <div className="mt-6 flex items-center justify-between">
-
-        <p className="text-sm text-slate-500">
+      <div className="mt-4 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
           {description}
         </p>
 
-        <div className="flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-600">
-
-          <TrendingUp size={16} />
-
+        <div className="flex items-center gap-1 rounded-full bg-emerald-100/70 dark:bg-emerald-950/60 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+          <TrendingUp size={13} />
           {trend}
-
         </div>
-
       </div>
     </motion.div>
   );

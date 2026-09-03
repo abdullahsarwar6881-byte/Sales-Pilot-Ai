@@ -8,6 +8,7 @@
 
   const script =
     document.currentScript ||
+    document.querySelector('script[data-widget-id]') ||
     document.querySelector('script[data-profile]');
 
   if (!script) {
@@ -15,10 +16,12 @@
     return;
   }
 
-  const profileId = script.getAttribute("data-profile");
+  const widgetId =
+    script.getAttribute("data-widget-id") ||
+    script.getAttribute("data-profile");
 
-  if (!profileId) {
-    console.error("Sales Pilot: data-profile is missing.");
+  if (!widgetId) {
+    console.error("Sales Pilot: data-widget-id is missing.");
     return;
   }
 
@@ -88,8 +91,8 @@
 
   async function loadWidgetConfig() {
     const url =
-      `${API_BASE}/api/widget-config?profileId=${encodeURIComponent(
-        profileId
+      `${API_BASE}/api/widget-config?widgetId=${encodeURIComponent(
+        widgetId
       )}`;
 
     try {
@@ -264,7 +267,8 @@
     const container = document.createElement("div");
 
     container.id = "salespilot-widget";
-    container.setAttribute("data-profile", profileId);
+    container.setAttribute("data-widget-id", widgetId);
+    container.setAttribute("data-profile", widgetId);
 
     document.body.appendChild(container);
 
@@ -1761,7 +1765,8 @@
               },
               body: JSON.stringify({
                 message,
-                profileId,
+                widgetId,
+                profileId: widgetId,
                 visitorSessionId,
                 customerName,
                 customerEmail,

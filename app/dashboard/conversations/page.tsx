@@ -1271,35 +1271,30 @@ export default function ConversationsPage() {
   // LOADING
   // ===================================================
 
+  // ===================================================
+  // LOADING
+  // ===================================================
+
   if (loading) {
     return (
-      <div className="space-y-6">
-
+      <div className="space-y-3">
         <div>
-          <h1 className="text-4xl font-bold text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
             Conversations
           </h1>
-
-          <p className="mt-2 text-slate-500">
-            Manage customer conversations handled
-            by your AI assistant.
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Manage customer conversations handled by your AI assistant.
           </p>
         </div>
 
-        <div className="flex min-h-[450px] items-center justify-center rounded-3xl border border-slate-200 bg-white shadow-sm">
-
+        <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-theme bg-card shadow-xs">
           <div className="text-center">
-
-            <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600" />
-
-            <p className="text-sm text-slate-500">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-3 border-muted border-t-indigo-600" />
+            <p className="text-xs text-muted-foreground">
               Loading conversations...
             </p>
-
           </div>
-
         </div>
-
       </div>
     );
   }
@@ -1309,31 +1304,26 @@ export default function ConversationsPage() {
   // ===================================================
 
   return (
-    <div className="space-y-6">
-
+    <div className="space-y-3">
       {/* =================================================
           PAGE HEADER
       ================================================= */}
-
-      <div>
-
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-          Conversations
-        </h1>
-
-        <p className="mt-2 text-slate-500">
-          Manage customer conversations handled
-          by your AI assistant.
-        </p>
-
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            Conversations
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Manage customer conversations handled by your AI assistant.
+          </p>
+        </div>
       </div>
 
       {/* =================================================
           ERROR
       ================================================= */}
-
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 px-3.5 py-2.5 text-xs text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
@@ -1341,7 +1331,6 @@ export default function ConversationsPage() {
       {/* =================================================
           STATS
       ================================================= */}
-
       <ConversationStats
         total={stats.total}
         aiResolved={stats.aiResolved}
@@ -1350,322 +1339,91 @@ export default function ConversationsPage() {
       />
 
       {/* =================================================
-          SEARCH
+          TOOLBAR: SEARCH & FILTERS
       ================================================= */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <ConversationSearch
+          value={search}
+          onChange={setSearch}
+        />
 
-      <ConversationSearch
-        value={search}
-        onChange={setSearch}
-      />
-
-      {/* =================================================
-          FILTERS
-      ================================================= */}
-
-      <ConversationFilters
-        selected={filter}
-        onSelect={setFilter}
-      />
+        <ConversationFilters
+          selected={filter}
+          onSelect={setFilter}
+        />
+      </div>
 
       {/* =================================================
           NO SEARCH RESULTS
       ================================================= */}
-
       {conversations.length > 0 &&
         filteredConversations.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-
-            <h3 className="text-lg font-semibold text-slate-900">
+          <div className="rounded-2xl border border-theme bg-card p-8 text-center">
+            <h3 className="text-sm font-semibold text-foreground">
               No matching conversations
             </h3>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Try changing your search or filter.
+            <p className="mt-1 text-xs text-muted-foreground">
+              Try changing your search keywords or active filter.
             </p>
-
           </div>
         )}
 
       {/* =================================================
-          MAIN AREA
+          MAIN WORKSPACE (3-COLUMN RESPONSIVE)
       ================================================= */}
-
       {conversations.length > 0 ? (
-        <div className="grid min-h-[650px] gap-6 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
-
+        <div className="grid h-[calc(100vh-210px)] min-h-[500px] max-h-[820px] gap-3 lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_minmax(0,1fr)_280px]">
           {/* =================================================
-              LEFT
+              LEFT: INBOX LIST
           ================================================= */}
-
           <ConversationList
-            conversations={
-              filteredConversations
-            }
+            conversations={filteredConversations}
             activeId={activeId}
-            onSelect={
-              handleSelectConversation
-            }
+            onSelect={handleSelectConversation}
           />
 
           {/* =================================================
-              CENTER
+              CENTER: CHAT WINDOW
           ================================================= */}
-
-          <div className="min-w-0">
-
+          <div className="min-w-0 h-full flex flex-col">
             {activeConversation ? (
-              <div className="space-y-3">
-
-                {/* =================================================
-                    ACTION BAR
-                ================================================= */}
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-
-                  {/* STATUS */}
-
-                  <div className="flex flex-wrap items-center gap-2">
-
-                    {activeConversationData?.assigned_to ===
-                    "ai" ? (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-sm font-medium text-emerald-700">
-
-                        <Bot size={15} />
-
-                        AI Handling
-
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-3 py-1.5 text-sm font-medium text-indigo-700">
-
-                        <UserRound size={15} />
-
-                        Human Handling
-
-                      </span>
-                    )}
-
-                    {activeConversationData?.status ===
-                      "resolved" && (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600">
-
-                        <CheckCircle2
-                          size={15}
-                        />
-
-                        Resolved
-
-                      </span>
-                    )}
-
-                    {activeConversationData?.status ===
-                      "open" && (
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700">
-                        Open
-                      </span>
-                    )}
-
-                  </div>
-
-                  {/* ACTIONS */}
-
-                  <div className="flex flex-wrap items-center gap-2">
-
-                    {/* RESOLVE / REOPEN */}
-
-                    {activeConversationData?.status ===
-                    "resolved" ? (
-                      <button
-                        type="button"
-                        onClick={
-                          handleReopen
-                        }
-                        disabled={
-                          actionLoading
-                        }
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-
-                        <RotateCcw
-                          size={15}
-                        />
-
-                        {actionLoading
-                          ? "Reopening..."
-                          : "Reopen"}
-
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={
-                          handleResolve
-                        }
-                        disabled={
-                          actionLoading
-                        }
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-emerald-300 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-
-                        <CheckCircle2
-                          size={15}
-                        />
-
-                        {actionLoading
-                          ? "Resolving..."
-                          : "Resolve"}
-
-                      </button>
-                    )}
-
-                    {/* TAKE OVER / RETURN TO AI */}
-
-                    {activeConversationData?.assigned_to ===
-                    "ai" ? (
-                      <button
-                        type="button"
-                        onClick={
-                          handleTakeOver
-                        }
-                        disabled={
-                          actionLoading
-                        }
-                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-
-                        <UserRound
-                          size={15}
-                        />
-
-                        {actionLoading
-                          ? "Taking Over..."
-                          : "Take Over"}
-
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={
-                          handleReturnToAI
-                        }
-                        disabled={
-                          actionLoading
-                        }
-                        className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-
-                        <Bot
-                          size={15}
-                        />
-
-                        {actionLoading
-                          ? "Returning..."
-                          : "Return to AI"}
-
-                      </button>
-                    )}
-
-                  </div>
-
-                </div>
-
-                {/* =================================================
-                    CHAT WINDOW
-                ================================================= */}
-
-                <ChatWindow
-                  customerName={
-                    activeConversation.name
-                  }
-
-                  messages={
-                    messagesLoading
-                      ? []
-                      : messages
-                  }
-
-                  onSend={
-                    handleSend
-                  }
-
-                  isHuman={
-                    activeConversationData?.assigned_to !==
-                    "ai"
-                  }
-
-                  onReturnToAI={
-                    handleReturnToAI
-                  }
-
-                  onResolve={
-                    handleResolve
-                  }
-                />
-
-                {/* =================================================
-                    SENDING
-                ================================================= */}
-
-                {sending && (
-                  <p className="text-center text-xs text-slate-400">
-                    Sending message...
-                  </p>
-                )}
-
-              </div>
+              <ChatWindow
+                customerName={activeConversation.name}
+                messages={messagesLoading ? [] : messages}
+                onSend={handleSend}
+                isHuman={activeConversationData?.assigned_to !== "ai"}
+                isResolved={activeConversationData?.status === "resolved"}
+                actionLoading={actionLoading}
+                onTakeOver={handleTakeOver}
+                onReturnToAI={handleReturnToAI}
+                onResolve={handleResolve}
+                onReopen={handleReopen}
+              />
             ) : (
-              <div className="flex h-full min-h-[500px] items-center justify-center rounded-3xl border border-slate-200 bg-white">
-
-                <p className="text-slate-500">
-                  Select a conversation.
+              <div className="flex h-full min-h-[400px] items-center justify-center rounded-2xl border border-theme bg-card">
+                <p className="text-xs text-muted-foreground">
+                  Select a conversation from the inbox to view chat history.
                 </p>
-
               </div>
             )}
-
           </div>
 
           {/* =================================================
-              RIGHT — CUSTOMER PANEL
+              RIGHT: CUSTOMER DETAILS PANEL
           ================================================= */}
-
-          <CustomerPanel
-            customerName={
-              activeConversation?.name ||
-              "Customer"
-            }
-
-            isAI={
-              activeConversationData?.assigned_to ===
-              "ai"
-            }
-
-            isResolved={
-              activeConversationData?.status ===
-              "resolved"
-            }
-
-            actionLoading={
-              actionLoading
-            }
-
-            onTakeOver={
-              handleTakeOver
-            }
-
-            onReturnToAI={
-              handleReturnToAI
-            }
-
-            onResolve={
-              handleResolve
-            }
-
-            onReopen={
-              handleReopen
-            }
-          />
-
+          <div className="hidden xl:block h-full min-w-0">
+            <CustomerPanel
+              customerName={activeConversation?.name || "Customer"}
+              customerEmail={activeConversationData?.customer_email || undefined}
+              isAI={activeConversationData?.assigned_to === "ai"}
+              isResolved={activeConversationData?.status === "resolved"}
+              actionLoading={actionLoading}
+              onTakeOver={handleTakeOver}
+              onReturnToAI={handleReturnToAI}
+              onResolve={handleResolve}
+              onReopen={handleReopen}
+            />
+          </div>
         </div>
       ) : (
 
@@ -1673,15 +1431,12 @@ export default function ConversationsPage() {
         // EMPTY STATE
         // =================================================
 
-        <div className="flex min-h-[500px] items-center justify-center rounded-3xl border border-slate-200 bg-white shadow-sm">
-
+        <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-theme bg-card shadow-xs">
           <div className="max-w-md px-6 text-center">
-
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
               <svg
-                width="36"
-                height="36"
+                width="28"
+                height="28"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -1689,38 +1444,25 @@ export default function ConversationsPage() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-
                 <path d="M8 12h.01" />
-
                 <path d="M12 12h.01" />
-
                 <path d="M16 12h.01" />
-
               </svg>
-
             </div>
 
-            <h2 className="mt-6 text-2xl font-bold text-slate-900">
+            <h2 className="mt-4 text-lg font-bold text-foreground">
               No Conversations Yet
             </h2>
 
-            <p className="mt-3 leading-7 text-slate-500">
-              Customer conversations will
-              automatically appear here when
-              visitors start chatting with your
-              Sales Pilot AI assistant.
+            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Customer conversations will automatically appear here when visitors start chatting with your Sales Pilot AI assistant.
             </p>
 
-            <p className="mt-5 text-sm text-slate-400">
-              Open your widget test page and send
-              a message to create your first
-              conversation.
+            <p className="mt-3 text-xs text-muted-foreground/80">
+              Open your widget test page and send a message to create your first conversation.
             </p>
-
           </div>
-
         </div>
       )}
 

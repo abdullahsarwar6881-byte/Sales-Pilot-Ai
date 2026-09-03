@@ -20,53 +20,45 @@ export default function MessageBubble({
   const isAI = message.sender === "ai";
 
   return (
-    <motion.div
-      initial={{
-        opacity: 0,
-        y: 10,
-      }}
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
+    <div
       className={`flex ${
         isAI ? "justify-start" : "justify-end"
       }`}
     >
       <div
-        className={`flex max-w-[75%] gap-3 ${
+        className={`flex max-w-[85%] sm:max-w-[80%] gap-2.5 ${
           isAI ? "" : "flex-row-reverse"
         }`}
       >
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white shadow-xs ${
             isAI
               ? "bg-gradient-to-br from-indigo-600 to-violet-600"
-              : "bg-slate-800"
+              : "bg-slate-700 dark:bg-slate-600"
           }`}
         >
           {isAI ? (
-            <Bot size={18} />
+            <Bot size={14} />
           ) : (
-            <User size={18} />
+            <User size={14} />
           )}
         </div>
 
         <div>
           <div
-            className={`rounded-3xl px-5 py-4 shadow-sm ${
+            className={`rounded-2xl px-3.5 py-2 text-xs sm:text-sm shadow-xs transition-colors ${
               isAI
-                ? "bg-white border border-slate-200 text-slate-900"
+                ? "bg-card border border-theme text-card-foreground"
                 : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
             }`}
           >
-            <p className="leading-7">
+            <p className="leading-relaxed whitespace-pre-wrap">
               {message.message}
             </p>
           </div>
 
           <p
-            className={`mt-2 text-xs text-slate-400 ${
+            className={`mt-1 text-[10px] text-muted-foreground ${
               isAI
                 ? "text-left"
                 : "text-right"
@@ -76,6 +68,6 @@ export default function MessageBubble({
           </p>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

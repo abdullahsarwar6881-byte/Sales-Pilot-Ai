@@ -30,10 +30,14 @@ export default function SidebarItem({
         items-center
         gap-3
         rounded-xl
-        px-4
-        py-3
+        px-3.5
+        py-2.5
         transition-all
-        duration-200
+        duration-150
+        ease-out
+        focus-visible:outline-none
+        focus-visible:ring-2
+        focus-visible:ring-indigo-500
 
         ${
           active
@@ -42,25 +46,31 @@ export default function SidebarItem({
               from-indigo-600
               to-violet-600
               text-white
-              shadow-lg
+              shadow-sm
+              active:scale-[0.98]
+              active:brightness-95
             `
             : `
               text-muted-foreground
               hover:bg-hover
               hover:text-foreground
+              active:scale-[0.98]
+              active:bg-slate-200/70
+              dark:active:bg-slate-800/80
+              active:text-foreground
             `
         }
       `}
     >
       <Icon
-        size={19}
+        size={18}
         className="
           shrink-0
           transition-colors
         "
       />
 
-      <span className="font-medium">
+      <span className="font-medium text-sm">
         {title}
       </span>
     </Link>

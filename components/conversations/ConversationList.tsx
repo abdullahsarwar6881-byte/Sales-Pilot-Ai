@@ -21,35 +21,27 @@ export default function ConversationList({
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-
-      <div className="border-b border-slate-100 px-6 py-4">
-
-        <h2 className="text-lg font-bold text-slate-900">
+    <div className="rounded-2xl border border-theme bg-card shadow-xs flex flex-col h-full overflow-hidden transition-colors">
+      <div className="border-b border-theme px-3.5 py-2.5 flex items-center justify-between bg-muted/20">
+        <h2 className="text-sm font-bold text-foreground">
           Inbox
         </h2>
 
-        <p className="text-sm text-slate-500">
-          {conversations.length} Conversations
-        </p>
-
+        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium">
+          {conversations.length}
+        </span>
       </div>
 
-      <div className="max-h-[700px] space-y-3 overflow-y-auto p-4">
-
+      <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
         {conversations.map((conversation) => (
-
           <ConversationItem
             key={conversation.id}
             conversation={conversation}
             active={conversation.id === activeId}
             onClick={() => onSelect(conversation.id)}
           />
-
         ))}
-
       </div>
-
     </div>
   );
 }

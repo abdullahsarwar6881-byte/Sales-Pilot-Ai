@@ -15,6 +15,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import NotificationDropdown from "@/components/notifications/NotificationDropdown";
 
 export default function Navbar() {
   const supabase = createClient();
@@ -53,15 +54,29 @@ export default function Navbar() {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
     document.addEventListener(
       "mousedown",
       handleClickOutside
+    );
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
     );
 
     return () => {
       document.removeEventListener(
         "mousedown",
         handleClickOutside
+      );
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
       );
     };
   }, []);
@@ -179,7 +194,11 @@ export default function Navbar() {
           bg-input
           px-4
           py-2
-          transition-colors
+          transition-all
+          duration-150
+          focus-within:border-indigo-500
+          focus-within:ring-2
+          focus-within:ring-indigo-500/20
         "
       >
         <Search
@@ -243,8 +262,15 @@ export default function Navbar() {
             border-theme
             bg-input
             text-foreground
-            transition
+            transition-all
+            duration-150
             hover:bg-hover
+            active:scale-95
+            active:bg-slate-200/70
+            dark:active:bg-slate-700/70
+            focus-visible:outline-none
+            focus-visible:ring-2
+            focus-visible:ring-indigo-500
             disabled:cursor-not-allowed
             disabled:opacity-50
           "
@@ -260,26 +286,7 @@ export default function Navbar() {
         {/* NOTIFICATIONS */}
         {/* ================================= */}
 
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="
-            flex
-            h-10
-            w-10
-            items-center
-            justify-center
-            rounded-xl
-            border
-            border-theme
-            bg-input
-            text-foreground
-            transition
-            hover:bg-hover
-          "
-        >
-          <Bell size={19} />
-        </button>
+        <NotificationDropdown />
 
         {/* ================================= */}
         {/* SETTINGS */}
@@ -304,8 +311,15 @@ export default function Navbar() {
             border-theme
             bg-input
             text-foreground
-            transition
+            transition-all
+            duration-150
             hover:bg-hover
+            active:scale-95
+            active:bg-slate-200/70
+            dark:active:bg-slate-700/70
+            focus-visible:outline-none
+            focus-visible:ring-2
+            focus-visible:ring-indigo-500
           "
         >
           <Settings size={19} />
@@ -324,6 +338,8 @@ export default function Navbar() {
             onClick={() =>
               setOpen(!open)
             }
+            aria-expanded={open}
+            aria-haspopup="menu"
             className="
               flex
               items-center
@@ -335,8 +351,15 @@ export default function Navbar() {
               px-3
               py-2
               text-input-foreground
-              transition
+              transition-all
+              duration-150
               hover:bg-hover
+              active:scale-[0.98]
+              active:bg-slate-200/60
+              dark:active:bg-slate-700/60
+              focus-visible:outline-none
+              focus-visible:ring-2
+              focus-visible:ring-indigo-500
             "
           >
             {/* Avatar */}

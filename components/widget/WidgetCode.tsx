@@ -26,7 +26,7 @@ export default function WidgetCode({
 
   const code = `<script
   src="https://app.salespilot.ai/widget.js"
-  data-profile="${widgetId}"
+  data-widget-id="${widgetId}"
   defer></script>`;
 
 

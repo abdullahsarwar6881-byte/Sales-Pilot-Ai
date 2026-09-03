@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Logo from "./Logo";
 import SidebarItem from "./SidebarItem";
 import { navigation } from "@/lib/navigation";
@@ -69,7 +70,7 @@ export default function Sidebar() {
         className="
           border-t
           border-theme
-          p-5
+          p-4
         "
       >
         <div
@@ -78,7 +79,7 @@ export default function Sidebar() {
             bg-gradient-to-r
             from-indigo-600
             to-violet-600
-            p-5
+            p-4
             text-white
           "
         >
@@ -93,9 +94,10 @@ export default function Sidebar() {
 
           <p
             className="
-              mt-2
+              mt-1.5
               text-xs
               text-indigo-100
+              leading-relaxed
             "
           >
             Unlock AI automation,
@@ -103,23 +105,33 @@ export default function Sidebar() {
             conversations.
           </p>
 
-          <button
-            type="button"
+          <Link
+            href="/dashboard/billing"
             className="
-              mt-4
+              mt-3.5
+              flex
               w-full
+              items-center
+              justify-center
               rounded-xl
               bg-white
               py-2
-              text-sm
+              text-xs
               font-semibold
               text-indigo-700
-              transition
-              hover:bg-slate-100
+              shadow-sm
+              transition-all
+              duration-150
+              hover:bg-slate-50
+              active:scale-[0.98]
+              active:bg-slate-100
+              focus-visible:outline-none
+              focus-visible:ring-2
+              focus-visible:ring-white
             "
           >
             Upgrade
-          </button>
+          </Link>
         </div>
       </div>
     </aside>

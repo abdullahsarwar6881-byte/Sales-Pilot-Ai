@@ -215,102 +215,54 @@ setLoading(false);
 
 
 
-return (
+  return (
+    <div className="rounded-2xl border border-theme bg-card p-4 sm:p-5 shadow-xs transition-colors">
+      <div className="mb-4">
+        <h2 className="text-base font-bold text-foreground">
+          Conversation Analytics
+        </h2>
 
-<div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-xs text-muted-foreground mt-0.5">
+          AI conversations during the last 7 days.
+        </p>
+      </div>
 
-
-<div className="mb-6">
-
-<h2 className="text-xl font-bold text-slate-900">
-
-Conversation Analytics
-
-</h2>
-
-
-<p className="mt-1 text-sm text-slate-500">
-
-AI conversations during the last 7 days.
-
-</p>
-
-
-</div>
-
-
-
-
-{
-loading ? (
-
-<p className="text-sm text-slate-500">
-
-Loading analytics...
-
-</p>
-
-)
-
-:
-
-<div className="h-80">
-
-
-<ResponsiveContainer
-width="100%"
-height="100%"
->
-
-
-<LineChart data={data}>
-
-
-<CartesianGrid strokeDasharray="3 3" />
-
-
-<XAxis dataKey="name" />
-
-
-<YAxis />
-
-
-<Tooltip />
-
-
-
-<Line
-
-type="monotone"
-
-dataKey="conversations"
-
-stroke="#6366F1"
-
-strokeWidth={4}
-
-dot={{r:5}}
-
-activeDot={{r:8}}
-
-/>
-
-
-
-</LineChart>
-
-
-</ResponsiveContainer>
-
-
-</div>
-
-}
-
-
-</div>
-
-);
-
-
+      {loading ? (
+        <p className="text-xs text-muted-foreground">
+          Loading analytics...
+        </p>
+      ) : (
+        <div className="h-72">
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+          >
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+              <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
+              <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "var(--card)",
+                  borderColor: "var(--border)",
+                  borderRadius: "0.75rem",
+                  color: "var(--foreground)",
+                  fontSize: "12px",
+                  boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="conversations"
+                stroke="#6366F1"
+                strokeWidth={3}
+                dot={{ r: 4, fill: "#6366F1" }}
+                activeDot={{ r: 6, fill: "#818cf8" }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
 }
