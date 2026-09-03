@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
-import { sendPaymentSuccessEmail } from "@/lib/email/billing-emails";
-
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -12,34 +10,24 @@ export const runtime = "nodejs";
 // =====================================================
 
 function getSupabaseAdmin() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL is not configured."
-    );
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.");
   }
 
   if (!serviceRoleKey) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not configured."
-    );
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured.");
   }
 
-  return createClient(
-    supabaseUrl,
-    serviceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
 // =====================================================
@@ -51,49 +39,34 @@ function verifySafepayWebhook(
   signature: string | null,
   timestamp: string | null
 ): boolean {
-  const webhookSecret =
-    process.env.SAFEPAY_WEBHOOK_SECRET;
+  const webhookSecret = process.env.SAFEPAY_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    throw new Error(
-      "SAFEPAY_WEBHOOK_SECRET is not configured."
-    );
+    throw new Error("SAFEPAY_WEBHOOK_SECRET is not configured.");
   }
 
   if (!signature || !timestamp) {
     return false;
   }
 
-  const signedPayload =
-    `${timestamp}.${rawBody}`;
+  const signedPayload = `${timestamp}.${rawBody}`;
 
   let secretKey: Buffer;
 
   try {
-    secretKey = Buffer.from(
-      webhookSecret,
-      "base64"
-    );
+    secretKey = Buffer.from(webhookSecret, "base64");
   } catch {
     return false;
   }
 
-  const expectedSignature =
-    `sha256=${crypto
-      .createHmac(
-        "sha256",
-        secretKey
-      )
-      .update(signedPayload)
-      .digest("hex")}`;
+  const expectedSignature = `sha256=${crypto
+    .createHmac("sha256", secretKey)
+    .update(signedPayload)
+    .digest("hex")}`;
 
-  const provided =
-    signature.trim();
+  const provided = signature.trim();
 
-  if (
-    expectedSignature.length !==
-    provided.length
-  ) {
+  if (expectedSignature.length !== provided.length) {
     return false;
   }
 
@@ -133,87 +106,54 @@ interface SafepayWebhookPayload {
 // POST WEBHOOK
 // =====================================================
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "SAFE PAY WEBHOOK RECEIVED"
-    );
-
-    console.log(
-      "================================="
-    );
+    console.log("=================================");
+    console.log("SAFE PAY WEBHOOK RECEIVED");
+    console.log("=================================");
 
     // =================================================
     // READ RAW BODY
     // =================================================
 
-    const rawBody =
-      await request.text();
+    const rawBody = await request.text();
 
     // =================================================
     // READ HEADERS
     // =================================================
 
-    const signature =
-      request.headers.get(
-        "x-sfpy-signature"
-      );
+    const signature = request.headers.get("x-sfpy-signature");
 
-    const timestamp =
-      request.headers.get(
-        "x-sfpy-timestamp"
-      );
+    const timestamp = request.headers.get("x-sfpy-timestamp");
 
-    const eventType =
-      request.headers.get(
-        "x-sfpy-event-type"
-      );
+    const eventType = request.headers.get("x-sfpy-event-type");
 
-    const eventId =
-      request.headers.get(
-        "x-sfpy-event-id"
-      );
+    const eventId = request.headers.get("x-sfpy-event-id");
 
-    console.log(
-      "Webhook headers:",
-      {
-        eventType,
-        eventId,
-        hasSignature:
-          Boolean(signature),
-        hasTimestamp:
-          Boolean(timestamp),
-      }
-    );
+    console.log("Webhook headers:", {
+      eventType,
+      eventId,
+      hasSignature: Boolean(signature),
+      hasTimestamp: Boolean(timestamp),
+    });
 
     // =================================================
     // VERIFY SIGNATURE
     // =================================================
 
-    const valid =
-      verifySafepayWebhook(
-        rawBody,
-        signature,
-        timestamp
-      );
+    const valid = verifySafepayWebhook(
+      rawBody,
+      signature,
+      timestamp
+    );
 
     if (!valid) {
-      console.error(
-        "Invalid Safepay webhook signature."
-      );
+      console.error("Invalid Safepay webhook signature.");
 
       return NextResponse.json(
         {
           success: false,
-
-          error:
-            "Invalid webhook signature.",
+          error: "Invalid webhook signature.",
         },
         {
           status: 401,
@@ -221,34 +161,25 @@ export async function POST(
       );
     }
 
-    console.log(
-      "Safepay webhook signature verified."
-    );
+    console.log("Safepay webhook signature verified.");
 
     // =================================================
     // PARSE JSON
     // =================================================
 
-    let payload:
-      | SafepayWebhookPayload
-      | null = null;
+    let payload: SafepayWebhookPayload | null = null;
 
     try {
-      payload =
-        JSON.parse(
-          rawBody
-        ) as SafepayWebhookPayload;
+      payload = JSON.parse(
+        rawBody
+      ) as SafepayWebhookPayload;
     } catch {
-      console.error(
-        "Invalid Safepay webhook JSON."
-      );
+      console.error("Invalid Safepay webhook JSON.");
 
       return NextResponse.json(
         {
           success: false,
-
-          error:
-            "Invalid JSON payload.",
+          error: "Invalid JSON payload.",
         },
         {
           status: 400,
@@ -256,32 +187,24 @@ export async function POST(
       );
     }
 
-    console.log(
-      "Safepay event:",
-      payload.type
-    );
+    console.log("Safepay event:", payload.type);
 
     // =================================================
     // ONLY PROCESS SUCCESSFUL PAYMENTS
     // =================================================
 
     if (
-      payload.type !==
-        "payment.succeeded" &&
-      eventType !==
-        "payment.succeeded"
+      payload.type !== "payment.succeeded" &&
+      eventType !== "payment.succeeded"
     ) {
       console.log(
         "Ignoring Safepay event:",
-        payload.type ||
-          eventType
+        payload.type || eventType
       );
 
       return NextResponse.json({
         success: true,
-
         received: true,
-
         processed: false,
       });
     }
@@ -290,23 +213,17 @@ export async function POST(
     // PAYMENT DATA
     // =================================================
 
-    const payment =
-      payload.data;
+    const payment = payload.data;
 
     if (!payment) {
-      throw new Error(
-        "Safepay payment data is missing."
-      );
+      throw new Error("Safepay payment data is missing.");
     }
 
     // =================================================
     // GET SAFEPAY TRACKER
     // =================================================
 
-    const tracker =
-      payment.tracker ??
-      payload.token ??
-      null;
+    const tracker = payment.tracker ?? payload.token ?? null;
 
     if (!tracker) {
       throw new Error(
@@ -314,76 +231,42 @@ export async function POST(
       );
     }
 
-    console.log(
-      "Safepay payment:",
-      {
-        tracker,
-
-        amount:
-          payment.amount,
-
-        currency:
-          payment.currency,
-
-        customerEmail:
-          payment.customer_email,
-
-        state:
-          payment.state,
-      }
-    );
+    console.log("Safepay payment:", {
+      tracker,
+      amount: payment.amount,
+      currency: payment.currency,
+      customerEmail: payment.customer_email,
+      state: payment.state,
+    });
 
     // =================================================
     // SUPABASE ADMIN
     // =================================================
 
-    const supabase =
-      getSupabaseAdmin();
+    const supabase = getSupabaseAdmin();
 
     // =================================================
     // FIND OUR PENDING TRANSACTION
     // =================================================
-    //
-    // We identify the Sales Pilot user using our own
-    // pending transaction.
-    //
-    // We do NOT depend on Safepay metadata for user_id.
-    // =================================================
 
     const {
-      data:
-        pendingTransaction,
+      data: pendingTransaction,
+      error: transactionLookupError,
+    } = await supabase
+      .from("billing_transactions")
+      .select(`
+        id,
+        user_id,
+        amount,
+        currency,
+        status,
+        provider_payment_id
+      `)
+      .eq("provider", "safepay")
+      .eq("provider_payment_id", tracker)
+      .maybeSingle();
 
-      error:
-        transactionLookupError,
-    } =
-      await supabase
-        .from(
-          "billing_transactions"
-        )
-        .select(
-          `
-            id,
-            user_id,
-            amount,
-            currency,
-            status,
-            provider_payment_id
-          `
-        )
-        .eq(
-          "provider",
-          "safepay"
-        )
-        .eq(
-          "provider_payment_id",
-          tracker
-        )
-        .maybeSingle();
-
-    if (
-      transactionLookupError
-    ) {
+    if (transactionLookupError) {
       throw transactionLookupError;
     }
 
@@ -397,50 +280,30 @@ export async function POST(
         tracker
       );
 
-      /*
-       * Never activate a subscription without a
-       * matching Sales Pilot transaction.
-       */
-
       return NextResponse.json({
         success: true,
-
         received: true,
-
         processed: false,
-
         reason:
           "No matching Sales Pilot transaction found.",
       });
     }
 
-    const userId =
-      pendingTransaction.user_id;
+    const userId = pendingTransaction.user_id;
 
     // =================================================
     // DUPLICATE PAYMENT PROTECTION
     // =================================================
 
-    if (
-      pendingTransaction.status ===
-      "succeeded"
-    ) {
-      console.log(
-        "Payment already processed:",
-        tracker
-      );
+    if (pendingTransaction.status === "succeeded") {
+      console.log("Payment already processed:", tracker);
 
       return NextResponse.json({
         success: true,
-
         received: true,
-
         processed: false,
-
         duplicate: true,
-
-        planId:
-          "starter",
+        planId: "starter",
       });
     }
 
@@ -448,27 +311,20 @@ export async function POST(
     // VERIFY AMOUNT
     // =================================================
 
-    const expectedAmount =
-      pendingTransaction.amount;
+    const expectedAmount = pendingTransaction.amount;
 
-    const paidAmount =
-      payment.amount;
+    const paidAmount = payment.amount;
 
     if (
-      typeof paidAmount ===
-        "number" &&
-      typeof expectedAmount ===
-        "number" &&
-      paidAmount !==
-        expectedAmount
+      typeof paidAmount === "number" &&
+      typeof expectedAmount === "number" &&
+      paidAmount !== expectedAmount
     ) {
       console.error(
         "Safepay payment amount does not match pending transaction.",
         {
           expectedAmount,
-
           paidAmount,
-
           tracker,
         }
       );
@@ -476,7 +332,6 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-
           error:
             "Payment amount does not match the pending transaction.",
         },
@@ -490,25 +345,20 @@ export async function POST(
     // VERIFY CURRENCY
     // =================================================
 
-    const expectedCurrency =
-      pendingTransaction.currency;
+    const expectedCurrency = pendingTransaction.currency;
 
-    const paidCurrency =
-      payment.currency;
+    const paidCurrency = payment.currency;
 
     if (
       paidCurrency &&
       expectedCurrency &&
-      paidCurrency !==
-        expectedCurrency
+      paidCurrency !== expectedCurrency
     ) {
       console.error(
         "Safepay payment currency does not match pending transaction.",
         {
           expectedCurrency,
-
           paidCurrency,
-
           tracker,
         }
       );
@@ -516,7 +366,6 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-
           error:
             "Payment currency does not match the pending transaction.",
         },
@@ -530,39 +379,24 @@ export async function POST(
     // STARTER ONLY
     // =================================================
 
-    const planId =
-      "starter";
+    const planId = "starter";
 
     // =================================================
     // UPDATE BILLING TRANSACTION
     // =================================================
 
     const {
-      error:
-        transactionUpdateError,
-    } =
-      await supabase
-        .from(
-          "billing_transactions"
-        )
-        .update({
-          status:
-            "succeeded",
+      error: transactionUpdateError,
+    } = await supabase
+      .from("billing_transactions")
+      .update({
+        status: "succeeded",
+        provider_transaction_id: tracker,
+        metadata: payload,
+      })
+      .eq("id", pendingTransaction.id);
 
-          provider_transaction_id:
-            tracker,
-
-          metadata:
-            payload,
-        })
-        .eq(
-          "id",
-          pendingTransaction.id
-        );
-
-    if (
-      transactionUpdateError
-    ) {
+    if (transactionUpdateError) {
       throw transactionUpdateError;
     }
 
@@ -575,63 +409,37 @@ export async function POST(
     // SUBSCRIPTION PERIOD
     // =================================================
 
-    const now =
-      new Date();
+    const now = new Date();
 
-    const periodEnd =
-      new Date(
-        now.getTime() +
-          30 *
-            24 *
-            60 *
-            60 *
-            1000
-      );
+    const periodEnd = new Date(
+      now.getTime() +
+        30 * 24 * 60 * 60 * 1000
+    );
 
     // =================================================
     // ACTIVATE STARTER
     // =================================================
 
     const {
-      error:
-        subscriptionError,
-    } =
-      await supabase
-        .from(
-          "subscriptions"
-        )
-        .upsert(
-          {
-            user_id:
-              userId,
+      error: subscriptionError,
+    } = await supabase
+      .from("subscriptions")
+      .upsert(
+        {
+          user_id: userId,
+          plan_id: planId,
+          status: "active",
+          billing_cycle: "monthly",
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          updated_at: now.toISOString(),
+        },
+        {
+          onConflict: "user_id",
+        }
+      );
 
-            plan_id:
-              planId,
-
-            status:
-              "active",
-
-            billing_cycle:
-              "monthly",
-
-            current_period_start:
-              now.toISOString(),
-
-            current_period_end:
-              periodEnd.toISOString(),
-
-            updated_at:
-              now.toISOString(),
-          },
-          {
-            onConflict:
-              "user_id",
-          }
-        );
-
-    if (
-      subscriptionError
-    ) {
+    if (subscriptionError) {
       throw subscriptionError;
     }
 
@@ -644,17 +452,12 @@ export async function POST(
     // GET USER EMAIL
     // =================================================
 
-    let customerEmail:
-      | string
-      | null = null;
+    let customerEmail: string | null = null;
 
     try {
       const {
-        data:
-          authUserData,
-
-        error:
-          authUserError,
+        data: authUserData,
+        error: authUserError,
       } =
         await supabase.auth.admin.getUserById(
           userId
@@ -665,8 +468,7 @@ export async function POST(
       }
 
       customerEmail =
-        authUserData.user?.email ??
-        null;
+        authUserData.user?.email ?? null;
     } catch (emailLookupError) {
       console.error(
         "Unable to retrieve Sales Pilot customer email:",
@@ -678,35 +480,28 @@ export async function POST(
     // SEND PAYMENT SUCCESS EMAIL
     // =================================================
     //
-    // IMPORTANT:
+    // Resend/email functionality is loaded dynamically.
+    // This prevents a missing RESEND_API_KEY from
+    // breaking the Vercel build.
     //
-    // Email failure must NOT reverse a successful
-    // payment or subscription.
     // =================================================
 
     if (customerEmail) {
       try {
+        const {
+          sendPaymentSuccessEmail,
+        } = await import(
+          "@/lib/email/billing-emails"
+        );
+
         await sendPaymentSuccessEmail({
-          to:
-            customerEmail,
-
-          planName:
-            "Starter",
-
-          amount:
-            pendingTransaction.amount,
-
-          currency:
-            pendingTransaction.currency,
-
-          billingCycle:
-            "monthly",
-
-          paymentDate:
-            now.toISOString(),
-
-          nextBillingDate:
-            periodEnd.toISOString(),
+          to: customerEmail,
+          planName: "Starter",
+          amount: pendingTransaction.amount,
+          currency: pendingTransaction.currency,
+          billingCycle: "monthly",
+          paymentDate: now.toISOString(),
+          nextBillingDate: periodEnd.toISOString(),
         });
 
         console.log(
@@ -732,58 +527,30 @@ export async function POST(
     // SUCCESS
     // =================================================
 
-    console.log(
-      "================================="
-    );
+    console.log("=================================");
+    console.log("STARTER SUBSCRIPTION ACTIVATED");
 
-    console.log(
-      "STARTER SUBSCRIPTION ACTIVATED"
-    );
+    console.log({
+      userId,
+      planId,
+      tracker,
+      amount: payment.amount,
+      currency: payment.currency,
+      transactionId: pendingTransaction.id,
+      emailSent: Boolean(customerEmail),
+    });
 
-    console.log(
-      {
-        userId,
-
-        planId,
-
-        tracker,
-
-        amount:
-          payment.amount,
-
-        currency:
-          payment.currency,
-
-        transactionId:
-          pendingTransaction.id,
-
-        emailSent:
-          Boolean(customerEmail),
-      }
-    );
-
-    console.log(
-      "================================="
-    );
+    console.log("=================================");
 
     return NextResponse.json({
       success: true,
-
       received: true,
-
       processed: true,
-
-      planId:
-        "starter",
-
+      planId: "starter",
       userId,
-
-      emailSent:
-        Boolean(customerEmail),
+      emailSent: Boolean(customerEmail),
     });
-  } catch (
-    error: unknown
-  ) {
+  } catch (error: unknown) {
     console.error(
       "Safepay webhook error:",
       error
@@ -792,7 +559,6 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-
         error:
           error instanceof Error
             ? error.message
