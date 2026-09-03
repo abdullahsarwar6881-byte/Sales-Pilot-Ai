@@ -5,22 +5,54 @@ import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
 import { classifyContent } from "@/lib/ai/classifyContent";
 import { detectPageType } from "@/lib/crawler/detectPageType";
 import { closeBrowser } from "@/lib/browser/browser";
+import { upsertProductVisualIndex } from "@/lib/products/visualIndex";
 
-function normalizeUrl(url: string) {
+// =====================================================
+// CONFIGURATION
+// =====================================================
+
+// Maximum number of pages Sales Pilot will process
+// during one website crawl.
+//
+// Keep this here as the default product limit.
+// The crawler itself should also enforce the limit.
+const DEFAULT_MAX_PAGES = 60;
+
+// Maximum chunks generated from one page.
+// This protects the system from extremely large pages.
+const MAX_CHUNKS_PER_PAGE = 50;
+
+// =====================================================
+// NORMALIZE URL
+// =====================================================
+
+function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
 
+    // Remove fragments.
     parsed.hash = "";
+
+    // Remove query parameters.
+    //
+    // This prevents URLs such as:
+    //
+    // /product?id=1
+    // /product?id=2
+    //
+    // from becoming separate pages.
     parsed.search = "";
 
     let cleanUrl = parsed.toString();
 
+    // Remove trailing slash.
     if (cleanUrl.endsWith("/")) {
       cleanUrl = cleanUrl.slice(0, -1);
     }
 
+    // Remove .md when present.
     if (cleanUrl.endsWith(".md")) {
-      cleanUrl = cleanUrl.replace(".md", "");
+      cleanUrl = cleanUrl.replace(/\.md$/, "");
     }
 
     return cleanUrl;
@@ -29,10 +61,18 @@ function normalizeUrl(url: string) {
   }
 }
 
+// =====================================================
+// SPLIT TEXT
+// =====================================================
+
 function splitText(
   text: string,
   size = 1200
-) {
+): string[] {
+  if (!text) {
+    return [];
+  }
+
   const chunks: string[] = [];
 
   for (
@@ -45,20 +85,73 @@ function splitText(
     );
   }
 
-  return chunks;
+  return chunks.slice(
+    0,
+    MAX_CHUNKS_PER_PAGE
+  );
 }
+
+// =====================================================
+// SAFE PAGE TYPE
+// =====================================================
+
+function normalizePageType(
+  pageType: unknown
+): string {
+  if (
+    typeof pageType !== "string" ||
+    !pageType.trim()
+  ) {
+    return "other";
+  }
+
+  return pageType.trim().toLowerCase();
+}
+
+// =====================================================
+// POST
+// =====================================================
 
 export async function POST(
   req: Request
 ) {
-  const requestStart = Date.now();
+  const requestStart =
+    Date.now();
+
+  let crawlJobId: string | null =
+    null;
+
+  let knowledgeUrlId: string | null =
+    null;
 
   try {
+    // =================================================
+    // REQUEST BODY
+    // =================================================
+
+    const body =
+      await req.json();
+
     const {
       url,
-      knowledgeUrlId,
-      crawlJobId,
-    } = await req.json();
+      knowledgeUrlId:
+        requestKnowledgeUrlId,
+      crawlJobId:
+        requestCrawlJobId,
+      maxPages,
+    } = body;
+
+    crawlJobId =
+      requestCrawlJobId ||
+      null;
+
+    knowledgeUrlId =
+      requestKnowledgeUrlId ||
+      null;
+
+    // =================================================
+    // VALIDATION
+    // =================================================
 
     if (
       !url ||
@@ -76,24 +169,64 @@ export async function POST(
       );
     }
 
+    // =================================================
+    // AUTHENTICATION
+    // =================================================
+
     const supabase =
       await createClient();
 
     const {
-      data: { user },
+      data: {
+        user,
+      },
     } =
       await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json(
         {
-          error: "Unauthorized",
+          error:
+            "Unauthorized",
         },
         {
           status: 401,
         }
       );
     }
+
+    // =================================================
+    // PAGE LIMIT
+    // =================================================
+    //
+    // We allow a caller to request a lower limit,
+    // but never allow more than 60 from this route.
+    //
+    // Example:
+    //
+    // maxPages: 20 → 20
+    // maxPages: 60 → 60
+    // maxPages: 500 → 60
+    //
+    // =================================================
+
+    const requestedMaxPages =
+      Number(maxPages);
+
+    const crawlMaxPages =
+      Number.isFinite(
+        requestedMaxPages
+      )
+        ? Math.min(
+            Math.max(
+              Math.floor(
+                requestedMaxPages
+              ),
+              1
+            ),
+            DEFAULT_MAX_PAGES
+          )
+        : DEFAULT_MAX_PAGES;
 
     console.log(
       "================================="
@@ -109,22 +242,57 @@ export async function POST(
     );
 
     console.log(
+      "MAX PAGES:",
+      crawlMaxPages
+    );
+
+    console.log(
+      "USER:",
+      user.id
+    );
+
+    console.log(
       "================================="
     );
 
-    // --------------------------------
+    // =================================================
     // CRAWL WEBSITE
-    // --------------------------------
+    // =================================================
 
     const crawlStart =
       Date.now();
 
     const pages =
-      await crawlWebsite(url);
+      await crawlWebsite(
+        url,
+        {
+          maxPages:
+            crawlMaxPages,
+        }
+      );
 
     const crawlDuration =
-      (Date.now() - crawlStart) /
+      (Date.now() -
+        crawlStart) /
       1000;
+
+    // =================================================
+    // SAFETY LIMIT
+    // =================================================
+    //
+    // Even if the crawler accidentally returns more
+    // pages, this route will never process more than
+    // the configured maximum.
+    //
+    // =================================================
+
+    const pagesToProcess =
+      Array.isArray(pages)
+        ? pages.slice(
+            0,
+            crawlMaxPages
+          )
+        : [];
 
     console.log(
       "================================="
@@ -143,59 +311,107 @@ export async function POST(
     );
 
     console.log(
-      "Pages found:",
+      "Pages returned:",
       pages.length
+    );
+
+    console.log(
+      "Pages to process:",
+      pagesToProcess.length
     );
 
     console.log(
       "================================="
     );
 
-    // --------------------------------
+    // =================================================
     // UPDATE CRAWL JOB
-    // --------------------------------
+    // =================================================
 
     await supabase
       .from("crawl_jobs")
       .update({
         total_pages:
-          pages.length,
+          pagesToProcess.length,
 
-        pages_completed: 0,
+        pages_completed:
+          0,
 
         started_at:
           new Date().toISOString(),
+
+        current_url:
+          null,
+
+        status:
+          "processing",
       })
       .eq(
         "id",
         crawlJobId
       );
 
+    // =================================================
+    // METRICS
+    // =================================================
+
     let totalChunks = 0;
 
     let completedPages = 0;
 
-    let totalEmbeddingSeconds = 0;
+    let totalEmbeddingSeconds =
+      0;
 
-    let totalClassificationSeconds = 0;
+    let totalClassificationSeconds =
+      0;
 
-    let totalPageProcessingSeconds = 0;
+    let totalPageProcessingSeconds =
+      0;
 
-    // --------------------------------
+    let skippedPages = 0;
+
+    // =================================================
     // PROCESS EACH PAGE
-    // --------------------------------
+    // =================================================
 
     for (
-      const crawledPage of pages
+      const crawledPage of
+        pagesToProcess
     ) {
       const pageStart =
         Date.now();
 
       completedPages++;
 
-      // --------------------------------
-      // UPDATE CRAWL PROGRESS
-      // --------------------------------
+      // =================================================
+      // BASIC PAGE VALIDATION
+      // =================================================
+
+      if (
+        !crawledPage ||
+        !crawledPage.url
+      ) {
+        skippedPages++;
+
+        console.log(
+          "Skipping invalid crawled page."
+        );
+
+        continue;
+      }
+
+      // =================================================
+      // CLEAN URL
+      // =================================================
+
+      const cleanUrl =
+        normalizeUrl(
+          crawledPage.url
+        );
+
+      // =================================================
+      // UPDATE PROGRESS
+      // =================================================
 
       await supabase
         .from("crawl_jobs")
@@ -204,16 +420,11 @@ export async function POST(
             completedPages,
 
           current_url:
-            crawledPage.url,
+            cleanUrl,
         })
         .eq(
           "id",
           crawlJobId
-        );
-
-      const cleanUrl =
-        normalizeUrl(
-          crawledPage.url
         );
 
       console.log(
@@ -221,7 +432,7 @@ export async function POST(
       );
 
       console.log(
-        `PROCESSING PAGE ${completedPages}/${pages.length}`
+        `PROCESSING PAGE ${completedPages}/${pagesToProcess.length}`
       );
 
       console.log(
@@ -229,18 +440,21 @@ export async function POST(
         cleanUrl
       );
 
-      // --------------------------------
+      // =================================================
       // DUPLICATE PROTECTION
-      // --------------------------------
+      // =================================================
 
       const {
-        data: existingPage,
+        data:
+          existingPage,
       } =
         await supabase
           .from(
             "knowledge_pages"
           )
-          .select("id")
+          .select(
+            "id"
+          )
           .eq(
             "user_id",
             user.id
@@ -251,7 +465,11 @@ export async function POST(
           )
           .maybeSingle();
 
-      if (existingPage) {
+      if (
+        existingPage
+      ) {
+        skippedPages++;
+
         console.log(
           "Duplicate skipped:",
           cleanUrl
@@ -260,9 +478,30 @@ export async function POST(
         continue;
       }
 
-      // --------------------------------
-      // FAST PAGE TYPE DETECTION
-      // --------------------------------
+      // =================================================
+      // PAGE CONTENT VALIDATION
+      // =================================================
+
+      const pageContent =
+        typeof crawledPage.content ===
+        "string"
+          ? crawledPage.content.trim()
+          : "";
+
+      if (!pageContent) {
+        skippedPages++;
+
+        console.log(
+          "Empty page skipped:",
+          cleanUrl
+        );
+
+        continue;
+      }
+
+      // =================================================
+      // PAGE TYPE DETECTION
+      // =================================================
 
       console.log(
         "Detecting page type..."
@@ -272,16 +511,20 @@ export async function POST(
         Date.now();
 
       let pageType =
-        detectPageType(
-          crawledPage.url,
-          crawledPage.title
+        normalizePageType(
+          detectPageType(
+            crawledPage.url,
+            crawledPage.title
+          )
         );
 
-      // --------------------------------
+      // =================================================
       // AI CLASSIFICATION FALLBACK
-      // --------------------------------
+      // =================================================
 
-      if (pageType === "page") {
+      if (
+        pageType === "page"
+      ) {
         console.log(
           "Fast detector could not determine page type."
         );
@@ -290,11 +533,25 @@ export async function POST(
           "Using AI classifier..."
         );
 
-        pageType =
-          await classifyContent(
-            crawledPage.title,
-            crawledPage.content
+        try {
+          pageType =
+            normalizePageType(
+              await classifyContent(
+                crawledPage.title,
+                pageContent
+              )
+            );
+        } catch (
+          classificationError
+        ) {
+          console.error(
+            "AI CLASSIFICATION ERROR:",
+            classificationError
           );
+
+          pageType =
+            "other";
+        }
 
         console.log(
           "AI Page Type:",
@@ -320,13 +577,9 @@ export async function POST(
         )} seconds`
       );
 
-      if (!pageType) {
-        pageType = "other";
-      }
-
-      // --------------------------------
-      // PRODUCT INFORMATION
-      // --------------------------------
+      // =================================================
+      // STRUCTURED PRODUCT INFORMATION
+      // =================================================
 
       if (
         crawledPage.productData
@@ -376,20 +629,22 @@ export async function POST(
         });
       }
 
-      // --------------------------------
+      // =================================================
       // SAVE PAGE
-      // --------------------------------
+      // =================================================
 
       const {
         data: page,
-        error: pageError,
+        error:
+          pageError,
       } =
         await supabase
           .from(
             "knowledge_pages"
           )
           .insert({
-            user_id: user.id,
+            user_id:
+              user.id,
 
             knowledge_url_id:
               knowledgeUrlId,
@@ -398,10 +653,11 @@ export async function POST(
               cleanUrl,
 
             title:
-              crawledPage.title,
+              crawledPage.title ||
+              cleanUrl,
 
             content:
-              crawledPage.content,
+              pageContent,
 
             page_type:
               pageType,
@@ -409,11 +665,16 @@ export async function POST(
           .select()
           .single();
 
-      if (pageError) {
+      if (
+        pageError ||
+        !page
+      ) {
         console.error(
           "PAGE ERROR:",
           pageError
         );
+
+        skippedPages++;
 
         continue;
       }
@@ -423,38 +684,82 @@ export async function POST(
         page.id
       );
 
-      // --------------------------------
+      // =================================================
+      // PRODUCT PAGE VISUAL INDEX (best-effort)
+      // =================================================
+      if (
+        pageType === "product" &&
+        crawledPage.images &&
+        crawledPage.images.length > 0
+      ) {
+        await upsertProductVisualIndex(
+          supabase,
+          {
+            id: page.id,
+            user_id: user.id,
+            productUrl: cleanUrl,
+            page_url: cleanUrl,
+            title: crawledPage.title || "",
+            images: crawledPage.images,
+            sku: crawledPage.productData?.sku || undefined,
+          },
+          {
+            userId: user.id,
+            source: "crawler",
+          }
+        ).catch((e) => {
+          console.error(
+            "CRAWL PRODUCT VISUAL INDEX ERROR:",
+            e?.message || e
+          );
+        });
+      }
+
+      // =================================================
       // CREATE CHUNKS
-      // --------------------------------
+      // =================================================
 
       /*
-       * Product pages stay as ONE chunk.
+       * Product pages stay as one chunk.
        *
-       * Other pages are split into
-       * 1200-character chunks.
+       * Other pages are split into chunks.
        */
 
       const chunks =
-        pageType === "product"
+        pageType ===
+        "product"
           ? [
-              crawledPage.content,
+              pageContent,
             ]
           : splitText(
-              crawledPage.content
+              pageContent
             );
+
+      if (
+        chunks.length ===
+        0
+      ) {
+        console.log(
+          "No chunks generated."
+        );
+
+        continue;
+      }
 
       console.log(
         "Chunks generated:",
         chunks.length
       );
 
-      // --------------------------------
+      // =================================================
       // SAVE CHUNKS
-      // --------------------------------
+      // =================================================
 
       const chunkRows =
         chunks.map(
-          (chunk) => ({
+          (
+            chunk
+          ) => ({
             user_id:
               user.id,
 
@@ -470,17 +775,23 @@ export async function POST(
         );
 
       const {
-        data: createdChunks,
-        error: chunkError,
+        data:
+          createdChunks,
+        error:
+          chunkError,
       } =
         await supabase
           .from(
             "knowledge_chunks"
           )
-          .insert(chunkRows)
+          .insert(
+            chunkRows
+          )
           .select();
 
-      if (chunkError) {
+      if (
+        chunkError
+      ) {
         console.error(
           "CHUNK ERROR:",
           chunkError
@@ -489,7 +800,11 @@ export async function POST(
         continue;
       }
 
-      if (!createdChunks) {
+      if (
+        !createdChunks ||
+        createdChunks.length ===
+          0
+      ) {
         console.error(
           "No chunks were created."
         );
@@ -505,9 +820,9 @@ export async function POST(
       totalChunks +=
         createdChunks.length;
 
-      // --------------------------------
+      // =================================================
       // CREATE EMBEDDINGS
-      // --------------------------------
+      // =================================================
 
       console.log(
         `Creating ${createdChunks.length} embeddings...`
@@ -516,14 +831,30 @@ export async function POST(
       const embeddingStart =
         Date.now();
 
-      const embeddings =
-        await createEmbeddings(
-          createdChunks.map(
-            (chunk) =>
-              chunk.content
-          ),
-          3
+      let embeddings: any[] =
+        [];
+
+      try {
+        embeddings =
+          await createEmbeddings(
+            createdChunks.map(
+              (
+                chunk
+              ) =>
+                chunk.content
+            ),
+            3
+          );
+      } catch (
+        embeddingError
+      ) {
+        console.error(
+          "EMBEDDING ERROR:",
+          embeddingError
         );
+
+        continue;
+      }
 
       const embeddingDuration =
         (Date.now() -
@@ -539,13 +870,14 @@ export async function POST(
         )} seconds`
       );
 
-      // --------------------------------
+      // =================================================
       // SAVE EMBEDDINGS
-      // --------------------------------
+      // =================================================
 
       for (
         let i = 0;
-        i < createdChunks.length;
+        i <
+        createdChunks.length;
         i++
       ) {
         const chunk =
@@ -553,6 +885,17 @@ export async function POST(
 
         const embedding =
           embeddings[i];
+
+        if (
+          !embedding
+        ) {
+          console.error(
+            "Missing embedding for chunk:",
+            chunk.id
+          );
+
+          continue;
+        }
 
         const {
           error:
@@ -570,7 +913,9 @@ export async function POST(
               chunk.id
             );
 
-        if (embeddingError) {
+        if (
+          embeddingError
+        ) {
           console.error(
             "Embedding database error:",
             embeddingError
@@ -578,9 +923,9 @@ export async function POST(
         }
       }
 
-      // --------------------------------
+      // =================================================
       // PAGE TIMING
-      // --------------------------------
+      // =================================================
 
       const pageDuration =
         (Date.now() -
@@ -591,38 +936,44 @@ export async function POST(
         pageDuration;
 
       console.log(
-        `PAGE ${completedPages}/${pages.length} TOOK: ${pageDuration.toFixed(
+        `PAGE ${completedPages}/${pagesToProcess.length} TOOK: ${pageDuration.toFixed(
           2
         )} seconds`
       );
 
       console.log(
-        `Page ${completedPages}/${pages.length} completed.`
+        `Page ${completedPages}/${pagesToProcess.length} completed.`
       );
     }
 
-    // --------------------------------
+    // =================================================
     // MARK KNOWLEDGE URL COMPLETED
-    // --------------------------------
+    // =================================================
 
     await supabase
-      .from("knowledge_urls")
+      .from(
+        "knowledge_urls"
+      )
       .update({
-        status: "completed",
+        status:
+          "completed",
       })
       .eq(
         "id",
         knowledgeUrlId
       );
 
-    // --------------------------------
+    // =================================================
     // MARK CRAWL JOB COMPLETED
-    // --------------------------------
+    // =================================================
 
     await supabase
-      .from("crawl_jobs")
+      .from(
+        "crawl_jobs"
+      )
       .update({
-        status: "completed",
+        status:
+          "completed",
 
         pages_completed:
           completedPages,
@@ -630,22 +981,23 @@ export async function POST(
         finished_at:
           new Date().toISOString(),
 
-        current_url: null,
+        current_url:
+          null,
       })
       .eq(
         "id",
         crawlJobId
       );
 
-    // --------------------------------
-    // CLOSE PLAYWRIGHT
-    // --------------------------------
+    // =================================================
+    // CLOSE BROWSER
+    // =================================================
 
     await closeBrowser();
 
-    // --------------------------------
+    // =================================================
     // FINAL TIMING
-    // --------------------------------
+    // =================================================
 
     const totalDuration =
       (Date.now() -
@@ -701,7 +1053,15 @@ export async function POST(
     );
 
     console.log(
-      `Pages: ${pages.length}`
+      `Pages discovered: ${pages.length}`
+    );
+
+    console.log(
+      `Pages processed: ${completedPages}`
+    );
+
+    console.log(
+      `Pages skipped: ${skippedPages}`
     );
 
     console.log(
@@ -709,25 +1069,45 @@ export async function POST(
     );
 
     console.log(
+      `Maximum allowed pages: ${crawlMaxPages}`
+    );
+
+    console.log(
       "================================="
     );
 
     return NextResponse.json({
-      success: true,
+      success:
+        true,
 
       message:
-        "Website crawled, AI classified, chunked and embedded successfully.",
+        "Website crawled, classified, chunked and embedded successfully.",
+
+      pagesDiscovered:
+        pages.length,
 
       pagesProcessed:
-        pages.length,
+        completedPages,
+
+      pagesSkipped:
+        skippedPages,
+
+      maxPages:
+        crawlMaxPages,
 
       chunksCreated:
         totalChunks,
 
       durationSeconds:
-        totalDuration,
+        Number(
+          totalDuration.toFixed(
+            2
+          )
+        ),
     });
-  } catch (error: any) {
+  } catch (
+    error: any
+  ) {
     console.error(
       "================================="
     );
@@ -740,6 +1120,64 @@ export async function POST(
     console.error(
       "================================="
     );
+
+    // =================================================
+    // MARK JOB FAILED
+    // =================================================
+
+    try {
+      if (
+        crawlJobId
+      ) {
+        await (
+          await createClient()
+        )
+          .from(
+            "crawl_jobs"
+          )
+          .update({
+            status:
+              "failed",
+
+            finished_at:
+              new Date().toISOString(),
+
+            current_url:
+              null,
+          })
+          .eq(
+            "id",
+            crawlJobId
+          );
+      }
+
+      if (
+        knowledgeUrlId
+      ) {
+        await (
+          await createClient()
+        )
+          .from(
+            "knowledge_urls"
+          )
+          .update({
+            status:
+              "failed",
+          })
+          .eq(
+            "id",
+            knowledgeUrlId
+          );
+      }
+    } catch (
+      statusError
+    ) {
+      console.error(
+        "FAILED TO UPDATE CRAWL STATUS:",
+        statusError
+
+      );
+    }
 
     await closeBrowser();
 

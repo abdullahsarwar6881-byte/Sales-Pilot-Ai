@@ -1,0 +1,77 @@
+[
+  {
+    "page": "Homepage",
+    "url": "http://localhost:3000/",
+    "status": 200,
+    "hasCssLoaded": true,
+    "flexComputed": "flex",
+    "buttonComputed": {
+      "tag": "A",
+      "classes": "text-sm font-medium bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm shadow-indigo-100",
+      "bgColor": "lab(38.4009 52.6132 -92.3857)",
+      "borderRadius": "8px",
+      "display": "block"
+    },
+    "screenshot": "screenshot_homepage.png"
+  },
+  {
+    "page": "Login",
+    "url": "http://localhost:3000/login",
+    "status": 200,
+    "hasCssLoaded": true,
+    "flexComputed": "flex",
+    "buttonComputed": {
+      "tag": "BUTTON",
+      "classes": "w-full rounded bg-blue-600 p-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50",
+      "bgColor": "lab(44.0605 29.0279 -86.0352)",
+      "borderRadius": "4px",
+      "display": "inline-block"
+    },
+    "screenshot": "screenshot_login.png"
+  },
+  {
+    "page": "Signup",
+    "url": "http://localhost:3000/signup",
+    "status": 200,
+    "hasCssLoaded": true,
+    "flexComputed": "flex",
+    "buttonComputed": {
+      "tag": "BUTTON",
+      "classes": "w-full rounded bg-blue-600 p-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50",
+      "bgColor": "lab(44.0605 29.0279 -86.0352)",
+      "borderRadius": "4px",
+      "display": "inline-block"
+    },
+    "screenshot": "screenshot_signup.png"
+  },
+  {
+    "page": "Widget Preview Test",
+    "url": "http://localhost:3000/widget-preview-test",
+    "status": 200,
+    "hasCssLoaded": true,
+    "flexComputed": "flex",
+    "buttonComputed": {
+      "tag": "BUTTON",
+      "classes": " flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 ",
+      "bgColor": "lab(98.1434 -0.369549 -1.05968)",
+      "borderRadius": "16px",
+      "display": "flex"
+    },
+    "screenshot": "screenshot_widget_preview.png"
+  },
+  {
+    "page": "Dashboard Widget",
+    "url": "http://localhost:3000/dashboard/widget",
+    "status": 200,
+    "hasCssLoaded": true,
+    "flexComputed": "flex",
+    "buttonComputed": {
+      "tag": "BUTTON",
+      "classes": "w-full rounded bg-blue-600 p-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50",
+      "bgColor": "lab(44.0605 29.0279 -86.0352)",
+      "borderRadius": "4px",
+      "display": "inline-block"
+    },
+    "screenshot": "screenshot_dashboard_widget.png"
+  }
+]

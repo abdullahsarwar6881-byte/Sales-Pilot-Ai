@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Bot,
@@ -6,8 +6,15 @@ import {
   ExternalLink,
   Send,
   User,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 interface Props {
   profileId?: string;
@@ -29,12 +36,83 @@ interface Props {
   showPoweredBy?: boolean;
 }
 
+interface WidgetProduct {
+  id?: string;
+  name?: string;
+  title?: string;
+  price?: string;
+  displayPrice?: string;
+  displayName?: string;
+  currency?: string;
+  description?: string;
+  imageUrl?: string;
+  image?: string;
+  productUrl?: string;
+  url?: string;
+  viewUrl?: string;
+  available?: boolean | null;
+  availabilityLabel?: string;
+}
+
 interface Message {
   id: string;
   sender: "ai" | "customer";
   content: string;
+  imageUrl?: string;
+  products?: WidgetProduct[];
+  imageMatch?: { matchType?: string; exactProductId?: string | null } | null;
   timestamp: Date;
 }
+
+// =====================================================
+// FILE TO BASE64
+// =====================================================
+
+function fileToDataUrl(
+  file: File
+): Promise<string> {
+  return new Promise(
+    (resolve, reject) => {
+      const reader =
+        new FileReader();
+
+      reader.onload = () => {
+        if (
+          typeof reader.result !==
+          "string"
+        ) {
+          reject(
+            new Error(
+              "Unable to read image."
+            )
+          );
+
+          return;
+        }
+
+        resolve(
+          reader.result
+        );
+      };
+
+      reader.onerror = () => {
+        reject(
+          new Error(
+            "Unable to read image."
+          )
+        );
+      };
+
+      reader.readAsDataURL(
+        file
+      );
+    }
+  );
+}
+
+// =====================================================
+// COMPONENT
+// =====================================================
 
 export default function WidgetPreview({
   profileId,
@@ -42,7 +120,7 @@ export default function WidgetPreview({
   aiName = "Sales Pilot AI",
 
   welcomeMessage =
-    "👋 Hi! How can I help you today?",
+    "ðŸ‘‹ Hi! How can I help you today?",
 
   brandColor = "#6366F1",
 
@@ -66,24 +144,52 @@ export default function WidgetPreview({
   // STATE
   // =====================================================
 
-  const [message, setMessage] = useState("");
-
-  const [loading, setLoading] = useState(false);
-
-  const [visitorSessionId, setVisitorSessionId] =
+  const [message, setMessage] =
     useState("");
 
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
+
+  const [
+    visitorSessionId,
+    setVisitorSessionId,
+  ] = useState("");
+
+  const [mounted, setMounted] =
+    useState(false);
+
+  // =====================================================
+  // IMAGE STATE
+  // =====================================================
+
+  const [
+    selectedImage,
+    setSelectedImage,
+  ] = useState<File | null>(null);
+
+  const [
+    imagePreview,
+    setImagePreview,
+  ] = useState<string | null>(null);
 
   // =====================================================
   // REFS
   // =====================================================
 
   const messagesEndRef =
-    useRef<HTMLDivElement | null>(null);
+    useRef<HTMLDivElement | null>(
+      null
+    );
 
   const inputRef =
-    useRef<HTMLInputElement | null>(null);
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const imageInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
 
   // =====================================================
   // MESSAGES
@@ -96,9 +202,11 @@ export default function WidgetPreview({
 
         sender: "ai",
 
-        content: welcomeMessage,
+        content:
+          welcomeMessage,
 
-        timestamp: new Date(0),
+        timestamp:
+          new Date(0),
       },
     ]);
 
@@ -109,25 +217,37 @@ export default function WidgetPreview({
   useEffect(() => {
     setMounted(true);
 
-    setMessages((previous) =>
-      previous.map((item) =>
-        item.id === "welcome"
-          ? {
-              ...item,
-              content: welcomeMessage,
-              timestamp: new Date(),
-            }
-          : item
-      )
+    setMessages(
+      (previous) =>
+        previous.map(
+          (item) =>
+            item.id ===
+            "welcome"
+              ? {
+                  ...item,
+
+                  content:
+                    welcomeMessage,
+
+                  timestamp:
+                    new Date(),
+                }
+              : item
+        )
     );
-  }, [welcomeMessage]);
+  }, [
+    welcomeMessage,
+  ]);
 
   // =====================================================
   // LOAD PREVIEW SESSION
   // =====================================================
 
   useEffect(() => {
-    if (!mounted || !profileId) {
+    if (
+      !mounted ||
+      !profileId
+    ) {
       return;
     }
 
@@ -135,10 +255,16 @@ export default function WidgetPreview({
       `sales-pilot-preview-session-${profileId}`;
 
     const existingSession =
-      localStorage.getItem(storageKey);
+      localStorage.getItem(
+        storageKey
+      );
 
-    if (existingSession) {
-      setVisitorSessionId(existingSession);
+    if (
+      existingSession
+    ) {
+      setVisitorSessionId(
+        existingSession
+      );
 
       return;
     }
@@ -154,19 +280,24 @@ export default function WidgetPreview({
     setVisitorSessionId(
       newSession
     );
-  }, [profileId, mounted]);
+  }, [
+    profileId,
+    mounted,
+  ]);
 
   // =====================================================
   // AUTO SCROLL
   // =====================================================
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior:
-        enableAnimations
-          ? "smooth"
-          : "auto",
-    });
+    messagesEndRef.current?.scrollIntoView(
+      {
+        behavior:
+          enableAnimations
+            ? "smooth"
+            : "auto",
+      }
+    );
   }, [
     messages,
     loading,
@@ -179,14 +310,33 @@ export default function WidgetPreview({
 
   useEffect(() => {
     if (!loading) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      const timer =
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 100);
 
       return () =>
         clearTimeout(timer);
     }
-  }, [loading]);
+  }, [
+    loading,
+  ]);
+
+  // =====================================================
+  // CLEAN IMAGE OBJECT URL
+  // =====================================================
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(
+          imagePreview
+        );
+      }
+    };
+  }, [
+    imagePreview,
+  ]);
 
   // =====================================================
   // SIZE
@@ -226,32 +376,170 @@ export default function WidgetPreview({
     "dark";
 
   // =====================================================
+  // OPEN IMAGE SELECTOR
+  // =====================================================
+
+  function openImageSelector() {
+    if (
+      loading ||
+      !profileId
+    ) {
+      return;
+    }
+
+    imageInputRef.current?.click();
+  }
+
+  // =====================================================
+  // SELECT IMAGE
+  // =====================================================
+
+  function handleImageSelect(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    // ---------------------------------------------------
+    // ALLOWED TYPES
+    // ---------------------------------------------------
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (
+      !allowedTypes.includes(
+        file.type
+      )
+    ) {
+      alert(
+        "Please upload a JPG, PNG, or WEBP image."
+      );
+
+      event.target.value =
+        "";
+
+      return;
+    }
+
+    // ---------------------------------------------------
+    // MAX SIZE
+    // ---------------------------------------------------
+
+    const MAX_SIZE =
+      5 * 1024 * 1024;
+
+    if (
+      file.size > MAX_SIZE
+    ) {
+      alert(
+        "Please upload an image smaller than 5MB."
+      );
+
+      event.target.value =
+        "";
+
+      return;
+    }
+
+    // ---------------------------------------------------
+    // CLEAN PREVIOUS PREVIEW
+    // ---------------------------------------------------
+
+    if (imagePreview) {
+      URL.revokeObjectURL(
+        imagePreview
+      );
+    }
+
+    // ---------------------------------------------------
+    // CREATE PREVIEW
+    // ---------------------------------------------------
+
+    const previewUrl =
+      URL.createObjectURL(
+        file
+      );
+
+    setSelectedImage(
+      file
+    );
+
+    setImagePreview(
+      previewUrl
+    );
+  }
+
+  // =====================================================
+  // REMOVE IMAGE
+  // =====================================================
+
+  function removeSelectedImage() {
+    if (imagePreview) {
+      URL.revokeObjectURL(
+        imagePreview
+      );
+    }
+
+    setSelectedImage(
+      null
+    );
+
+    setImagePreview(
+      null
+    );
+
+    if (
+      imageInputRef.current
+    ) {
+      imageInputRef.current.value =
+        "";
+    }
+  }
+
+  // =====================================================
   // SEND MESSAGE
   // =====================================================
 
   async function sendMessage() {
     if (
-      !message.trim() ||
-      loading
+      !message.trim() &&
+      !selectedImage
     ) {
       return;
     }
 
+    if (loading) {
+      return;
+    }
+
     if (!profileId) {
-      setMessages((previous) => [
-        ...previous,
-        {
-          id:
-            `error-${Date.now()}`,
+      setMessages(
+        (previous) => [
+          ...previous,
 
-          sender: "ai",
+          {
+            id:
+              `error-${Date.now()}`,
 
-          content:
-            "The widget is not connected to a Sales Pilot account yet.",
+            sender:
+              "ai",
 
-          timestamp: new Date(),
-        },
-      ]);
+            content:
+              "The widget is not connected to a Sales Pilot account yet.",
+
+            timestamp:
+              new Date(),
+          },
+        ]
+      );
 
       return;
     }
@@ -259,28 +547,33 @@ export default function WidgetPreview({
     const userMessage =
       message.trim();
 
+    const imageToSend =
+      selectedImage;
+
     // ---------------------------------------------------
-    // ADD CUSTOMER MESSAGE
+    // CUSTOMER MESSAGE TEXT
     // ---------------------------------------------------
 
-    const customerMessage: Message = {
-      id:
-        `customer-${Date.now()}`,
+    let customerContent =
+      userMessage;
 
-      sender: "customer",
+    if (
+      imageToSend &&
+      !customerContent
+    ) {
+      customerContent =
+        "I uploaded a product image. Can you find this product?";
+    }
 
-      content:
-        userMessage,
-
-      timestamp: new Date(),
-    };
-
-    setMessages((previous) => [
-      ...previous,
-      customerMessage,
-    ]);
+    // ---------------------------------------------------
+    // CLEAR TEXT INPUT
+    // ---------------------------------------------------
 
     setMessage("");
+
+    // ---------------------------------------------------
+    // START LOADING
+    // ---------------------------------------------------
 
     setLoading(true);
 
@@ -309,18 +602,89 @@ export default function WidgetPreview({
       );
 
       console.log(
+        "IMAGE:",
+        imageToSend
+          ? {
+              name:
+                imageToSend.name,
+
+              type:
+                imageToSend.type,
+
+              size:
+                imageToSend.size,
+            }
+          : null
+      );
+
+      console.log(
         "================================="
+      );
+      // =================================================
+      // CONVERT IMAGE TO BASE64
+      // =================================================
+
+      let imageData: string | null = null;
+
+      if (imageToSend) {
+        console.log("CONVERTING IMAGE TO BASE64...");
+
+        imageData = await fileToDataUrl(imageToSend);
+
+        console.log("IMAGE CONVERTED");
+
+        console.log("IMAGE DATA LENGTH:", imageData.length);
+      }
+
+      // ---------------------------------------------------
+      // ADD CUSTOMER MESSAGE (with the actual image)
+      // ---------------------------------------------------
+
+      const customerMessage: Message = {
+        id: `customer-${Date.now()}`,
+
+        sender: "customer",
+
+        content: customerContent,
+
+        imageUrl: imageData || undefined,
+
+        timestamp: new Date(),
+      };
+
+      setMessages(
+        (previous) => [
+          ...previous,
+          customerMessage,
+        ]
       );
 
       // ---------------------------------------------------
-      // CALL EXISTING CHAT API
+      // CLEAR PENDING IMAGE (kept only as imageUrl on message)
       // ---------------------------------------------------
+
+      setSelectedImage(null);
+
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+
+      setImagePreview(null);
+
+      if (imageInputRef.current) {
+        imageInputRef.current.value = "";
+      }
+
+      // =================================================
+      // SEND TO CHAT API
+      // =================================================
 
       const response =
         await fetch(
           "/api/chat",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
@@ -329,27 +693,58 @@ export default function WidgetPreview({
 
             body:
               JSON.stringify({
+                // ---------------------------------------
+                // MESSAGE
+                // ---------------------------------------
+
                 message:
-                  userMessage,
+                  userMessage ||
+                  "Find this product from the image.",
+
+                // ---------------------------------------
+                // PROFILE
+                // ---------------------------------------
 
                 profileId,
+
+                // ---------------------------------------
+                // SESSION
+                // ---------------------------------------
 
                 visitorSessionId:
                   visitorSessionId ||
                   null,
+
+                // ---------------------------------------
+                // CUSTOMER
+                // ---------------------------------------
 
                 customerName:
                   "Widget Preview",
 
                 customerEmail:
                   null,
+
+                // ---------------------------------------
+                // IMAGE
+                // ---------------------------------------
+
+                imageData,
+
+                imageName:
+                  imageToSend?.name ||
+                  null,
+
+                imageType:
+                  imageToSend?.type ||
+                  null,
               }),
           }
         );
 
-      // ---------------------------------------------------
+      // =================================================
       // RESPONSE
-      // ---------------------------------------------------
+      // =================================================
 
       let data: any =
         null;
@@ -358,7 +753,8 @@ export default function WidgetPreview({
         data =
           await response.json();
       } catch {
-        data = null;
+        data =
+          null;
       }
 
       console.log(
@@ -371,11 +767,13 @@ export default function WidgetPreview({
         data
       );
 
-      // ---------------------------------------------------
+      // =================================================
       // ERROR
-      // ---------------------------------------------------
+      // =================================================
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         throw new Error(
           data?.error ||
             data?.message ||
@@ -383,9 +781,9 @@ export default function WidgetPreview({
         );
       }
 
-      // ---------------------------------------------------
+      // =================================================
       // SAVE SESSION
-      // ---------------------------------------------------
+      // =================================================
 
       if (
         data?.visitorSessionId &&
@@ -405,9 +803,9 @@ export default function WidgetPreview({
         );
       }
 
-      // ---------------------------------------------------
+      // =================================================
       // AI RESPONSE
-      // ---------------------------------------------------
+      // =================================================
 
       const aiResponse =
         String(
@@ -415,24 +813,58 @@ export default function WidgetPreview({
             "I'm sorry, I couldn't find an answer."
         ).trim();
 
-      const aiMessage: Message = {
+      const rawProducts =
+        Array.isArray(data?.products)
+          ? data.products
+          : Array.isArray(data?.productCards)
+            ? data.productCards
+            : [];
+
+      const productData = rawProducts
+        .map((entry: any) => ({
+          id: entry.id || undefined,
+          name: entry.displayName || entry.name || entry.title || "",
+          title: entry.title || entry.name || entry.displayName || "",
+          price: entry.displayPrice || entry.price || "",
+          currency: entry.currency || "",
+          imageUrl: entry.imageUrl || entry.image || "",
+          image: entry.image || entry.imageUrl || "",
+          productUrl: entry.productUrl || entry.viewUrl || entry.url || "",
+          url: entry.url || entry.productUrl || entry.viewUrl || "",
+          viewUrl: entry.viewUrl || entry.productUrl || entry.url || "",
+          available: typeof entry.available === "boolean" ? entry.available : null,
+          availabilityLabel: entry.availabilityLabel || "",
+        }))
+        .filter((p: { name?: string }) => p.name);
+
+      const aiMessage:
+        Message = {
         id:
           `ai-${Date.now()}`,
 
-        sender: "ai",
+        sender:
+          "ai",
 
         content:
           aiResponse,
 
+        products:
+          productData,
+        imageMatch:
+          data?.imageMatch || null,
+
         timestamp:
           new Date(),
       };
-
-      setMessages((previous) => [
-        ...previous,
-        aiMessage,
-      ]);
-    } catch (error) {
+      setMessages(
+        (previous) => [
+          ...previous,
+          aiMessage,
+        ]
+      );
+    } catch (
+      error
+    ) {
       console.error(
         "WIDGET PREVIEW CHAT ERROR:",
         error
@@ -443,52 +875,74 @@ export default function WidgetPreview({
           ? error.message
           : "Something went wrong.";
 
+      console.error(
+        "ERROR MESSAGE:",
+        errorMessage
+      );
+
       let userFacingError =
         "I'm sorry, something went wrong. Please try again.";
 
+      const normalizedError =
+        errorMessage
+          .toLowerCase();
+
       if (
-        errorMessage
-          .toLowerCase()
-          .includes("billing") ||
-        errorMessage
-          .toLowerCase()
-          .includes("subscription")
+        normalizedError.includes(
+          "billing"
+        ) ||
+        normalizedError.includes(
+          "subscription"
+        )
       ) {
         userFacingError =
           "This Sales Pilot account does not have an active billing subscription.";
       } else if (
-        errorMessage
-          .toLowerCase()
-          .includes("knowledge")
+        normalizedError.includes(
+          "knowledge"
+        )
       ) {
         userFacingError =
           "I couldn't access the store knowledge base right now.";
       } else if (
-        errorMessage
-          .toLowerCase()
-          .includes("profile")
+        normalizedError.includes(
+          "profile"
+        )
       ) {
         userFacingError =
           "This widget is not connected to a valid Sales Pilot account.";
+      } else if (
+        normalizedError.includes(
+          "image"
+        )
+      ) {
+        userFacingError =
+          "I couldn't process that image. Please try another JPG, PNG, or WEBP image.";
       }
 
-      setMessages((previous) => [
-        ...previous,
-        {
-          id:
-            `error-${Date.now()}`,
+      setMessages(
+        (previous) => [
+          ...previous,
 
-          sender: "ai",
+          {
+            id:
+              `error-${Date.now()}`,
 
-          content:
-            userFacingError,
+            sender:
+              "ai",
 
-          timestamp:
-            new Date(),
-        },
-      ]);
+            content:
+              userFacingError,
+
+            timestamp:
+              new Date(),
+          },
+        ]
+      );
     } finally {
-      setLoading(false);
+      setLoading(
+        false
+      );
     }
   }
 
@@ -558,20 +1012,22 @@ export default function WidgetPreview({
 
     return (
       <div
-        className={`flex ${
+        className={`flex w-full min-w-0 ${
           isAI
             ? "justify-start"
             : "justify-end"
         }`}
       >
         <div
-          className={`flex max-w-[88%] gap-2.5 ${
+          className={`flex w-full max-w-[88%] min-w-0 gap-2.5 ${
             isAI
               ? "items-start"
               : "items-end"
           }`}
         >
-          {/* AI AVATAR */}
+          {/* =================================================
+              AI AVATAR
+          ================================================= */}
 
           {isAI &&
             showAiAvatar && (
@@ -589,6 +1045,7 @@ export default function WidgetPreview({
                 style={{
                   backgroundColor:
                     `${brandColor}18`,
+
                   color:
                     brandColor,
                 }}
@@ -599,8 +1056,10 @@ export default function WidgetPreview({
               </div>
             )}
 
-          <div>
-            {/* MESSAGE */}
+          <div className="min-w-0 w-full max-w-full">
+            {/* =================================================
+                MESSAGE
+            ================================================= */}
 
             <div
               className={`
@@ -627,6 +1086,23 @@ export default function WidgetPreview({
                   : undefined
               }
             >
+              {/* CUSTOMER UPLOADED IMAGE */}
+              {!isAI && msg.imageUrl && (
+                <img
+                  src={msg.imageUrl}
+                  alt="Uploaded image"
+                  className="
+                    mb-2
+                    block
+                    max-h-[140px]
+                    max-w-[120px]
+                    rounded-xl
+                    object-contain
+                    border
+                    border-black/10
+                  "
+                />
+              )}
               <p className="whitespace-pre-wrap break-words">
                 {text}
               </p>
@@ -667,7 +1143,188 @@ export default function WidgetPreview({
               )}
             </div>
 
-            {/* TIME */}
+              {/* =================================================
+                  PRODUCT CARDS
+              ================================================= */}
+
+              {isAI &&
+                Array.isArray(msg.products) &&
+                msg.products.length > 0 && (
+                <div className="mt-2 w-full max-w-full space-y-2">
+                  {msg.imageMatch &&
+                    (msg.imageMatch.matchType === "similar" ||
+                     msg.imageMatch.matchType === "no_match") && (
+                    <p
+                      className={`
+                        text-xs
+                        font-semibold
+                        uppercase
+                        tracking-wide
+                        ${
+                          isDark
+                            ? "text-slate-400"
+                            : "text-slate-500"
+                        }
+                      `}
+                    >
+                      Similar options
+                    </p>
+                  )}
+                  {msg.products.map(
+                    (product, idx) => {
+                      const name =
+                        product.title ||
+                          product.name ||
+                          "";
+
+                      const price =
+                        product.price ||
+                          product.displayPrice ||
+                          "";
+
+                      const productUrl =
+                        product.productUrl ||
+                          product.viewUrl ||
+                          product.url ||
+                          "";
+
+                      const imageUrl =
+                        product.imageUrl ||
+                          product.image ||
+                          "";
+
+                      const isAvailable =
+                        product.available;
+
+                      const availabilityText =
+                        product.availabilityLabel ||
+                        (isAvailable === true
+                          ? "In stock"
+                          : isAvailable === false
+                            ? "Out of stock"
+                            : "");
+
+                      return (
+                        <div
+                          key={`${name}-${idx}`}
+                          className={`
+                            flex
+                            items-center
+                            gap-3
+                            min-w-0
+                            w-full
+                            max-w-full
+                            overflow-hidden
+                            rounded-xl
+                            border
+                            p-2.5
+                            ${
+                              isDark
+                                ? "border-slate-700 bg-slate-800"
+                                : "border-slate-200 bg-white"
+                            }
+                          `}
+                        >
+                          {imageUrl && (
+                            <img
+                              src={imageUrl}
+                              alt={name}
+                              className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                            />
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={`
+                                break-words
+                                text-sm
+                                font-semibold
+                                ${
+                                  isDark
+                                    ? "text-slate-100"
+                                    : "text-slate-800"
+                                }
+                              `}
+                            >
+                              {name}
+                            </p>
+
+                            {price && (
+                              <p
+                                className={`
+                                  mt-0.5
+                                  text-sm
+                                  ${
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-500"
+                                  }
+                                `}
+                              >
+                                {price}
+                              </p>
+                            )}
+
+                            {typeof isAvailable === "boolean" && (
+                              <span
+                                className={`
+                                  inline-block
+                                  text-xs
+                                  font-medium
+                                  ${
+                                    isAvailable
+                                      ? "text-emerald-600"
+                                      : "text-red-500"
+                                  }
+                                `}
+                              >
+                                {availabilityText ||
+                                  (isAvailable ? "In stock" : "Out of stock")}
+                              </span>
+                            )}
+                          </div>
+
+                          {productUrl && (
+                            <a
+                              href={productUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                backgroundColor:
+                                  brandColor,
+                              }}
+                              className="
+                                inline-flex
+                                shrink-0
+                                items-center
+                                gap-1.5
+                                rounded-lg
+                                px-3
+                                py-2
+                                text-xs
+                                font-semibold
+                                text-white
+                                transition
+                                hover:opacity-90
+                              "
+                            >
+                              View Product
+
+                              <ExternalLink
+                                size={14}
+                              />
+                            </a>
+                          )}
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              )}
+
+            {/* =================================================
+                TIME
+            ================================================= */}
 
             {mounted && (
               <div
@@ -692,6 +1349,7 @@ export default function WidgetPreview({
                   {
                     hour:
                       "numeric",
+
                     minute:
                       "2-digit",
                   }
@@ -709,7 +1367,9 @@ export default function WidgetPreview({
             )}
           </div>
 
-          {/* CUSTOMER AVATAR */}
+          {/* =================================================
+              CUSTOMER AVATAR
+          ================================================= */}
 
           {!isAI && (
             <div
@@ -726,6 +1386,7 @@ export default function WidgetPreview({
               style={{
                 backgroundColor:
                   `${brandColor}18`,
+
                 color:
                   brandColor,
               }}
@@ -814,7 +1475,9 @@ export default function WidgetPreview({
           dark:bg-slate-900
         "
       >
-        {/* WEBSITE BACKGROUND */}
+        {/* =================================================
+            WEBSITE BACKGROUND
+        ================================================= */}
 
         <div className="absolute inset-0 opacity-50">
           <div className="absolute left-8 top-8 h-24 w-48 rounded-xl bg-white dark:bg-slate-800" />
@@ -824,7 +1487,9 @@ export default function WidgetPreview({
           <div className="absolute bottom-10 left-12 h-40 w-64 rounded-xl bg-white dark:bg-slate-800" />
         </div>
 
-        {/* WIDGET */}
+        {/* =================================================
+            WIDGET
+        ================================================= */}
 
         <div
           className={`
@@ -883,7 +1548,7 @@ export default function WidgetPreview({
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
 
                 <span>
-                  Online · AI Support
+                  Online Â· AI Support
                 </span>
               </div>
             </div>
@@ -910,7 +1575,9 @@ export default function WidgetPreview({
               {messages.map(
                 (msg) => (
                   <div
-                    key={msg.id}
+                    key={
+                      msg.id
+                    }
                   >
                     {renderMessage(
                       msg
@@ -940,6 +1607,7 @@ export default function WidgetPreview({
                         style={{
                           backgroundColor:
                             `${brandColor}18`,
+
                           color:
                             brandColor,
                         }}
@@ -966,7 +1634,9 @@ export default function WidgetPreview({
                     >
                       <div className="flex items-center gap-1.5">
                         {[0, 1, 2].map(
-                          (item) => (
+                          (
+                            item
+                          ) => (
                             <span
                               key={
                                 item
@@ -975,6 +1645,7 @@ export default function WidgetPreview({
                               style={{
                                 backgroundColor:
                                   brandColor,
+
                                 animationDelay:
                                   `${item * 120}ms`,
                               }}
@@ -995,7 +1666,7 @@ export default function WidgetPreview({
           </div>
 
           {/* =================================================
-              INPUT
+              INPUT AREA
           ================================================= */}
 
           <div
@@ -1010,7 +1681,130 @@ export default function WidgetPreview({
               }
             `}
           >
+            {/* =================================================
+                IMAGE PREVIEW
+            ================================================= */}
+
+            {imagePreview && (
+              <div className="mb-2 flex items-start">
+                <div className="relative">
+                  <img
+                    src={
+                      imagePreview
+                    }
+                    alt="Selected product"
+                    className="
+                      h-20
+                      w-20
+                      rounded-xl
+                      border
+                      border-slate-200
+                      object-cover
+                      shadow-sm
+                    "
+                  />
+
+                  <button
+                    type="button"
+                    onClick={
+                      removeSelectedImage
+                    }
+                    disabled={
+                      loading
+                    }
+                    className="
+                      absolute
+                      -right-2
+                      -top-2
+                      flex
+                      h-6
+                      w-6
+                      items-center
+                      justify-center
+                      rounded-full
+                      bg-slate-900
+                      text-white
+                      shadow
+                      transition
+                      hover:bg-slate-700
+                      disabled:cursor-not-allowed
+                      disabled:opacity-50
+                    "
+                    aria-label="Remove image"
+                  >
+                    <X
+                      size={13}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* =================================================
+                INPUT ROW
+            ================================================= */}
+
             <div className="flex items-end gap-2">
+              {/* =================================================
+                  HIDDEN FILE INPUT
+              ================================================= */}
+
+              <input
+                ref={
+                  imageInputRef
+                }
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={
+                  handleImageSelect
+                }
+                className="hidden"
+              />
+
+              {/* =================================================
+                  IMAGE BUTTON
+              ================================================= */}
+
+              <button
+                type="button"
+                onClick={
+                  openImageSelector
+                }
+                disabled={
+                  loading ||
+                  !profileId
+                }
+                className="
+                  flex
+                  h-12
+                  w-12
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  border
+                  border-slate-200
+                  bg-slate-50
+                  text-slate-500
+                  shadow-sm
+                  transition
+                  hover:bg-slate-100
+                  hover:text-slate-700
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+                aria-label="Upload product image"
+                title="Upload product image"
+              >
+                <ImageIcon
+                  size={19}
+                />
+              </button>
+
+              {/* =================================================
+                  TEXT INPUT
+              ================================================= */}
+
               <div
                 className={`
                   flex
@@ -1047,9 +1841,11 @@ export default function WidgetPreview({
                     !profileId
                   }
                   placeholder={
-                    profileId
-                      ? "Ask me anything..."
-                      : "Connecting to Sales Pilot..."
+                    imagePreview
+                      ? "Ask about this product..."
+                      : profileId
+                        ? "Ask me anything..."
+                        : "Connecting to Sales Pilot..."
                   }
                   className={`
                     w-full
@@ -1065,6 +1861,10 @@ export default function WidgetPreview({
                 />
               </div>
 
+              {/* =================================================
+                  SEND BUTTON
+              ================================================= */}
+
               <button
                 type="button"
                 onClick={
@@ -1072,7 +1872,10 @@ export default function WidgetPreview({
                 }
                 disabled={
                   loading ||
-                  !message.trim() ||
+                  (
+                    !message.trim() &&
+                    !selectedImage
+                  ) ||
                   !profileId
                 }
                 style={{
@@ -1101,6 +1904,10 @@ export default function WidgetPreview({
                 />
               </button>
             </div>
+
+            {/* =================================================
+                POWERED BY
+            ================================================= */}
 
             {showPoweredBy && (
               <div

@@ -1,5 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import { authenticateShopifyRequest } from "./auth";
+import { upsertProductVisualIndex } from "@/lib/products/visualIndex";
 
 const SHOPIFY_API_VERSION = "2026-07";
 
@@ -14,6 +15,14 @@ const PRODUCTS_QUERY = `
         status
         productType
         vendor
+
+        images(first: 20) {
+          nodes {
+            id
+            src
+            altText
+          }
+        }
 
         variants(first: 100) {
           nodes {
@@ -76,6 +85,16 @@ type ProductsData = {
       status: string;
       productType: string | null;
       vendor: string | null;
+      images:
+        | {
+            nodes: Array<{
+              id: string;
+              src: string;
+              altText: string | null;
+            }>;
+          }
+        | null
+        | undefined;
       variants: {
         nodes: Array<{
           id: string;
@@ -243,7 +262,7 @@ export async function syncShopifyStore(
         onConflict: "shop_domain",
       }
     )
-    .select("id, shop_domain")
+    .select("id, user_id, shop_domain")
     .single();
 
   if (storeError) {
@@ -290,6 +309,15 @@ export async function syncShopifyStore(
         data: {
           variants:
             product.variants.nodes,
+
+          images:
+            (product.images?.nodes || []).map(
+              (img) => ({
+                src: img.src,
+                url: img.src,
+                altText: img.altText,
+              })
+            ),
         },
 
         updated_at:
@@ -310,6 +338,23 @@ export async function syncShopifyStore(
         `Failed to save products: ${productsError.message}`
       );
     }
+  }
+
+  // ---------------------------------------------------------
+  // 4b. Index product images for visual matching
+  // ---------------------------------------------------------
+  // Best-effort, non-blocking: failures never fail the sync.
+  for (const product of products) {
+    await upsertProductVisualIndex(supabase, {
+      ...product,
+      store_id: store.id,
+    }, {
+      userId: store.user_id,
+      storeId: store.id,
+      source: "shopify",
+    }).catch((e) => {
+      console.error("PRODUCT VISUAL INDEX ERROR:", e?.message || e);
+    });
   }
 
   // ---------------------------------------------------------
@@ -420,3 +465,5 @@ export async function syncShopifyStore(
       `Shopify sync completed successfully. ${products.length} products and ${orders.length} orders synchronized.`,
   };
 }
+
+

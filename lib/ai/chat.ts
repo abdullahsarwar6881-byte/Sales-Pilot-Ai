@@ -1,458 +1,324 @@
-// =====================================================
-// OPENAI CHAT CONFIG
-// =====================================================
-
-const OPENAI_API_URL =
-  "https://api.openai.com/v1/responses";
-
-const MODEL =
-  process.env.OPENAI_CHAT_MODEL ??
-  "gpt-5-mini";
+import { completeAi } from "@/lib/ai/provider";
 
 // =====================================================
-// TIMEOUT
+// SALES PILOT — OPENAI CHAT RESPONSE ENGINE
+// =====================================================
+//
+// Purpose:
+// - Generate natural, professional customer-facing replies.
+// - Use only verified store information supplied by the caller.
+// - Never invent products, prices, orders, policies, stock, or URLs.
+// - Keep the function signature compatible with the existing route.ts:
+//     chatWithAI(question, context)
+// =====================================================
+
+
+// =====================================================
+// CONFIG
 // =====================================================
 
 const TIMEOUT = 60000;
 
+// A little more room than the old 500-token limit so the
+// model can answer naturally when products/orders are involved.
+const MAX_OUTPUT_TOKENS = 700;
+
+// Keep the context bounded so one very large scraped page or
+// conversation cannot overwhelm the response model.
+const MAX_CONTEXT_CHARS = 12000;
+
+// Keep an individual customer message bounded as well.
+const MAX_QUESTION_CHARS = 4000;
+
 // =====================================================
-// OUTPUT LIMIT
+// TEXT HELPERS
 // =====================================================
 
-const MAX_OUTPUT_TOKENS = 500;
-
-// =====================================================
-// CLEAN TEXT
-// =====================================================
-
-function cleanText(text: string) {
-  return String(text || "")
+function cleanText(text: unknown): string {
+  return String(text ?? "")
     .replace(/\u0000/g, "")
-    .replace(/\s+/g, " ")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
+function limitQuestion(question: unknown): string {
+  return cleanText(question).slice(0, MAX_QUESTION_CHARS);
+}
+
+function limitContext(context: unknown): string {
+  return cleanText(context).slice(0, MAX_CONTEXT_CHARS);
+}
+
 // =====================================================
-// LIMIT CONTEXT
+// RESPONSE CLEANING
+// =====================================================
+//
+// The model should normally return clean customer-facing text.
+// These safeguards remove accidental prompt leakage or wrapper
+// text without destroying useful content.
 // =====================================================
 
-function limitContext(context: string) {
-  return cleanText(context).slice(0, 6000);
+function cleanModelResponse(text: unknown): string {
+  let result = cleanText(text);
+
+  if (!result) {
+    return "";
+  }
+
+  // Remove accidental answer wrappers.
+  result = result.replace(
+    /^(answer|assistant|sales pilot)\s*:\s*/i,
+    ""
+  );
+
+  // Never expose internal prompt/context labels.
+  result = result.replace(
+    /\b(store information|customer question|internal context|system prompt)\s*:\s*/gi,
+    ""
+  );
+
+  // Strip any raw product/page URLs from prose. Product links are supplied
+  // to the UI as structured product cards, never pasted into the message.
+  result = result.replace(
+    /https?:\/\/[^\s<>"')]+/gi,
+    ""
+  );
+
+  // Remove leftover "View Product"/URL scaffolding text.
+  // These tokens are removed verbatim; surrounding whitespace is preserved
+  // so normal words are never glued together.
+  result = result.replace(
+    /\[?\s*view\s*(?:product|it here)?\s*\]?\s*:?\s*\[?/gi,
+    ""
+  );
+
+  // Collapse any double spaces created when scaffolding is removed.
+  result = result.replace(/ {2,}/g, " ");
+
+  // Trim generic AI filler.
+  result = result.replace(
+    /\b(great question!|i'd be happy to help(?: you)?!|thanks for asking!|that's a great question!|i found a great option for you)\b/gi,
+    ""
+  );
+
+  // Avoid excessive blank lines.
+  result = result
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // Conservative length safety net: responses should stay short.
+  // If the model produced many loose paragraphs that are not an explicit
+  // numbered/bulleted step list, keep the first two paragraphs so the
+  // answer stays concise without cutting useful content.
+  const paragraphs = result
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length > 2) {
+    const looksLikeList =
+      paragraphs.some(
+        (part) =>
+          /^\s*(?:\d+[.)]|[-*])\s+/m.test(part) && part.split("\n").length <= 4
+      );
+
+    if (!looksLikeList) {
+      result = paragraphs.slice(0, 2).join("\n\n");
+    }
+  }
+
+  // Never send a completely empty response.
+  result = result.trim();
+
+  return result;
 }
+
+// =====================================================
+// EXTRACT RESPONSES API TEXT
+// =====================================================
+
+function extractOutputText(data: any): string {
+  if (
+    typeof data?.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+    return data.output_text.trim();
+  }
+
+  if (!Array.isArray(data?.output)) {
+    return "";
+  }
+
+  const parts: string[] = [];
+
+  for (const outputItem of data.output) {
+    if (!Array.isArray(outputItem?.content)) {
+      continue;
+    }
+
+    for (const contentItem of outputItem.content) {
+      if (
+        contentItem?.type === "output_text" &&
+        typeof contentItem?.text === "string"
+      ) {
+        parts.push(contentItem.text);
+      }
+    }
+  }
+
+  return parts.join("\n").trim();
+}
+
+// =====================================================
+// AI INSTRUCTIONS
+// =====================================================
+//
+// IMPORTANT:
+// This is intentionally separate from the customer input.
+// The Responses API supports an instructions field, which makes
+// the system behavior clearer than putting everything into one
+// large customer-facing prompt.
+// =====================================================
+
+const SALES_PILOT_INSTRUCTIONS = `
+You are Sales Pilot, a professional AI sales and customer-support employee for a merchant.
+
+Your job is to communicate with customers naturally, accurately, confidently, and helpfully, behaving like an intelligent sales employee rather than a defensive database assistant.
+
+The website may be an ecommerce store, a retail brand, a service business, or any other website. Adapt to the specific business described in the verified information, and represent the merchant directly.
+
+CORE PRINCIPLE:
+Use verified information from the provided store context. Never invent facts.
+
+MERCHANT VOICE:
+- Always speak from the merchant's perspective: "our collection", "our products", "we offer", "I'd be happy to help you find", "let me help you find the right option".
+- NEVER speak as a detached third party. Avoid phrases like "in this store", "this store", "the database does not contain", "I don't have access to", or "I cannot verify" as an opening response.
+
+TRUTH AND FACTUAL GROUNDING:
+- Never invent products, product names, prices, currencies, discounts, stock, variants, sizes, colors, features, shipping times, delivery dates, return rules, refund rules, order status, tracking information, customer information, or URLs.
+- Do NOT automatically make exaggerated marketing claims such as "finest luxury quality" or "best quality" unless those claims are explicitly supported by merchant knowledge or product descriptions.
+- Never guess a missing price or URL.
+- Never turn an internal ID into a customer-facing URL.
+- Never claim an action was completed unless the provided context explicitly confirms that it was completed.
+
+SALES INTELLIGENCE — GENERAL INQUIRIES:
+- When a customer asks a general question about materials, fabrics, craftsmanship, or collection details (e.g. "What material do you use in clothing?", "What fabrics do you offer?"):
+  * Do NOT give a defensive database disclaimer such as "I don't have verified details on the fabrics used across our collection."
+  * Explain warmly and confidently that our materials and specifications vary depending on the article and design.
+  * Proactively guide the customer to explore: invite them to share a specific product or tell you the style/fabric they prefer so you can check available details (such as fabric, embroidery, print, cut, and specifications).
+  * Example: "Our materials vary depending on the article and design, and I'd be happy to help you find something that suits what you're looking for. If you share a product or tell me the style you prefer, I can check the available details such as fabric, embroidery, print, and other specifications."
+
+SALES INTELLIGENCE — PRODUCT-SPECIFIC INQUIRIES:
+- When verified product data is available, actively use it to sell intelligently.
+- Transform verified product details into natural, engaging, and helpful sales language rather than dryly dumping specifications.
+- Example: "This article is a 3-piece unstitched lawn outfit with embroidered detailing. The lawn fabric makes it a great option for customers looking for a lightweight and elegant style."
+- Intelligently handle fabric, quality, style, suitability, availability, price comparisons, and color preferences using verified information.
+
+OBJECTION HANDLING:
+- When a customer says "I don't like this", "show me something else", or expresses hesitation:
+  * Do not end the conversation or sound defensive.
+  * Maintain the context of what product they are reacting to.
+  * Acknowledge gracefully and helpfully without being pushy: ask what they would prefer different (different color, design, fabric, cut, price range, or detailing).
+  * Example: "No problem — I can help you find something closer to your style. Would you prefer a different color, design, fabric, price range, or something with more or less embroidery?"
+  * Proactively introduce any alternative options shown in the conversation.
+
+CONVERSATION BEHAVIOR:
+- Behave like a capable in-store sales associate, not a search engine.
+- Understand conversational wording, spelling mistakes, short follow-ups, and references such as "the first one", "that dress", "it", "this one", and "how much is it".
+- Use the conversation/context supplied by the caller to resolve references.
+- Do not ask the customer to repeat information that is already clearly present in the supplied context.
+- If a clarification is genuinely required, ask one concise question.
+
+TONE:
+- Warm, professional, concise, confident, and helpful.
+- Sound natural and human.
+- Avoid robotic phrases such as "Based on the information provided" or "According to the context".
+- Do not say "I am an AI".
+- Do not mention "knowledge base", "database", "documents", "sources", "system", "tools", or "model".
+- Do not over-apologize.
+- Prefer natural contractions such as "I'll", "that's", and "we've" when appropriate.
+
+ANSWER LENGTH:
+- Default to SHORT responses: 1-3 short sentences for simple questions.
+- Product searches: a short line plus the product cards already shown.
+- Product recommendations: a one-line reason for each selected product.
+- Problem/support questions: direct solution first, then a couple of short steps only if needed.
+- Only expand into longer answers when the customer explicitly asks for detail.
+
+PRODUCT RESPONSES & LINKS:
+- When products are provided, use their exact names and exact price/currency.
+- In normal responses, do not paste raw URLs; product links are displayed as structured product cards and buttons.
+- HOWEVER, when the customer EXPLICITLY asks for the link ("give me the link", "send me the link", "where can I buy it"), you MUST include the exact verified product URL from the supplied product data on its own line (e.g. "You can view it here: <URL>"). Never invent or reconstruct a URL; only use a URL literally present in the supplied verified data.
+- If multiple products are supplied, present the strongest matches first.
+
+MISSING INFORMATION:
+- When specific information genuinely cannot be found after checking the available data, provide a warm, helpful response:
+  "I don't have the exact details on that for our collection, but I'd be happy to help you check a specific article or explore our available options."
+- Never sound detached or robotic.
+
+FINAL RESPONSE:
+Return ONLY the customer-facing response.
+Do not add "Answer:".
+Do not add internal notes.
+Do not describe your reasoning.
+`.trim();
 
 // =====================================================
 // CHAT WITH OPENAI
 // =====================================================
 
+export interface ChatWithAIOptions {
+  /** Extra verified website facts (name, URL, capabilities) for universal adaptation. */
+  websiteContext?: string;
+  /** Optional base64 image data URL for vision-capable models. */
+  imageDataUrl?: string | null;
+}
+
+// =====================================================
+// CHAT WITH AI (via the extensible provider layer)
+// =====================================================
+
 export async function chatWithAI(
   question: string,
-  context: string
-) {
-  const cleanQuestion =
-    cleanText(question);
+  context: string,
+  options: ChatWithAIOptions = {}
+): Promise<string> {
+  const cleanQuestion = limitQuestion(question);
+  const cleanContext = limitContext(context);
+  const cleanSiteContext = cleanText(options.websiteContext).slice(0, 2000);
 
-  const cleanContext =
-    limitContext(context);
-
-  // ===================================================
-  // API KEY
-  // ===================================================
-
-  const apiKey =
-    process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY is not configured."
-    );
+  if (!cleanQuestion) {
+    throw new Error("Customer question is empty.");
   }
 
-  // ===================================================
-  // PROMPT
-  // ===================================================
-
-  const prompt = `
-You are Sales Pilot, a professional ecommerce customer support employee.
-
-Answer the customer using ONLY the store information provided below.
-
-RULES:
-
-1. Never invent information.
-
-2. Never invent:
-- Products
-- Prices
-- Discounts
-- Stock
-- Features
-- Shipping rules
-- Return rules
-- Refund rules
-- URLs
-
-3. If a product URL exists in the store information, use the exact URL.
-
-4. Never create or guess a URL.
-
-5. Never mention:
-- AI
-- Knowledge base
-- Documents
-- Context
-- Sources
-- Internal systems
-
-6. Speak naturally like a real store employee.
-
-7. Keep the answer short and useful.
-
-8. Normally answer in 1-3 sentences.
-
-9. If the customer asks what the store offers, summarize the actual products or services found in the store information.
-
-10. If the information is unavailable, say:
-"I couldn't find that information in this store's information."
-
-STORE INFORMATION:
-
-${cleanContext}
-
-CUSTOMER QUESTION:
-
-${cleanQuestion}
-
-ANSWER:
-`.trim();
-
-  // ===================================================
-  // ABORT CONTROLLER
-  // ===================================================
-
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(() => {
-      controller.abort();
-    }, TIMEOUT);
-
-  const startedAt =
-    Date.now();
-
-  try {
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "OPENAI CHAT START"
-    );
-
-    console.log(
-      "MODEL:",
-      MODEL
-    );
-
-    console.log(
-      "QUESTION:",
-      cleanQuestion
-    );
-
-    console.log(
-      "CONTEXT LENGTH:",
-      cleanContext.length
-    );
-
-    console.log(
-      "PROMPT LENGTH:",
-      prompt.length
-    );
-
-    console.log(
-      "MAX OUTPUT TOKENS:",
-      MAX_OUTPUT_TOKENS
-    );
-
-    // =================================================
-    // OPENAI REQUEST
-    // =================================================
-
-    const response =
-      await fetch(
-        OPENAI_API_URL,
-        {
-          method: "POST",
-
-          signal:
-            controller.signal,
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Authorization:
-              `Bearer ${apiKey}`,
-          },
-
-          body: JSON.stringify({
-            model: MODEL,
-
-            input: prompt,
-
-            store: false,
-
-            // Keep reasoning small so the model
-            // has enough tokens to produce the
-            // actual customer-facing answer.
-            reasoning: {
-              effort: "low",
-            },
-
-            max_output_tokens:
-              MAX_OUTPUT_TOKENS,
-          }),
-        }
-      );
-
-    clearTimeout(timeout);
-
-    // =================================================
-    // READ RESPONSE
-    // =================================================
-
-    const responseText =
-      await response.text();
-
-    // =================================================
-    // API ERROR
-    // =================================================
-
-    if (!response.ok) {
-      console.error(
-        "OPENAI API STATUS:",
-        response.status
-      );
-
-      console.error(
-        "OPENAI API ERROR:",
-        responseText
-      );
-
-      let errorMessage =
-        `OpenAI returned ${response.status}.`;
-
-      try {
-        const errorData =
-          JSON.parse(
-            responseText
-          );
-
-        errorMessage =
-          errorData?.error?.message ||
-          errorMessage;
-      } catch {
-        // Response was not JSON.
-      }
-
-      throw new Error(
-        errorMessage
-      );
-    }
-
-    // =================================================
-    // PARSE RESPONSE
-    // =================================================
-
-    let data: any;
-
-    try {
-      data =
-        JSON.parse(
-          responseText
-        );
-    } catch {
-      throw new Error(
-        "OpenAI returned invalid JSON."
-      );
-    }
-
-    // =================================================
-    // LOG RESPONSE STATUS
-    // =================================================
-
-    console.log(
-      "OPENAI STATUS:",
-      data?.status
-    );
-
-    if (
-      data?.incomplete_details
-    ) {
-      console.warn(
-        "OPENAI INCOMPLETE:",
-        data.incomplete_details
-      );
-    }
-
-    // =================================================
-    // GET OUTPUT TEXT
-    // =================================================
-
-    let result = "";
-
-    // Preferred Responses API field.
-
-    if (
-      typeof data?.output_text ===
-      "string"
-    ) {
-      result =
-        data.output_text.trim();
-    }
-
-    // =================================================
-    // FALLBACK OUTPUT EXTRACTION
-    // =================================================
-
-    if (
-      !result &&
-      Array.isArray(
-        data?.output
-      )
-    ) {
-      const textParts: string[] =
-        [];
-
-      for (
-        const outputItem of
-          data.output
-      ) {
-        if (
-          !Array.isArray(
-            outputItem?.content
-          )
-        ) {
-          continue;
-        }
-
-        for (
-          const contentItem of
-            outputItem.content
-        ) {
-          if (
-            contentItem?.type ===
-              "output_text" &&
-            typeof contentItem?.text ===
-              "string"
-          ) {
-            textParts.push(
-              contentItem.text
-            );
-          }
-        }
-      }
-
-      result =
-        textParts
-          .join("\n")
-          .trim();
-    }
-
-    // =================================================
-    // DURATION
-    // =================================================
-
-    const duration =
-      Date.now() -
-      startedAt;
-
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "OPENAI CHAT COMPLETED"
-    );
-
-    console.log(
-      `OPENAI CHAT TIME: ${duration}ms`
-    );
-
-    console.log(
-      "OPENAI RESPONSE:",
-      result
-    );
-
-    console.log(
-      "================================="
-    );
-
-    // =================================================
-    // INCOMPLETE RESPONSE
-    // =================================================
-
-    if (
-      data?.status ===
-        "incomplete" &&
-      data?.incomplete_details
-        ?.reason ===
-        "max_output_tokens"
-    ) {
-      throw new Error(
-        "OpenAI response reached the output token limit before producing an answer."
-      );
-    }
-
-    // =================================================
-    // EMPTY RESPONSE
-    // =================================================
-
-    if (!result) {
-      console.error(
-        "OPENAI RAW RESPONSE:",
-        data
-      );
-
-      throw new Error(
-        "OpenAI returned an empty response."
-      );
-    }
-
-    return result;
-
-  } catch (error: any) {
-    clearTimeout(timeout);
-
-    console.error(
-      "================================="
-    );
-
-    console.error(
-      "OPENAI CHAT ERROR"
-    );
-
-    console.error(
-      error
-    );
-
-    console.error(
-      "================================="
-    );
-
-    // =================================================
-    // TIMEOUT
-    // =================================================
-
-    if (
-      error?.name ===
-      "AbortError"
-    ) {
-      throw new Error(
-        "OpenAI response timed out after 60 seconds."
-      );
-    }
-
-    throw error;
+  // Compose verified information: optional website context (universal),
+  // then the caller-provided store/knowledge context.
+  const verifiedParts: string[] = [];
+  if (cleanSiteContext) verifiedParts.push(cleanSiteContext);
+  if (cleanContext) verifiedParts.push(cleanContext);
+
+  const input = [
+    "VERIFIED STORE / CONVERSATION INFORMATION:",
+    verifiedParts.length
+      ? verifiedParts.join("\n\n")
+      : "(No verified store information was found.)",
+    "",
+    "CUSTOMER MESSAGE:",
+    cleanQuestion,
+  ].join("\n").trim();
+
+  const result = await completeAi({
+    instructions: SALES_PILOT_INSTRUCTIONS,
+    text: input,
+    imageDataUrl: options.imageDataUrl ?? null,
+  });
+
+  const cleaned = cleanModelResponse(result.text);
+  if (!cleaned) {
+    throw new Error("AI provider returned an empty response.");
   }
+  return cleaned;
 }

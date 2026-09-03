@@ -1,0 +1,1615 @@
+▲ Next.js 16.2.12 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.14:3000
+- Environments: .env.local
+✓ Ready in 877ms
+
+ GET /widget-preview-test 200 in 884ms (next.js: 206ms, proxy.ts: 330ms, application-code: 348ms)
+SALES PILOT NEW CHAT ROUTE ACTIVE
+=================================
+CHAT API START
+=================================
+USER MESSAGE: What is this dress?
+PROFILE: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+VISITOR SESSION: 2dfc74fe-3c05-468f-b082-f1c830ed9992
+IMAGE NAME: real_fsp1266_yellow.jpg
+IMAGE TYPE: image/jpeg
+IMAGE PROVIDED: true
+=================================
+OPENAI IMAGE ANALYSIS START
+MODEL: gpt-5-mini
+IMAGE DATA LENGTH: 626291
+CUSTOMER QUESTION: What is this dress?
+=================================
+IMAGE ANALYSIS RESULT: Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set.
+=================================
+IMAGE ANALYSIS TIME: 5441ms
+EFFECTIVE SEARCH MESSAGE: Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?
+NEW CONVERSATION - CHECKING BILLING
+BILLING RESULT: {
+  allowed: true,
+  planId: 'starter',
+  planName: 'Starter',
+  used: 85,
+  limit: 50,
+  remaining: -35
+}
+CREATING CONVERSATION
+CONVERSATION HISTORY: 1
+HISTORY TIME: 455ms
+WEBSITE CONTEXT:
+Available website capabilities: products, pricing, knowledge base, FAQs, policies, 60 crawled pages.
+=================================
+CHECKING FOR ACTION
+=================================
+=================================
+ACTION DETECTED: search_products
+ACTION PARAMETERS: {
+  query: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?',
+  originalQuery: 'What is this dress?',
+  resolvedQuery: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?',
+  isFollowUp: false,
+  isProductFollowUp: false,
+  followUpType: null,
+  productContextQuery: 'What is this dress?',
+  isNewTopic: true,
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+FINAL ACTION REQUEST: {
+  "action": "search_products",
+  "parameters": {
+    "query": "Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?",
+    "originalQuery": "What is this dress?",
+    "resolvedQuery": "Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?",
+    "isFollowUp": false,
+    "isProductFollowUp": false,
+    "followUpType": null,
+    "productContextQuery": "What is this dress?",
+    "isNewTopic": true,
+    "userId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9",
+    "profileId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9"
+  }
+}
+=================================
+EXECUTING ACTION: search_products
+PARAMETERS: {
+  query: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?',
+  originalQuery: 'What is this dress?',
+  resolvedQuery: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lace-trim kurta pajama, cotton lawn ethnic dress, three-piece dupatta set. What is this dress?',
+  isFollowUp: false,
+  isProductFollowUp: false,
+  followUpType: null,
+  productContextQuery: 'What is this dress?',
+  isNewTopic: true,
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+PRODUCT SEARCH RAW QUERY: Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac
+PRODUCT SEARCH CONTEXT QUERY: 
+PRODUCT SEARCH FINAL QUERY: Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac
+PRODUCT QUERY ANALYSIS: {
+  isCatalogQuery: false,
+  isShoppingQuery: true,
+  hasPriceRange: false,
+  priceMin: undefined,
+  priceMax: undefined
+}
+=================================
+SEARCH PRODUCTS ACTION
+PROFILE ID: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+QUERY: Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac
+=================================
+SEARCH ANALYSIS: {
+  "originalQuery": "Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac",
+  "cleanedQuery": "women s three-piece ethnic set long straight kurta with matching wide straight pants and dupatta. color pastel lemon yellow with small white pale-pink floral print. distinctive features white scalloped lace trim at round neckline sleeve cuffs and hem lace border on trouser hem lightweight semi-matte fabric appears cotton lawn . dupatta coordinating light blue white striped panel with lace edging. no visible brand text logo or sku. suitable search keywords yellow floral kurta set lac",
+  "words": [
+    "women",
+    "s",
+    "three-piece",
+    "ethnic",
+    "set",
+    "long",
+    "straight",
+    "kurta",
+    "matching",
+    "wide",
+    "straight",
+    "pant",
+    "and",
+    "dupatta.",
+    "color",
+    "pastel",
+    "lemon",
+    "yellow",
+    "small",
+    "white",
+    "pale-pink",
+    "floral",
+    "print.",
+    "distinctive",
+    "featur",
+    "white",
+    "scalloped",
+    "lace",
+    "trim",
+    "at",
+    "round",
+    "neckline",
+    "sleeve",
+    "cuff",
+    "and",
+    "hem",
+    "lace",
+    "border",
+    "trouser",
+    "hem",
+    "lightweight",
+    "semi-matte",
+    "fabric",
+    "appear",
+    "cotton",
+    "lawn",
+    ".",
+    "dupatta",
+    "coordinating",
+    "light",
+    "blue",
+    "white",
+    "striped",
+    "panel",
+    "lace",
+    "edging.",
+    "no",
+    "visible",
+    "brand",
+    "text",
+    "logo",
+    "or",
+    "sku.",
+    "suitable",
+    "search",
+    "keyword",
+    "yellow",
+    "floral",
+    "kurta",
+    "set",
+    "lac"
+  ],
+  "requiredTerms": [
+    "kurta",
+    "trouser",
+    "cotton",
+    "lawn",
+    "dupatta",
+    "yellow",
+    "white",
+    "blue",
+    "women",
+    "s",
+    "three-piece",
+    "ethnic",
+    "set",
+    "long",
+    "straight",
+    "matching",
+    "wide",
+    "pant",
+    "dupatta.",
+    "color",
+    "pastel",
+    "lemon",
+    "small",
+    "pale-pink",
+    "floral",
+    "print.",
+    "distinctive",
+    "featur",
+    "scalloped",
+    "lace",
+    "trim",
+    "round",
+    "neckline",
+    "sleeve",
+    "cuff",
+    "hem",
+    "border",
+    "lightweight",
+    "semi-matte",
+    "fabric",
+    "appear",
+    ".",
+    "coordinating",
+    "light",
+    "striped",
+    "panel",
+    "edging.",
+    "no",
+    "visible",
+    "brand",
+    "text",
+    "logo",
+    "or",
+    "sku.",
+    "suitable",
+    "search",
+    "keyword",
+    "lac"
+  ],
+  "attributeTerms": [],
+  "categoryTerms": [
+    "kurta",
+    "trouser",
+    "cotton",
+    "lawn",
+    "dupatta"
+  ],
+  "colorTerms": [
+    "yellow",
+    "white",
+    "blue"
+  ],
+  "otherTerms": [
+    "women",
+    "s",
+    "three-piece",
+    "ethnic",
+    "set",
+    "long",
+    "straight",
+    "matching",
+    "wide",
+    "straight",
+    "pant",
+    "dupatta.",
+    "color",
+    "pastel",
+    "lemon",
+    "small",
+    "pale-pink",
+    "floral",
+    "print.",
+    "distinctive",
+    "featur",
+    "scalloped",
+    "lace",
+    "trim",
+    "round",
+    "neckline",
+    "sleeve",
+    "cuff",
+    "hem",
+    "lace",
+    "border",
+    "hem",
+    "lightweight",
+    "semi-matte",
+    "fabric",
+    "appear",
+    ".",
+    "coordinating",
+    "light",
+    "striped",
+    "panel",
+    "lace",
+    "edging.",
+    "no",
+    "visible",
+    "brand",
+    "text",
+    "logo",
+    "or",
+    "sku.",
+    "suitable",
+    "search",
+    "keyword",
+    "floral",
+    "set",
+    "lac"
+  ],
+  "broadCatalog": false,
+  "priceOnly": false,
+  "availabilityOnly": false,
+  "sizeFilter": {
+    "values": [
+      "s"
+    ],
+    "numericValues": []
+  }
+}
+PRODUCT PAGES FOUND: 60
+UNIQUE PRODUCTS: 60
+TOP PRODUCT SCORES: []
+PRODUCT SEARCH RESULT COUNT: 0
+ACTION TIME: 1494ms
+ACTION RESULT: {
+  success: true,
+  data: {
+    products: [],
+    count: 0,
+    query: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac',
+    originalQuery: 'Women’s three-piece ethnic set: long straight kurta with matching wide/straight pants and dupatta. Color: pastel lemon yellow with small white/pale-pink floral print. Distinctive features: white scalloped lace trim at round neckline, sleeve cuffs and hem; lace border on trouser hem; lightweight semi-matte fabric (appears cotton/lawn). Dupatta: coordinating light blue/white striped panel with lace edging. No visible brand, text, logo, or SKU. Suitable search keywords: yellow floral kurta set, lac',
+    analysis: {
+      isCatalogQuery: false,
+      isShoppingQuery: true,
+      hasPriceRange: false,
+      priceMin: undefined,
+      priceMax: undefined
+    },
+    isCatalogQuery: false,
+    hasPriceRange: false,
+    priceMin: undefined,
+    priceMax: undefined
+  }
+}
+SEARCH PRODUCTS RETURNED: 3 [
+  {
+    id: 'd08d3ecf-9f9b-4ac7-829e-dd50a0e6cf15',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1249-white',
+    content: "Skip to product information TFSPRINTED LAWN 3 PCS (UNSTITCHED) SKU: FSP1249-WHITE-2000000216901 Regular price Rs.7,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 3 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: WHITE\n' +
+      ' DESCRIPTION: Printed  Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '7499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1249-WHITE-2000000216901\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_2.jpg?v=1774422006&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_3.jpg?v=1774422005&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_4.jpg?v=1774422006&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_2.jpg?v=1774422006&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_3.jpg?v=1774422005&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_4.jpg?v=1774422006&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_2.jpg?v=1774422006&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_3.jpg?v=1774422005&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_4.jpg?v=1774422006&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1249-WHITE_1.jpg?v=1774422005&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1249-white\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 3 PCS (UNSTITCHED) FSP1249-WHITE-2000000216901 Rs.7,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 3 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1249-WHITE-2000000216901 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1249-white',
+    url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1249-white',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1249-WHITE',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: '253db61b-b000-4d2d-9e58-4888689e3248',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1367-blue',
+    content: "Skip to product information TFSPRINTED LAWN 3 PCS (UNSTITCHED) SKU: FSP1367-BLUE-2000000216667 Regular price Rs.5,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 3 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: BLUE\n' +
+      ' DESCRIPTION: Printed  Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '5499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1367-BLUE-2000000216667\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_2.jpg?v=1774421997&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_3.jpg?v=1774421997&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_4.jpg?v=1774421996&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_2.jpg?v=1774421997&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_3.jpg?v=1774421997&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_4.jpg?v=1774421996&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_2.jpg?v=1774421997&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_3.jpg?v=1774421997&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_4.jpg?v=1774421996&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1367-BLUE_1.jpg?v=1774421997&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1367-blue\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 3 PCS (UNSTITCHED) FSP1367-BLUE-2000000216667 Rs.5,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 3 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1367-BLUE-2000000216667 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1367-blue',
+    url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1367-blue',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1367-BLUE',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: '09523ba2-fa6c-45ac-82d0-243684e11bbe',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1247-white',
+    content: "Skip to product information TFSPRINTED LAWN 3 PCS (UNSTITCHED) SKU: FSP1247-WHITE-2000000216893 Regular price Rs.7,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 3 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: WHITE\n' +
+      ' DESCRIPTION: Printed  Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '7499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1247-WHITE-2000000216893\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_2.jpg?v=1774422008&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_3.jpg?v=1774422009&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_4.jpg?v=1774422008&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_2.jpg?v=1774422008&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_3.jpg?v=1774422009&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_4.jpg?v=1774422008&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_2.jpg?v=1774422008&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_3.jpg?v=1774422009&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_4.jpg?v=1774422008&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1247-WHITE_1.jpg?v=1774422008&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1247-white\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 3 PCS (UNSTITCHED) FSP1247-WHITE-2000000216893 Rs.7,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 3 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: WHITE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Chiffon Dupatta 2.5 Mtr. Plain Cambric Trouser 2.5 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1247-WHITE-2000000216893 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1247-white',
+    url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1247-white',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1247-WHITE',
+    collectionNames: [],
+    collectionUrls: []
+  }
+]
+ACTION AI TIME: 0ms
+ POST /api/chat 200 in 15.5s (next.js: 196ms, proxy.ts: 11ms, application-code: 15.3s)
+SALES PILOT NEW CHAT ROUTE ACTIVE
+=================================
+CHAT API START
+=================================
+USER MESSAGE: Find this product.
+PROFILE: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+VISITOR SESSION: 2dfc74fe-3c05-468f-b082-f1c830ed9992
+IMAGE NAME: test_car.png
+IMAGE TYPE: image/png
+IMAGE PROVIDED: true
+=================================
+OPENAI IMAGE ANALYSIS START
+MODEL: gpt-5-mini
+IMAGE DATA LENGTH: 11118
+CUSTOMER QUESTION: Find this product.
+=================================
+IMAGE ANALYSIS RESULT: Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road".
+=================================
+IMAGE ANALYSIS TIME: 3667ms
+EFFECTIVE SEARCH MESSAGE: Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.
+EXISTING CONVERSATION - BILLING CHECK PASSED
+CONVERSATION HISTORY: 3
+HISTORY TIME: 444ms
+WEBSITE CONTEXT:
+Available website capabilities: products, pricing, knowledge base, FAQs, policies, 60 crawled pages.
+=================================
+CHECKING FOR ACTION
+=================================
+=================================
+ACTION DETECTED: search_products
+ACTION PARAMETERS: {
+  query: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+  originalQuery: 'Find this product.',
+  resolvedQuery: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+  isFollowUp: false,
+  isProductFollowUp: false,
+  followUpType: null,
+  productContextQuery: 'Find this product.',
+  isNewTopic: true,
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+FINAL ACTION REQUEST: {
+  "action": "search_products",
+  "parameters": {
+    "query": "Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text \"A CAR\" centered above the vehicle. No visible brand or model. Suitable search keywords: \"red car clipart flat vector\", \"children's car illustration A CAR text\", \"simple red car icon on road\". Find this product.",
+    "originalQuery": "Find this product.",
+    "resolvedQuery": "Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text \"A CAR\" centered above the vehicle. No visible brand or model. Suitable search keywords: \"red car clipart flat vector\", \"children's car illustration A CAR text\", \"simple red car icon on road\". Find this product.",
+    "isFollowUp": false,
+    "isProductFollowUp": false,
+    "followUpType": null,
+    "productContextQuery": "Find this product.",
+    "isNewTopic": true,
+    "userId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9",
+    "profileId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9"
+  }
+}
+=================================
+EXECUTING ACTION: search_products
+PARAMETERS: {
+  query: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+  originalQuery: 'Find this product.',
+  resolvedQuery: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+  isFollowUp: false,
+  isProductFollowUp: false,
+  followUpType: null,
+  productContextQuery: 'Find this product.',
+  isNewTopic: true,
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+PRODUCT SEARCH RAW QUERY: Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.
+PRODUCT SEARCH CONTEXT QUERY: 
+PRODUCT SEARCH FINAL QUERY: Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.
+PRODUCT QUERY ANALYSIS: {
+  isCatalogQuery: false,
+  isShoppingQuery: true,
+  hasPriceRange: false,
+  priceMin: undefined,
+  priceMax: undefined
+}
+=================================
+SEARCH PRODUCTS ACTION
+PROFILE ID: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+QUERY: Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.
+=================================
+SEARCH ANALYSIS: {
+  "originalQuery": "Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text \"A CAR\" centered above the vehicle. No visible brand or model. Suitable search keywords: \"red car clipart flat vector\", \"children's car illustration A CAR text\", \"simple red car icon on road\". Find this product.",
+  "cleanedQuery": "flat vector clipart image of a red car on a road. key details simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof two black wheels with gray hubs blue sky background green grass strips above and below a gray road. black serif text a car centered above the vehicle. no visible brand or model. suitable search keywords red car clipart flat vector children s car illustration a car text simple red car icon on road . find this product.",
+  "words": [
+    "flat",
+    "vector",
+    "clipart",
+    "image",
+    "red",
+    "car",
+    "road.",
+    "key",
+    "detail",
+    "simple",
+    "flat-design",
+    "red",
+    "sedan",
+    "shape",
+    "rounded",
+    "rectangle",
+    "body",
+    "and",
+    "smaller",
+    "rounded-rectangle",
+    "roof",
+    "two",
+    "black",
+    "wheel",
+    "gray",
+    "hub",
+    "blue",
+    "sky",
+    "background",
+    "green",
+    "gras",
+    "strip",
+    "above",
+    "and",
+    "below",
+    "gray",
+    "road.",
+    "black",
+    "serif",
+    "text",
+    "car",
+    "centered",
+    "above",
+    "vehicle.",
+    "no",
+    "visible",
+    "brand",
+    "or",
+    "model.",
+    "suitable",
+    "search",
+    "keyword",
+    "red",
+    "car",
+    "clipart",
+    "flat",
+    "vector",
+    "children",
+    "s",
+    "car",
+    "illustration",
+    "car",
+    "text",
+    "simple",
+    "red",
+    "car",
+    "icon",
+    "road",
+    ".",
+    "thi",
+    "product."
+  ],
+  "requiredTerms": [
+    "red",
+    "black",
+    "grey",
+    "blue",
+    "green",
+    "flat",
+    "vector",
+    "clipart",
+    "image",
+    "car",
+    "road.",
+    "key",
+    "detail",
+    "simple",
+    "flat-design",
+    "sedan",
+    "shape",
+    "rounded",
+    "rectangle",
+    "body",
+    "smaller",
+    "rounded-rectangle",
+    "roof",
+    "two",
+    "wheel",
+    "gray",
+    "hub",
+    "sky",
+    "background",
+    "gras",
+    "strip",
+    "serif",
+    "text",
+    "centered",
+    "vehicle.",
+    "no",
+    "visible",
+    "brand",
+    "or",
+    "model.",
+    "suitable",
+    "search",
+    "keyword",
+    "children",
+    "s",
+    "illustration",
+    "icon",
+    "road",
+    ".",
+    "thi",
+    "product."
+  ],
+  "attributeTerms": [],
+  "categoryTerms": [],
+  "colorTerms": [
+    "red",
+    "black",
+    "grey",
+    "blue",
+    "green"
+  ],
+  "otherTerms": [
+    "flat",
+    "vector",
+    "clipart",
+    "image",
+    "car",
+    "road.",
+    "key",
+    "detail",
+    "simple",
+    "flat-design",
+    "sedan",
+    "shape",
+    "rounded",
+    "rectangle",
+    "body",
+    "smaller",
+    "rounded-rectangle",
+    "roof",
+    "two",
+    "wheel",
+    "gray",
+    "hub",
+    "sky",
+    "background",
+    "gras",
+    "strip",
+    "gray",
+    "road.",
+    "serif",
+    "text",
+    "car",
+    "centered",
+    "vehicle.",
+    "no",
+    "visible",
+    "brand",
+    "or",
+    "model.",
+    "suitable",
+    "search",
+    "keyword",
+    "car",
+    "clipart",
+    "flat",
+    "vector",
+    "children",
+    "s",
+    "car",
+    "illustration",
+    "car",
+    "text",
+    "simple",
+    "car",
+    "icon",
+    "road",
+    ".",
+    "thi",
+    "product."
+  ],
+  "broadCatalog": false,
+  "priceOnly": false,
+  "availabilityOnly": false,
+  "sizeFilter": {
+    "values": [
+      "s"
+    ],
+    "numericValues": []
+  }
+}
+PRODUCT PAGES FOUND: 60
+UNIQUE PRODUCTS: 60
+TOP PRODUCT SCORES: []
+PRODUCT SEARCH RESULT COUNT: 0
+ACTION TIME: 1365ms
+ACTION RESULT: {
+  success: true,
+  data: {
+    products: [],
+    count: 0,
+    query: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+    originalQuery: `Flat vector/clipart image of a red car on a road. Key details: simple flat-design red sedan shape with rounded rectangle body and smaller rounded-rectangle roof, two black wheels with gray hubs, blue sky background, green grass strips above and below a gray road. Black serif text "A CAR" centered above the vehicle. No visible brand or model. Suitable search keywords: "red car clipart flat vector", "children's car illustration A CAR text", "simple red car icon on road". Find this product.`,
+    analysis: {
+      isCatalogQuery: false,
+      isShoppingQuery: true,
+      hasPriceRange: false,
+      priceMin: undefined,
+      priceMax: undefined
+    },
+    isCatalogQuery: false,
+    hasPriceRange: false,
+    priceMin: undefined,
+    priceMax: undefined
+  }
+}
+SEARCH PRODUCTS RETURNED: 3 [
+  {
+    id: '5d91181d-8842-4abd-866e-44792cfe3c8d',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1292-maroon',
+    content: "Skip to product information TFSPRINTED LAWN 3 PCS (UNSTITCHED) SKU: FSP1292-MAROON-2000000216637 Regular price Rs.5,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 3 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: MAROON\n' +
+      ' DESCRIPTION: Printed  Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '5499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1292-MAROON-2000000216637\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_2_7c336ca0-0379-4800-b602-b0b82e449a5c.jpg?v=1774422003&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_3_939850bb-e85d-462b-a3c8-5a7fb59b8e7c.jpg?v=1774422003&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_4_df9a2aa6-f73d-430a-9dd6-864b2e948150.jpg?v=1774422003&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_2_7c336ca0-0379-4800-b602-b0b82e449a5c.jpg?v=1774422003&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_3_939850bb-e85d-462b-a3c8-5a7fb59b8e7c.jpg?v=1774422003&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_4_df9a2aa6-f73d-430a-9dd6-864b2e948150.jpg?v=1774422003&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_2_7c336ca0-0379-4800-b602-b0b82e449a5c.jpg?v=1774422003&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_3_939850bb-e85d-462b-a3c8-5a7fb59b8e7c.jpg?v=1774422003&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_4_df9a2aa6-f73d-430a-9dd6-864b2e948150.jpg?v=1774422003&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1292-MAROON_1_3a9fa12f-5729-4c32-acf3-43f8fae6ac06.jpg?v=1774422003&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1292-maroon\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 3 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 3 PCS (UNSTITCHED) FSP1292-MAROON-2000000216637 Rs.5,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 3 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Printed Lawn Dupatta 2.5 Mtr. Plain Cambric Wider Width Trouser 1.75 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1292-MAROON-2000000216637 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1292-maroon',
+    url: 'https://tfs.com.pk/products/printed-lawn-3-pcs-unstitched-fsp1292-maroon',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1292-MAROON',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: '9e9e3e84-ba2c-49d4-bc26-bec7d57aa851',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 1 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1356-sky-blue',
+    content: "Skip to product information TFSPRINTED LAWN 1 PCS (UNSTITCHED) SKU: FSP1356-SKY-BLUE-2000000216539 Regular price Rs.1,999.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: SKY-BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 1 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: SKY-BLUE\n' +
+      ' DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '1999\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1356-SKY-BLUE-2000000216539\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_2.jpg?v=1774422042&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_3.jpg?v=1774422042&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_4.jpg?v=1774422041&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_2.jpg?v=1774422042&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_3.jpg?v=1774422042&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_4.jpg?v=1774422041&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_2.jpg?v=1774422042&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_3.jpg?v=1774422042&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_4.jpg?v=1774422041&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1356-SKY-BLUE_1.jpg?v=1774422042&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1356-sky-blue\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 1 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 1 PCS (UNSTITCHED) FSP1356-SKY-BLUE-2000000216539 Rs.1,999.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: SKY-BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 1 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: SKY-BLUE DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1356-SKY-BLUE-2000000216539 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1356-sky-blue',
+    url: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1356-sky-blue',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1356-SKY-BLUE',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: 'dae2c681-cb7d-4814-bcbe-ba4cd25783c1',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRINTED LAWN 1 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1338-maroon',
+    content: "Skip to product information TFSPRINTED LAWN 1 PCS (UNSTITCHED) SKU: FSP1338-MAROON-2000000216537 Regular price Rs.1,999.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRINTED LAWN 1 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: MAROON\n' +
+      ' DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '1999\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1338-MAROON-2000000216537\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_2.jpg?v=1774422043&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_3.jpg?v=1774422043&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_4.jpg?v=1774422043&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_2.jpg?v=1774422043&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_3.jpg?v=1774422043&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_4.jpg?v=1774422043&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_2.jpg?v=1774422043&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_3.jpg?v=1774422043&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_4.jpg?v=1774422043&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1338-MAROON_1.jpg?v=1774422043&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1338-maroon\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRINTED LAWN 1 PCS (UNSTITCHED) – TFS',
+    description: "TFSPRINTED LAWN 1 PCS (UNSTITCHED) FSP1338-MAROON-2000000216537 Rs.1,999.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: PRINTED LAWN 1 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: MAROON DESCRIPTION: Printed Lawn Wider Width Shirt 1.75 Mtr. Brand: TFS Currency: PKR Availability: InStock FSP1338-MAROON-2000000216537 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1338-maroon',
+    url: 'https://tfs.com.pk/products/printed-lawn-1-pcs-unstitched-fsp1338-maroon',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1338-MAROON',
+    collectionNames: [],
+    collectionUrls: []
+  }
+]
+ACTION AI TIME: 1ms
+ POST /api/chat 200 in 9.7s (next.js: 8ms, proxy.ts: 9ms, application-code: 9.7s)
+ GET /widget-preview-test 200 in 216ms (next.js: 15ms, proxy.ts: 14ms, application-code: 187ms)
+SALES PILOT NEW CHAT ROUTE ACTIVE
+=================================
+CHAT API START
+=================================
+USER MESSAGE: How is the quality of your dresses?
+PROFILE: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+VISITOR SESSION: 18289d87-032b-40ff-bca3-50471dcf971f
+IMAGE NAME: null
+IMAGE TYPE: null
+IMAGE PROVIDED: false
+EFFECTIVE SEARCH MESSAGE: How is the quality of your dresses?
+NEW CONVERSATION - CHECKING BILLING
+BILLING RESULT: {
+  allowed: true,
+  planId: 'starter',
+  planName: 'Starter',
+  used: 86,
+  limit: 50,
+  remaining: -36
+}
+CREATING CONVERSATION
+CONVERSATION HISTORY: 1
+HISTORY TIME: 497ms
+WEBSITE CONTEXT:
+Available website capabilities: products, pricing, knowledge base, FAQs, policies, 60 crawled pages.
+=================================
+CHECKING FOR ACTION
+=================================
+=================================
+SALES PILOT ACTION DETECTION
+MESSAGE: How is the quality of your dresses?
+NORMALIZED: how is the quality of your dresses
+ORDER NUMBER: null
+=================================
+PRODUCT SEARCH ACTION DETECTED
+PRODUCT QUERY: How is the quality of your dresses?
+=================================
+ACTION DETECTED: search_products
+ACTION PARAMETERS: {
+  query: 'How is the quality of your dresses?',
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+FINAL ACTION REQUEST: {
+  "action": "search_products",
+  "parameters": {
+    "query": "How is the quality of your dresses?",
+    "userId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9",
+    "profileId": "3c321d7c-23e8-4101-9d30-1a2a8a0a37f9"
+  }
+}
+=================================
+EXECUTING ACTION: search_products
+PARAMETERS: {
+  query: 'How is the quality of your dresses?',
+  userId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+  profileId: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9'
+}
+=================================
+PRODUCT SEARCH RAW QUERY: How is the quality of your dresses?
+PRODUCT SEARCH CONTEXT QUERY: 
+PRODUCT SEARCH FINAL QUERY: How is the quality of your dresses?
+PRODUCT QUERY ANALYSIS: {
+  isCatalogQuery: false,
+  isShoppingQuery: true,
+  hasPriceRange: false,
+  priceMin: undefined,
+  priceMax: undefined
+}
+=================================
+SEARCH PRODUCTS ACTION
+PROFILE ID: 3c321d7c-23e8-4101-9d30-1a2a8a0a37f9
+QUERY: How is the quality of your dresses?
+=================================
+SEARCH ANALYSIS: {
+  "originalQuery": "How is the quality of your dresses?",
+  "cleanedQuery": "how is the quality of your dresses",
+  "words": [
+    "how",
+    "quality",
+    "dresses"
+  ],
+  "requiredTerms": [
+    "dres",
+    "how",
+    "quality",
+    "dresses"
+  ],
+  "attributeTerms": [],
+  "categoryTerms": [
+    "dres"
+  ],
+  "colorTerms": [],
+  "otherTerms": [
+    "how",
+    "quality",
+    "dresses"
+  ],
+  "broadCatalog": false,
+  "priceOnly": false,
+  "availabilityOnly": false
+}
+PRODUCT PAGES FOUND: 60
+UNIQUE PRODUCTS: 60
+TOP PRODUCT SCORES: []
+PRODUCT SEARCH RESULT COUNT: 0
+ACTION TIME: 1893ms
+ACTION RESULT: {
+  success: true,
+  data: {
+    products: [],
+    count: 0,
+    query: 'How is the quality of your dresses?',
+    originalQuery: 'How is the quality of your dresses?',
+    analysis: {
+      isCatalogQuery: false,
+      isShoppingQuery: true,
+      hasPriceRange: false,
+      priceMin: undefined,
+      priceMax: undefined
+    },
+    isCatalogQuery: false,
+    hasPriceRange: false,
+    priceMin: undefined,
+    priceMax: undefined
+  }
+}
+○ Compiling /dashboard/widget ...
+SEARCH PRODUCTS RETURNED: 3 [
+  {
+    id: '8b076656-1c5c-4b18-9293-7828a8457ea8',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'EMBROIDERED LAWN 2 PCS (UNSTITCHED) – TFS',
+    page_url: 'https://tfs.com.pk/products/embroidered-lawn-2-pcs-unstitched-fse673-peach',
+    content: "Skip to product information TFSEMBROIDERED LAWN 2 PCS (UNSTITCHED) SKU: FSE673-PEACH-2000000218080 Regular price Rs.8,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: PEACH DESCRIPTION: Embroidered Lawn Shirt 2.5Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'EMBROIDERED LAWN 2 PCS (UNSTITCHED)\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: PEACH\n' +
+      ' DESCRIPTION: Embroidered  Lawn Shirt 2.5Mtr. Plain Cambric Trouser 2.5 Mtr.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '8499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSE673-PEACH-2000000218080\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_2.jpg?v=1774421982&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_3.jpg?v=1774421982&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_4.jpg?v=1774421983&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_2.jpg?v=1774421982&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_3.jpg?v=1774421982&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_4.jpg?v=1774421983&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_2.jpg?v=1774421982&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_3.jpg?v=1774421982&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_4.jpg?v=1774421983&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE673-PEACH_1.jpg?v=1774421982&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/embroidered-lawn-2-pcs-unstitched-fse673-peach\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'EMBROIDERED LAWN 2 PCS (UNSTITCHED) – TFS',
+    description: "TFSEMBROIDERED LAWN 2 PCS (UNSTITCHED) FSE673-PEACH-2000000218080 Rs.8,499.00 In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: PEACH DESCRIPTION: Embroidered Lawn Shirt 2.5Mtr. Plain Cambric Trouser 2.5 Mtr. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like ================ PRODUCT INFORMATION ================ Product Name: EMBROIDERED LAWN 2 PCS (UNSTITCHED) Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: PEACH DESCRIPTION: Embroidered Lawn Shirt 2.5Mtr. Plain Cambric Trouser 2.5 Mtr. Brand: TFS Currency: PKR Availability: InStock FSE673-PEACH-2000000218080 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/embroidered-lawn-2-pcs-unstitched-fse673-peach',
+    url: 'https://tfs.com.pk/products/embroidered-lawn-2-pcs-unstitched-fse673-peach',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSE673-PEACH',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: 'ae30fca7-d2af-430f-a356-f778f06e9d80',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRET EMBROIDERED CHIFFON 3 PCS – TFS',
+    page_url: 'https://tfs.com.pk/products/pret-embroidered-chiffon-3-pcs-fsp1332-pret-black',
+    content: "Skip to product information TFSPRET EMBROIDERED CHIFFON 3 PCS Regular price Rs.16,799.00 Size: S SIZE GUIDE S S M M L L Low stock: 5 left Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: CHIFFON COLOR: BLACK DESCRIPTION: Embroidered Chiffon Shirt. Embroidered Chiffon Dupatta. Plain Raw Silk Plazo. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like Hold and Drag to move items\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRET EMBROIDERED CHIFFON 3 PCS\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: CHIFFON\n' +
+      ' COLOR: BLACK\n' +
+      ' DESCRIPTION: Embroidered Chiffon Shirt. Embroidered Chiffon Dupatta. Plain Raw Silk Plazo.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '16799\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1332-PRET-SMALL-BLACK-2000000231361\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_3.jpg?v=1774589924&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_788594f1-4ad8-461e-9ae5-f96801de9591.jpg?v=1774589924&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_4.jpg?v=1774589924&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_2.jpg?v=1774589924&width=2048\n' +
+      'https://cdn.shopify.com/s/files/1/0757/1823/0205/files/Size_Guide_18dd3a7f-c7e7-499a-8386-2b405964d420.jpg?v=1775648865\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_3.jpg?v=1774589924&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_788594f1-4ad8-461e-9ae5-f96801de9591.jpg?v=1774589924&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_4.jpg?v=1774589924&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_2.jpg?v=1774589924&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_3.jpg?v=1774589924&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_788594f1-4ad8-461e-9ae5-f96801de9591.jpg?v=1774589924&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_4.jpg?v=1774589924&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_2.jpg?v=1774589924&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924\n' +
+      'https://tfs.com.pk/cdn/shop/files/2_1_fde61598-4bce-42d3-b133-5d786436d10e.jpg?v=1774589924&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/pret-embroidered-chiffon-3-pcs-fsp1332-pret-black\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRET EMBROIDERED CHIFFON 3 PCS – TFS',
+    description: "TFSPRET EMBROIDERED CHIFFON 3 PCS Rs.16,799.00 Size: S SIZE GUIDE Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: CHIFFON COLOR: BLACK DESCRIPTION: Embroidered Chiffon Shirt. Embroidered Chiffon Dupatta. Plain Raw Silk Plazo. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like Hold and Drag to move items ================ PRODUCT INFORMATION ================ Product Name: PRET EMBROIDERED CHIFFON 3 PCS Description: PRODUCT DETAIL:FABRIC: CHIFFON COLOR: BLACK DESCRIPTION: Embroidered Chiffon Shirt. Embroidered Chiffon Dupatta. Plain Raw Silk Plazo. Brand: TFS Currency: PKR Availability: InStock FSP1332-PRET-SMALL-BLACK-2000000231361 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/pret-embroidered-chiffon-3-pcs-fsp1332-pret-black',
+    url: 'https://tfs.com.pk/products/pret-embroidered-chiffon-3-pcs-fsp1332-pret-black',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1332-PRET-SMALL-BLACK',
+    collectionNames: [],
+    collectionUrls: []
+  },
+  {
+    id: '8404db34-894d-453f-9583-51134f8565f7',
+    user_id: '3c321d7c-23e8-4101-9d30-1a2a8a0a37f9',
+    title: 'PRET EMBROIDERED & EMBELISHED LAWN 3 PCS – TFS',
+    page_url: 'https://tfs.com.pk/products/pret-embroidered-embelished-lawn-3-pcs-fsp1331-pret-lilac',
+    content: "Skip to product information TFSPRET EMBROIDERED & EMBELISHED LAWN 3 PCS Regular price Rs.14,499.00 Size: S SIZE GUIDE S S M M L L In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: LILAC DESCRIPTION: Embroidered & Sheesha Work Lawn Shirt. Embroidered Chiffon Dupatta. Plain Cambric Trouser. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like Hold and Drag to move items\n" +
+      '\n' +
+      '================ PRODUCT INFORMATION ================\n' +
+      '\n' +
+      'Product Name:\n' +
+      'PRET EMBROIDERED & EMBELISHED LAWN 3 PCS\n' +
+      '\n' +
+      'Description:\n' +
+      'PRODUCT DETAIL:FABRIC: LAWN\n' +
+      ' COLOR: LILAC\n' +
+      ' DESCRIPTION: Embroidered &amp; Sheesha Work  Lawn Shirt. Embroidered Chiffon Dupatta. Plain Cambric Trouser.\n' +
+      '\n' +
+      '\n' +
+      'Brand:\n' +
+      'TFS\n' +
+      '\n' +
+      'Price:\n' +
+      '14499\n' +
+      '\n' +
+      'Currency:\n' +
+      'PKR\n' +
+      '\n' +
+      'Availability:\n' +
+      'InStock\n' +
+      '\n' +
+      'SKU:\n' +
+      'FSP1331-PRET-SMALL-LILAC-2000000230921\n' +
+      '\n' +
+      'Category:\n' +
+      '\n' +
+      '\n' +
+      'Rating:\n' +
+      '\n' +
+      '\n' +
+      'Reviews:\n' +
+      '\n' +
+      '\n' +
+      'Images:\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE703-GREEN_1_4fd8354b-6636-43e4-bf40-55155f0f8dc8.jpg?v=1782110325&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1294-PRET-BLACK_1.jpg?v=1780403541&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=600\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1397-WHITE_1_80f5dfab-c917-40d1-8f58-4e40fa35e638.jpg?v=1782110334&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSP1365-PURPLE_1.jpg?v=1782110333&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/fse490-maroon_20_1.jpg?v=1774422960&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE707-BLACK_1.jpg?v=1774422095&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/FSE126_FRONT.jpg?v=1774424405&width=750\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_4.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_5.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_8.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_7.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3.jpg?v=1774589854&width=2048\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_6.jpg?v=1774589854&width=2048\n' +
+      'https://cdn.shopify.com/s/files/1/0757/1823/0205/files/Size_Guide_18dd3a7f-c7e7-499a-8386-2b405964d420.jpg?v=1775648865\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854&width=1946\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_4.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_5.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_8.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_7.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_6.jpg?v=1774589854&width=550\n' +
+      'https://tfs.com.pk/cdn/shop/files/new_website_logo_42efbfd1-6745-4da3-b89f-478c3ccb115f.png?v=1774958704&width=400\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_4.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_5.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_8.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_7.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3.jpg?v=1774589854&width=1445\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_6.jpg?v=1774589854&width=1445\n' +
+      'http://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854\n' +
+      'https://tfs.com.pk/cdn/shop/files/3_2.jpg?v=1774589854&width=1920\n' +
+      '\n' +
+      'Product URL:\n' +
+      'https://tfs.com.pk/products/pret-embroidered-embelished-lawn-3-pcs-fsp1331-pret-lilac\n' +
+      '\n' +
+      '=====================================================\n',
+    page_type: 'product',
+    name: 'PRET EMBROIDERED & EMBELISHED LAWN 3 PCS – TFS',
+    description: "TFSPRET EMBROIDERED & EMBELISHED LAWN 3 PCS Rs.14,499.00 Size: S SIZE GUIDE In Stock and ready to ship Form submitted successfully! Thank you for subscribing to the stock notification. Couldn't load pickup availability Refresh Description DISCLAIMER DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. Ask a question Link Close share Copy link Description PRODUCT DETAIL:FABRIC: LAWN COLOR: LILAC DESCRIPTION: Embroidered & Sheesha Work Lawn Shirt. Embroidered Chiffon Dupatta. Plain Cambric Trouser. DISCLAIMER Your order may arrive in multiple packages from different locations, but don't worry—there's no extra shipping cost. Product colour may slightly vary due to photographic lighting. Please allow measurement error of 1-2 CM. You May Also Like Hold and Drag to move items ================ PRODUCT INFORMATION ================ Product Name: PRET EMBROIDERED & EMBELISHED LAWN 3 PCS Description: PRODUCT DETAIL:FABRIC: LAWN COLOR: LILAC DESCRIPTION: Embroidered & Sheesha Work Lawn Shirt. Embroidered Chiffon Dupatta. Plain Cambric Trouser. Brand: TFS Currency: PKR Availability: InStock FSP1331-PRET-SMALL-LILAC-2000000230921 Category: Rating: Reviews: Images: =====================================================",
+    price: undefined,
+    productUrl: 'https://tfs.com.pk/products/pret-embroidered-embelished-lawn-3-pcs-fsp1331-pret-lilac',
+    url: 'https://tfs.com.pk/products/pret-embroidered-embelished-lawn-3-pcs-fsp1331-pret-lilac',
+    imageUrl: undefined,
+    available: undefined,
+    sku: 'FSP1331-PRET-SMALL-LILAC',
+    collectionNames: [],
+    collectionUrls: []
+  }
+]
+=================================
+AI PROVIDER REQUEST
+MODEL: gpt-5-mini
+VISION: false
+VISION MODEL SUPPORTS IMAGES: true
+TEXT LENGTH: 9417
+AI PROVIDER STATUS: completed
+AI PROVIDER COMPLETED
+AI PROVIDER TIME: 3238ms
+ACTION AI TIME: 3256ms
+ POST /api/chat 200 in 11.1s (next.js: 26ms, proxy.ts: 27ms, application-code: 11.1s)

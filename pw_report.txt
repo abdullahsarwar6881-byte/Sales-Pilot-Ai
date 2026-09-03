@@ -1,0 +1,21 @@
+PASS | A. matchType==exact | exact
+PASS | A. url==FSP1266-YELLOW | https://tfs.com.pk/products/embroidered-printed-lawn-2-pcs-unstitched-fsp1266-yellow
+PASS | A. followup available same product | url=https://tfs.com.pk/products/embroidered-printed-lawn-2-pcs-unstitched-fsp1266-yellow
+PASS | A. followup imageMatch same | https://tfs.com.pk/products/embroidered-printed-lawn-2-pcs-unstitched-fsp1266-yellow
+PASS | A. followup link returns exact url | url=https://tfs.com.pk/products/embroidered-printed-lawn-2-pcs-unstitched-fsp1266-yellow text=EMBROIDERED & PRINTED LAWN 2 PCS (UNSTITCHED) – TFS is the product you were asking about. You can view it here: https://
+PASS | B. attempt visual match | matchType=similar
+PASS | B. no wrong-product replacement | similar
+PASS | C. matchType==no_match | no_match
+PASS | C. no false exact card | no_match
+PASS | C. no fake link for car | cards=0
+PASS | C. conservative text | I couldn't verify the exact product in your image as a currently available store item.
+PASS | E. no "in this store" | I don't have enough verified information to state the overall quality of our dresses. I can pull up the fabric, construc
+PASS | E. no unsupported premium claim | I don't have enough verified information to state the overall quality of our dresses. I can pull up the fabric, construc
+PASS | E. merchant voice | I don't have enough verified information to state the overall quality of our dresses. I can pull up the fabric, construc
+PASS | F. new session created | eb3c2dac-ee9a-4100-8681-9d038f87cd38 (old=d3d485f9-4e47-4ddc-b97a-d96f744dad28)
+PASS | F. first msg -> exactly 1 conversation | count=1
+PASS | F. 12+ msgs -> still 1 conversation | count=1
+PASS | F. reload same session -> still 1 | count=1
+PASS | F. second new session created | 6579cd97-0de3-4eb2-9d19-b253b1a40645
+PASS | F. new visitor -> 1 new conversation | count=1
+PASS | F. old session still 1 (not duplicated) | count=1

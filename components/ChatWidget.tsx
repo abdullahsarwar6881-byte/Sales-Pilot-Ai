@@ -1,9 +1,11 @@
-"use client";
+﻿"use client";
 
 import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
+  type KeyboardEvent,
 } from "react";
 
 import {
@@ -14,6 +16,10 @@ import {
   Check,
   ExternalLink,
   User,
+  Paperclip,
+  Trash2,
+  Sparkles,
+  RotateCcw,
 } from "lucide-react";
 
 // =====================================================
@@ -31,7 +37,6 @@ interface Props {
 
   preview?: boolean;
 
-  // Appearance
   theme?: "Light" | "Dark";
 
   size?: "Small" | "Medium" | "Large";
@@ -40,7 +45,6 @@ interface Props {
 
   position?: "Bottom Right" | "Bottom Left";
 
-  // Behavior
   autoOpen?: boolean;
 
   showTypingIndicator?: boolean;
@@ -59,7 +63,7 @@ interface Props {
 }
 
 // =====================================================
-// MESSAGE TYPE
+// MESSAGE
 // =====================================================
 
 interface Message {
@@ -70,6 +74,39 @@ interface Message {
   content: string;
 
   timestamp: Date;
+
+  imageUrl?: string;
+
+  products?: any[];
+
+  siteUrl?: string;
+}
+
+
+// =====================================================
+// API RESPONSE
+// =====================================================
+
+interface ChatApiResponse {
+  response?: string;
+
+  visitorSessionId?: string;
+
+  conversationId?: string;
+
+  messageId?: string;
+
+  products?: unknown[];
+
+  action?: string;
+
+  success?: boolean;
+
+  error?: string;
+
+  message?: string;
+
+  [key: string]: unknown;
 }
 
 // =====================================================
@@ -84,7 +121,7 @@ export default function ChatWidget({
   brandColor = "#6366F1",
 
   welcomeMessage =
-    "👋 Hi! How can I help you today?",
+    "Hi! How can I help you today?",
 
   preview = false,
 
@@ -120,9 +157,11 @@ export default function ChatWidget({
     preview || autoOpen
   );
 
-  const [message, setMessage] = useState("");
+  const [message, setMessage] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
 
   const [visitorName, setVisitorName] =
     useState("");
@@ -138,8 +177,26 @@ export default function ChatWidget({
       !collectVisitorEmail
   );
 
-  // Used to prevent hydration mismatch.
-  const [mounted, setMounted] = useState(false);
+  const [selectedImage, setSelectedImage] =
+    useState<string | null>(null);
+
+  const [selectedImageName, setSelectedImageName] =
+    useState("");
+
+  const [imageError, setImageError] =
+    useState("");
+
+const [zoomImage, setZoomImage] =
+    useState<string | null>(null);
+
+  const [mounted, setMounted] =
+    useState(false);
+
+  const [showSuggestions, setShowSuggestions] =
+    useState(true);
+
+  const [sending, setSending] =
+    useState(false);
 
   // ===================================================
   // REFS
@@ -149,10 +206,13 @@ export default function ChatWidget({
     useRef<HTMLDivElement | null>(null);
 
   const inputRef =
+    useRef<HTMLTextAreaElement | null>(null);
+
+  const fileInputRef =
     useRef<HTMLInputElement | null>(null);
 
   // ===================================================
-  // MESSAGE STATE
+  // MESSAGES
   // ===================================================
 
   const [messages, setMessages] =
@@ -164,12 +224,19 @@ export default function ChatWidget({
 
         content: welcomeMessage,
 
-        // IMPORTANT:
-        // Fixed date prevents SSR/client hydration
-        // mismatch caused by new Date().
         timestamp: new Date(0),
       },
     ]);
+
+  // ===================================================
+  // SUGGESTIONS
+  // ===================================================
+
+  const suggestions = [
+    "What products do you have?",
+    "Show me your best products",
+    "I need help choosing a product",
+  ];
 
   // ===================================================
   // MOUNT
@@ -191,11 +258,15 @@ export default function ChatWidget({
   }, []);
 
   // ===================================================
-  // LOAD VISITOR SESSION
+  // LOAD SESSION
   // ===================================================
 
   useEffect(() => {
-    if (!mounted || !profileId) {
+    if (
+      !mounted ||
+      !profileId ||
+      typeof window === "undefined"
+    ) {
       return;
     }
 
@@ -206,9 +277,14 @@ export default function ChatWidget({
       localStorage.getItem(storageKey);
 
     if (existingSession) {
-      setVisitorSessionId(existingSession);
+      setVisitorSessionId(
+        existingSession
+      );
     }
-  }, [profileId, mounted]);
+  }, [
+    profileId,
+    mounted,
+  ]);
 
   // ===================================================
   // AUTO SCROLL
@@ -228,7 +304,7 @@ export default function ChatWidget({
   ]);
 
   // ===================================================
-  // FOCUS INPUT
+  // INPUT FOCUS
   // ===================================================
 
   useEffect(() => {
@@ -237,11 +313,15 @@ export default function ChatWidget({
       started &&
       !loading
     ) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      const timer =
+        window.setTimeout(() => {
+          inputRef.current?.focus();
+        }, 150);
 
-      return () => clearTimeout(timer);
+      return () =>
+        window.clearTimeout(
+          timer
+        );
     }
   }, [
     open,
@@ -255,10 +335,10 @@ export default function ChatWidget({
 
   const sizeClass =
     size === "Small"
-      ? "h-[500px] w-[340px]"
+      ? "h-[min(560px,calc(100vh-110px))] w-[min(360px,calc(100vw-24px))]"
       : size === "Large"
-      ? "h-[680px] w-[430px]"
-      : "h-[600px] w-[390px]";
+      ? "h-[min(720px,calc(100vh-110px))] w-[min(460px,calc(100vw-24px))]"
+      : "h-[min(640px,calc(100vh-110px))] w-[min(410px,calc(100vw-24px))]";
 
   // ===================================================
   // RADIUS
@@ -268,7 +348,7 @@ export default function ChatWidget({
     radius === "Square"
       ? "rounded-none"
       : radius === "Pill"
-      ? "rounded-[32px]"
+      ? "rounded-[30px]"
       : "rounded-[24px]";
 
   // ===================================================
@@ -277,8 +357,8 @@ export default function ChatWidget({
 
   const positionClass =
     position === "Bottom Left"
-      ? "left-6"
-      : "right-6";
+      ? "left-4 sm:left-6"
+      : "right-4 sm:right-6";
 
   // ===================================================
   // THEME
@@ -313,7 +393,7 @@ export default function ChatWidget({
 
     setStarted(true);
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
   }
@@ -322,17 +402,20 @@ export default function ChatWidget({
   // FORMAT TIME
   // ===================================================
 
-  function formatTime(date: Date) {
-    // Don't render dynamic browser time before
-    // hydration has completed.
+  function formatTime(
+    date: Date
+  ) {
     if (!mounted) {
       return "";
     }
 
-    return date.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return date.toLocaleTimeString(
+      [],
+      {
+        hour: "numeric",
+        minute: "2-digit",
+      }
+    );
   }
 
   // ===================================================
@@ -369,11 +452,12 @@ export default function ChatWidget({
       const gain =
         audioContext.createGain();
 
-      oscillator.frequency.value = 700;
+      oscillator.frequency.value =
+        680;
 
       oscillator.type = "sine";
 
-      gain.gain.value = 0.04;
+      gain.gain.value = 0.035;
 
       oscillator.connect(gain);
 
@@ -384,12 +468,167 @@ export default function ChatWidget({
       oscillator.start();
 
       oscillator.stop(
-        audioContext.currentTime + 0.08
+        audioContext.currentTime +
+          0.08
       );
+
+      window.setTimeout(() => {
+        void audioContext.close();
+      }, 200);
     } catch {
-      // Ignore sound errors.
+      // Ignore audio errors.
     }
   }
+
+  // ===================================================
+  // SELECT IMAGE
+  // ===================================================
+
+  function handleImageSelect(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    setImageError("");
+
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (
+      !allowedTypes.includes(
+        file.type
+      )
+    ) {
+      setImageError(
+        "Please select a JPG, PNG, or WebP image."
+      );
+
+      event.target.value = "";
+
+      return;
+    }
+
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setImageError(
+        "Image must be smaller than 5 MB."
+      );
+
+      event.target.value = "";
+
+      return;
+    }
+
+    const reader =
+      new FileReader();
+
+    reader.onload = () => {
+      if (
+        typeof reader.result !==
+        "string"
+      ) {
+        setImageError(
+          "Unable to read this image."
+        );
+
+        return;
+      }
+
+      setSelectedImage(
+        reader.result
+      );
+
+      setSelectedImageName(
+        file.name
+      );
+    };
+
+    reader.onerror = () => {
+      setImageError(
+        "Unable to read this image."
+      );
+    };
+
+    reader.readAsDataURL(
+      file
+    );
+  }
+
+  // ===================================================
+  // REMOVE IMAGE
+  // ===================================================
+
+  function removeSelectedImage() {
+    setSelectedImage(null);
+
+    setSelectedImageName("");
+
+    setImageError("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value =
+        "";
+    }
+  }
+
+  // ===================================================
+  // OPEN IMAGE SELECTOR
+  // ===================================================
+
+  function openImageSelector() {
+    if (loading) {
+      return;
+    }
+
+    fileInputRef.current?.click();
+  }
+
+  // ===================================================
+  // HANDLE INPUT
+  // ===================================================
+
+  function handleMessageChange(
+    value: string
+  ) {
+    setMessage(value);
+
+    if (value.trim()) {
+      setShowSuggestions(false);
+    } else {
+      setShowSuggestions(true);
+    }
+  }
+
+  // ===================================================
+  // TEXTAREA AUTO RESIZE
+  // ===================================================
+
+  useEffect(() => {
+    const textarea =
+      inputRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "0px";
+
+    textarea.style.height =
+      `${Math.min(
+        textarea.scrollHeight,
+        120
+      )}px`;
+  }, [message]);
 
   // ===================================================
   // SEND MESSAGE
@@ -397,28 +636,29 @@ export default function ChatWidget({
 
   async function sendMessage() {
     if (
-      !message.trim() ||
+      (
+        !message.trim() &&
+        !selectedImage
+      ) ||
       loading
     ) {
       return;
     }
 
     if (!profileId) {
-      console.error(
-        "ChatWidget: profileId is missing."
-      );
-
       setMessages((previous) => [
         ...previous,
         {
-          id: `error-${Date.now()}`,
+          id:
+            `error-${Date.now()}`,
 
           sender: "ai",
 
           content:
             "This chat widget is not connected to a Sales Pilot account.",
 
-          timestamp: new Date(),
+          timestamp:
+            new Date(),
         },
       ]);
 
@@ -428,24 +668,45 @@ export default function ChatWidget({
     const userMessage =
       message.trim();
 
-    // Save current conversation history
-    // before adding the new customer message.
+    const imageToSend =
+      selectedImage;
+
+    // -------------------------------------------------
+    // HISTORY
+    // -------------------------------------------------
+
     const historyForApi =
       messages.map((msg) => ({
-        sender: msg.sender,
-        content: msg.content,
+        sender:
+          msg.sender,
+
+        content:
+          msg.content,
       }));
 
-    const customerMessage: Message = {
-      id:
-        `customer-${Date.now()}`,
+    // -------------------------------------------------
+    // CUSTOMER MESSAGE
+    // -------------------------------------------------
 
-      sender: "customer",
+    const customerMessage: Message =
+      {
+        id:
+          `customer-${Date.now()}`,
 
-      content: userMessage,
+        sender:
+          "customer",
 
-      timestamp: new Date(),
-    };
+        content:
+          userMessage ||
+          "Please identify this product.",
+
+        timestamp:
+          new Date(),
+
+        imageUrl:
+          imageToSend ||
+          undefined,
+      };
 
     setMessages((previous) => [
       ...previous,
@@ -454,96 +715,84 @@ export default function ChatWidget({
 
     setMessage("");
 
+    setSelectedImage(null);
+
+    setSelectedImageName("");
+
+    setImageError("");
+
+    setShowSuggestions(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value =
+        "";
+    }
+
     setLoading(true);
 
+    setSending(true);
+
     try {
-      console.log(
-        "================================="
-      );
-
-      console.log(
-        "SALES PILOT CHAT"
-      );
-
-      console.log(
-        "PROFILE:",
-        profileId
-      );
-
-      console.log(
-        "SESSION:",
-        visitorSessionId
-      );
-
-      console.log(
-        "MESSAGE:",
-        userMessage
-      );
-
-      console.log(
-        "================================="
-      );
-
       // =================================================
       // API REQUEST
       // =================================================
 
-      const response = await fetch(
-        "/api/chat",
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          "/api/chat",
+          {
+            method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-          body: JSON.stringify({
-            message:
-              userMessage,
+            body:
+              JSON.stringify({
+                message:
+                  userMessage ||
+                  "Please identify this product.",
 
-            profileId,
+                profileId,
 
-            visitorSessionId:
-              visitorSessionId ||
-              null,
+                visitorSessionId:
+                  visitorSessionId ||
+                  null,
 
-            customerName:
-              visitorName.trim() ||
-              "Website Visitor",
+                customerName:
+                  visitorName.trim() ||
+                  "Website Visitor",
 
-            customerEmail:
-              visitorEmail.trim() ||
-              null,
+                customerEmail:
+                  visitorEmail.trim() ||
+                  null,
 
-            conversationHistory:
-              historyForApi,
-          }),
-        }
-      );
+                conversationHistory:
+                  historyForApi,
+
+                image:
+                  imageToSend ||
+                  null,
+              }),
+          }
+        );
 
       // =================================================
-      // READ RESPONSE
+      // PARSE RESPONSE
       // =================================================
 
-      let data: any = null;
+      let data:
+        ChatApiResponse | null =
+        null;
 
       try {
         data =
-          await response.json();
+          (await response.json()) as
+            ChatApiResponse;
       } catch {
         data = null;
       }
-
-      console.log(
-        "CHAT API STATUS:",
-        response.status
-      );
-
-      console.log(
-        "CHAT API RESPONSE:",
-        data
-      );
 
       // =================================================
       // API ERROR
@@ -566,7 +815,8 @@ export default function ChatWidget({
 
       if (
         data?.visitorSessionId &&
-        typeof window !== "undefined"
+        typeof window !==
+          "undefined"
       ) {
         const storageKey =
           `sales-pilot-session-${profileId}`;
@@ -591,16 +841,35 @@ export default function ChatWidget({
             "I'm sorry, I couldn't find an answer."
         ).trim();
 
-      const aiMessage: Message = {
-        id:
-          `ai-${Date.now()}`,
+      const productData =
+        Array.isArray(data?.products)
+          ? data.products
+          : Array.isArray(data?.productCards)
+            ? data.productCards
+            : [];
 
-        sender: "ai",
+      const aiMessage: Message =
+        {
+          id:
+            `ai-${Date.now()}`,
 
-        content: aiResponse,
+          sender:
+            "ai",
 
-        timestamp: new Date(),
-      };
+          content:
+            aiResponse,
+
+          timestamp:
+            new Date(),
+
+          products:
+            productData,
+          siteUrl:
+            typeof data?.siteUrl ===
+            "string"
+              ? data.siteUrl
+              : undefined,
+        };
 
       setMessages((previous) => [
         ...previous,
@@ -608,23 +877,10 @@ export default function ChatWidget({
       ]);
 
       playNotificationSound();
-
-      console.log(
-        "AI RESPONSE:",
-        aiResponse
-      );
     } catch (error: unknown) {
       console.error(
-        "================================="
-      );
-
-      console.error(
-        "CHAT ERROR:",
+        "SALES PILOT CHAT ERROR:",
         error
-      );
-
-      console.error(
-        "================================="
       );
 
       const errorMessage =
@@ -632,68 +888,67 @@ export default function ChatWidget({
           ? error.message
           : "Something went wrong.";
 
-      // =================================================
-      // FRIENDLY ERROR MESSAGE
-      // =================================================
-
       let userFacingError =
         "I'm sorry, something went wrong. Please try again.";
 
-      // Billing error
+      const normalizedError =
+        errorMessage.toLowerCase();
+
       if (
-        errorMessage
-          .toLowerCase()
-          .includes("billing") ||
-        errorMessage
-          .toLowerCase()
-          .includes("subscription") ||
-        errorMessage
-          .toLowerCase()
-          .includes("active billing")
+        normalizedError.includes(
+          "billing"
+        ) ||
+        normalizedError.includes(
+          "subscription"
+        ) ||
+        normalizedError.includes(
+          "active billing"
+        )
       ) {
         userFacingError =
-          "This Sales Pilot account does not have an active billing subscription. Please activate a plan before using the AI support agent.";
-      }
-
-      // Profile error
-      else if (
-        errorMessage
-          .toLowerCase()
-          .includes("profile")
+          "This Sales Pilot account does not have an active billing subscription. Please activate a plan before using the AI support employee.";
+      } else if (
+        normalizedError.includes(
+          "profile"
+        )
       ) {
         userFacingError =
           "This chat widget is not connected to a valid Sales Pilot account.";
-      }
-
-      // Knowledge error
-      else if (
-        errorMessage
-          .toLowerCase()
-          .includes("knowledge")
+      } else if (
+        normalizedError.includes(
+          "knowledge"
+        )
       ) {
         userFacingError =
-          "I couldn't access the store's knowledge base right now. Please try again.";
-      }
-
-      // Timeout
-      else if (
-        errorMessage
-          .toLowerCase()
-          .includes("timeout") ||
-        errorMessage
-          .toLowerCase()
-          .includes("timed out")
+          "I couldn't access the store information right now. Please try again.";
+      } else if (
+        normalizedError.includes(
+          "image"
+        )
+      ) {
+        userFacingError =
+          "I couldn't analyze that image. Please try another clear product photo.";
+      } else if (
+        normalizedError.includes(
+          "timeout"
+        ) ||
+        normalizedError.includes(
+          "timed out"
+        )
       ) {
         userFacingError =
           "The AI is taking longer than expected. Please try again.";
+      } else if (
+        normalizedError.includes(
+          "rate limit"
+        ) ||
+        normalizedError.includes(
+          "429"
+        )
+      ) {
+        userFacingError =
+          "We're receiving a lot of requests right now. Please try again in a moment.";
       }
-
-      // Development mode:
-      // Show actual error in console only.
-      console.error(
-        "BACKEND ERROR:",
-        errorMessage
-      );
 
       setMessages((previous) => [
         ...previous,
@@ -701,16 +956,24 @@ export default function ChatWidget({
           id:
             `error-${Date.now()}`,
 
-          sender: "ai",
+          sender:
+            "ai",
 
           content:
             userFacingError,
 
-          timestamp: new Date(),
+          timestamp:
+            new Date(),
         },
       ]);
     } finally {
       setLoading(false);
+
+      setSending(false);
+
+      window.setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
   }
 
@@ -719,111 +982,380 @@ export default function ChatWidget({
   // ===================================================
 
   function handleKeyDown(
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: KeyboardEvent<HTMLTextAreaElement>
   ) {
     if (
-      e.key === "Enter"
+      e.key === "Enter" &&
+      !e.shiftKey
     ) {
       e.preventDefault();
 
-      sendMessage();
+      void sendMessage();
     }
   }
 
   // ===================================================
-  // PARSE PRODUCT RESPONSE
+  // SUGGESTION CLICK
   // ===================================================
 
-  function parseProductResponse(
-    content: string
+  function handleSuggestion(
+    suggestion: string
   ) {
-    const urlRegex =
-      /(https?:\/\/[^\s]+)/gi;
+    setMessage(suggestion);
 
-    const urls =
-      content.match(urlRegex) || [];
+    setShowSuggestions(false);
 
-    return {
-      urls,
-      content,
-    };
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   }
 
   // ===================================================
-  // RENDER MESSAGE
+  // NEW CONVERSATION
+  // ===================================================
+
+  function startNewConversation() {
+    if (loading) {
+      return;
+    }
+
+    setMessages([
+      {
+        id:
+          `welcome-${Date.now()}`,
+
+        sender:
+          "ai",
+
+        content:
+          welcomeMessage,
+
+        timestamp:
+          new Date(),
+      },
+    ]);
+
+    setMessage("");
+
+    setSelectedImage(null);
+
+    setSelectedImageName("");
+
+    setImageError("");
+
+    setShowSuggestions(true);
+
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  }
+
+  // ===================================================
+  // CLEAR SESSION
+  // ===================================================
+
+  function clearConversationSession() {
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+      const storageKey =
+        `sales-pilot-session-${profileId}`;
+
+      localStorage.removeItem(
+        storageKey
+      );
+    }
+
+    setVisitorSessionId("");
+
+    startNewConversation();
+  }
+
+  // ===================================================
+  // PARSE RESPONSE
+  // ===================================================
+
+  // ===================================================
+  // RENDER MESSAGE CONTENT
   // ===================================================
 
   function renderMessageContent(
     msg: Message
   ) {
-    const parsed =
-      parseProductResponse(
-        msg.content
-      );
-
+    // Strip every raw URL from the AI text. Product links are rendered as
+    // product cards/buttons below from the structured product data.
     let text =
-      parsed.content;
-
-    const url =
-      parsed.urls[0];
-
-    // =================================================
-    // REMOVE URL FROM MESSAGE TEXT
-    // =================================================
-
-    if (url) {
-      text =
-        text.replace(
-          url,
-          ""
-        );
-
-      text =
-        text.replace(
-          "View product:",
-          ""
-        );
-
-      text =
-        text.trim();
-    }
-
-    // =================================================
-    // REMOVE PLACEHOLDER
-    // =================================================
-
-    text =
-      text.replace(
-        /\[Product URL\]/gi,
+      String(msg.content || "").replace(
+        /https?:\/\/[^\s<>"')]+/gi,
         ""
       );
 
+    text =
+      text
+        .replace(
+          /\[?\s*view\s+product\s*\]?\s*:?/gi,
+          ""
+        )
+        .replace(
+          /view it here\s*:/gi,
+          ""
+        )
+        .replace(
+          /\n{3,}/g,
+          "\n\n"
+        )
+        .trim();
+
+    const productList =
+      Array.isArray(msg.products)
+        ? msg.products
+          .map((raw) => {
+            if (!raw || typeof raw !== "object") {
+              return null;
+            }
+            const product = raw as any;
+            const name =
+              String(
+                product.displayName ||
+                  product.name ||
+                  product.title ||
+                  ""
+              ).trim();
+            const productUrl =
+              String(
+                product.productUrl ||
+                  product.viewUrl ||
+                  product.url ||
+                  ""
+              ).trim();
+            const price =
+              String(
+                product.displayPrice ||
+                  product.price ||
+                  ""
+              ).trim();
+            const image =
+              String(
+                product.imageUrl ||
+                  product.image ||
+                  ""
+              ).trim();
+            const available =
+              product.available === true ||
+              product.in_stock === true;
+
+            if (!name) {
+              return null;
+            }
+
+            return {
+              name,
+              productUrl,
+              price,
+              image,
+              available,
+            };
+          })
+          .filter(
+            (item: any) =>
+              Boolean(item && item.name)
+          )
+        : [];
+
     return (
       <div className="space-y-3">
+        {/* CUSTOMER IMAGE */}
+
+        {msg.imageUrl && (
+          <div
+            className={`
+              overflow-hidden
+              rounded-xl
+              border
+              w-fit
+              max-w-[160px]
+              ${
+                isDark
+                  ? "border-slate-700"
+                  : "border-slate-200"
+              }
+            `}
+          >
+            <img
+              src={msg.imageUrl}
+              alt="Uploaded product"
+              className="max-h-[160px] max-w-[140px] w-auto h-auto cursor-zoom-in object-contain"
+              onClick={() =>
+                setZoomImage(
+                  msg.imageUrl as string
+                )
+              }
+              role="button"
+              aria-label="Enlarge uploaded image"
+            />
+          </div>
+        )}
+
+        {/* MESSAGE */}
+
         {text && (
-          <p className="whitespace-pre-wrap break-words leading-6">
+          <p
+            className="
+              whitespace-pre-wrap
+              break-words
+              leading-6
+            "
+          >
             {text}
           </p>
         )}
 
-        {url && (
-          <a
-            href={url.replace(
-              /[),.]+$/,
-              ""
+        {/* PRODUCT CARDS */}
+
+        {productList.length > 0 && (
+          <div className="space-y-2">
+            {productList.map(
+              (product, index) => (
+                <div
+                  key={`${product.name}-${index}`}
+                  className={`
+                    flex
+                    items-center
+                    gap-3
+                    overflow-hidden
+                    rounded-xl
+                    border
+                    p-2
+                    ${
+                      isDark
+                        ? "border-slate-700 bg-slate-800"
+                        : "border-slate-200 bg-white"
+                    }
+                  `}
+                >
+                  {product.image && (
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                    />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="
+                        truncate
+                        text-sm
+                        font-semibold
+                      "
+                    >
+                      {product.name}
+                    </p>
+
+                    {product.price && (
+                      <p
+                        className="
+                          text-sm
+                          text-slate-500
+                        "
+                      >
+                        {product.price}
+                      </p>
+                    )}
+                    {typeof product.available ===
+                      "boolean" && (
+                      <p className="mt-0.5">
+                        <span
+                          className={`
+                            inline-flex
+                            items-center
+                            rounded-full
+                            px-2
+                            py-0.5
+                            text-[11px]
+                            font-semibold
+                            ${
+                              product.available
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-red-100 text-red-700"
+                            }
+                          `}
+                        >
+                          {product.available
+                            ? "In Stock"
+                            : "Out of Stock"}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  {product.productUrl && (
+                    <a
+                      href={product.productUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        backgroundColor:
+                          brandColor,
+                      }}
+                      className="
+                        inline-flex
+                        shrink-0
+                        items-center
+                        gap-1.5
+                        rounded-lg
+                        px-3
+                        py-2
+                        text-xs
+                        font-semibold
+                        text-white
+                        transition
+                        hover:opacity-90
+                      "
+                    >
+                      View Product
+
+                      <ExternalLink
+                        size={14}
+                      />
+                    </a>
+                  )}
+                </div>
+              )
             )}
+          </div>
+        )}
+
+        {/* HOMEPAGE / STORE LINK */}
+
+        {msg.siteUrl && (
+          <a
+            href={msg.siteUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              backgroundColor:
-                brandColor,
+              backgroundColor: brandColor,
             }}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="
+              inline-flex
+              shrink-0
+              items-center
+              gap-1.5
+              rounded-lg
+              px-3
+              py-2
+              text-xs
+              font-semibold
+              text-white
+              transition
+              hover:opacity-90
+            "
           >
-            View Product
+            Visit Website
 
             <ExternalLink
-              size={15}
+              size={14}
             />
           </a>
         )}
@@ -843,9 +1375,12 @@ export default function ChatWidget({
 
       {open && (
         <div
+          role="dialog"
+          aria-label={`${aiName} chat`}
           className={`
             fixed
-            bottom-24
+            bottom-20
+            sm:bottom-24
             ${positionClass}
             ${sizeClass}
             ${radiusClass}
@@ -855,8 +1390,12 @@ export default function ChatWidget({
             flex-col
             overflow-hidden
             border
-            border-slate-200/80
-            shadow-[0_20px_60px_rgba(15,23,42,0.25)]
+            ${
+              isDark
+                ? "border-slate-800"
+                : "border-slate-200"
+            }
+            shadow-[0_24px_80px_rgba(15,23,42,0.22)]
             ${
               enableAnimations
                 ? "animate-in fade-in slide-in-from-bottom-4 duration-200"
@@ -873,50 +1412,134 @@ export default function ChatWidget({
               backgroundColor:
                 brandColor,
             }}
-            className="flex shrink-0 items-center justify-between px-5 py-4 text-white"
+            className="
+              flex
+              shrink-0
+              items-center
+              justify-between
+              px-4
+              py-3.5
+              text-white
+            "
           >
             <div className="flex min-w-0 items-center gap-3">
-              {/* Avatar */}
+              {/* AVATAR */}
 
               <div className="relative">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 backdrop-blur">
-                  <Bot size={22} />
+                <div
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    items-center
+                    justify-center
+                    rounded-full
+                    bg-white/15
+                    backdrop-blur
+                  "
+                >
+                  {showAiAvatar ? (
+                    <Bot size={21} />
+                  ) : (
+                    <Sparkles
+                      size={20}
+                    />
+                  )}
                 </div>
 
-                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
+                <span
+                  className="
+                    absolute
+                    bottom-0
+                    right-0
+                    h-2.5
+                    w-2.5
+                    rounded-full
+                    border-2
+                    border-white
+                    bg-emerald-400
+                  "
+                />
               </div>
 
-              {/* Name */}
+              {/* TITLE */}
 
               <div className="min-w-0">
                 <h3 className="truncate text-[15px] font-bold">
                   {aiName}
                 </h3>
 
-                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-white/80">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/80">
+                  <span>
+                    Online
+                  </span>
+
+                  <span className="opacity-50">
+                    ·
+                  </span>
 
                   <span>
-                    Online · AI Support
+                    Support
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Close */}
+            {/* HEADER ACTIONS */}
 
-            {!preview && (
-              <button
-                type="button"
-                onClick={() =>
-                  setOpen(false)
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/15"
-                aria-label="Close chat"
-              >
-                <X size={20} />
-              </button>
-            )}
+            <div className="flex items-center gap-1">
+              {!preview && (
+                <button
+                  type="button"
+                  onClick={
+                    startNewConversation
+                  }
+                  disabled={
+                    loading
+                  }
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    items-center
+                    justify-center
+                    rounded-full
+                    transition
+                    hover:bg-white/15
+                    disabled:opacity-40
+                  "
+                  aria-label="New conversation"
+                  title="New conversation"
+                >
+                  <RotateCcw
+                    size={16}
+                  />
+                </button>
+              )}
+
+              {!preview && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpen(false)
+                  }
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    items-center
+                    justify-center
+                    rounded-full
+                    transition
+                    hover:bg-white/15
+                  "
+                  aria-label="Close chat"
+                  title="Close chat"
+                >
+                  <X size={19} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* =================================================
@@ -930,6 +1553,7 @@ export default function ChatWidget({
                 flex-1
                 flex-col
                 justify-center
+                overflow-y-auto
                 px-6
                 ${
                   isDark
@@ -946,37 +1570,56 @@ export default function ChatWidget({
                     color:
                       brandColor,
                   }}
-                  className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl"
+                  className="
+                    mb-4
+                    flex
+                    h-12
+                    w-12
+                    items-center
+                    justify-center
+                    rounded-2xl
+                  "
                 >
-                  <Bot size={25} />
+                  <Sparkles
+                    size={23}
+                  />
                 </div>
 
                 <h2 className="text-2xl font-bold">
-                  Before we start 👋
+                  Let's get started
                 </h2>
 
                 <p
-                  className={`mt-2 text-sm leading-6 ${
-                    isDark
-                      ? "text-slate-400"
-                      : "text-slate-500"
-                  }`}
+                  className={`
+                    mt-2
+                    text-sm
+                    leading-6
+                    ${
+                      isDark
+                        ? "text-slate-400"
+                        : "text-slate-500"
+                    }
+                  `}
                 >
                   Tell us a little about
-                  yourself so our AI can
-                  better assist you.
+                  yourself and we'll be
+                  happy to help.
                 </p>
               </div>
 
-              {/* Name */}
+              {/* NAME */}
 
               {collectVisitorName && (
                 <div className="mb-4">
-                  <label className="mb-2 block text-sm font-semibold">
+                  <label
+                    htmlFor="visitor-name"
+                    className="mb-2 block text-sm font-semibold"
+                  >
                     Your name
                   </label>
 
                   <input
+                    id="visitor-name"
                     value={
                       visitorName
                     }
@@ -986,24 +1629,44 @@ export default function ChatWidget({
                       )
                     }
                     placeholder="Enter your name"
-                    className="w-full rounded-xl border px-4 py-3 outline-none transition"
+                    className={`
+                      w-full
+                      rounded-xl
+                      border
+                      px-4
+                      py-3
+                      text-sm
+                      outline-none
+                      transition
+                      ${
+                        isDark
+                          ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500"
+                          : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
+                      }
+                    `}
                     style={{
                       borderColor:
-                        `${brandColor}55`,
+                        visitorName
+                          ? `${brandColor}70`
+                          : undefined,
                     }}
                   />
                 </div>
               )}
 
-              {/* Email */}
+              {/* EMAIL */}
 
               {collectVisitorEmail && (
                 <div className="mb-5">
-                  <label className="mb-2 block text-sm font-semibold">
+                  <label
+                    htmlFor="visitor-email"
+                    className="mb-2 block text-sm font-semibold"
+                  >
                     Your email
                   </label>
 
                   <input
+                    id="visitor-email"
                     type="email"
                     value={
                       visitorEmail
@@ -1014,12 +1677,24 @@ export default function ChatWidget({
                       )
                     }
                     placeholder="you@example.com"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none transition"
+                    className={`
+                      w-full
+                      rounded-xl
+                      border
+                      px-4
+                      py-3
+                      text-sm
+                      outline-none
+                      transition
+                      ${
+                        isDark
+                          ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500"
+                          : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
+                      }
+                    `}
                   />
                 </div>
               )}
-
-              {/* Start */}
 
               <button
                 type="button"
@@ -1030,7 +1705,18 @@ export default function ChatWidget({
                   backgroundColor:
                     brandColor,
                 }}
-                className="w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition hover:opacity-90"
+                className="
+                  w-full
+                  rounded-xl
+                  py-3.5
+                  text-sm
+                  font-bold
+                  text-white
+                  shadow-lg
+                  transition
+                  hover:opacity-90
+                  active:scale-[0.99]
+                "
               >
                 Start Chat
               </button>
@@ -1045,8 +1731,10 @@ export default function ChatWidget({
                 className={`
                   flex-1
                   overflow-y-auto
-                  px-4
-                  py-5
+                  px-3
+                  py-4
+                  sm:px-4
+                  sm:py-5
                   ${
                     isDark
                       ? "bg-slate-900"
@@ -1054,7 +1742,82 @@ export default function ChatWidget({
                   }
                 `}
               >
-                <div className="space-y-5">
+                <div className="space-y-4">
+                  {/* =================================================
+                      SUGGESTIONS
+                      ================================================= */}
+
+                  {messages.length ===
+                    1 &&
+                    showSuggestions && (
+                      <div className="px-1 pb-2 pt-1">
+                        <div className="mb-2 flex items-center gap-2">
+                          <Sparkles
+                            size={13}
+                            style={{
+                              color:
+                                brandColor,
+                            }}
+                          />
+
+                          <span
+                            className={`
+                              text-[11px]
+                              font-semibold
+                              ${
+                                isDark
+                                  ? "text-slate-400"
+                                  : "text-slate-500"
+                              }
+                            `}
+                          >
+                            You can ask me
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {suggestions.map(
+                            (
+                              suggestion
+                            ) => (
+                              <button
+                                key={
+                                  suggestion
+                                }
+                                type="button"
+                                onClick={() =>
+                                  handleSuggestion(
+                                    suggestion
+                                  )
+                                }
+                                className={`
+                                  rounded-full
+                                  border
+                                  px-3
+                                  py-2
+                                  text-left
+                                  text-[11px]
+                                  font-medium
+                                  transition
+                                  ${
+                                    isDark
+                                      ? "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:bg-slate-700"
+                                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                                  }
+                                `}
+                              >
+                                {suggestion}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* =================================================
+                      MESSAGES
+                      ================================================= */}
+
                   {messages.map(
                     (msg) => {
                       const isAI =
@@ -1078,8 +1841,8 @@ export default function ChatWidget({
                           <div
                             className={`
                               flex
-                              max-w-[88%]
-                              gap-2.5
+                              max-w-[90%]
+                              gap-2
                               ${
                                 isAI
                                   ? "items-start"
@@ -1087,7 +1850,7 @@ export default function ChatWidget({
                               }
                             `}
                           >
-                            {/* AI avatar */}
+                            {/* AI AVATAR */}
 
                             {isAI &&
                               showAiAvatar && (
@@ -1098,7 +1861,16 @@ export default function ChatWidget({
                                     color:
                                       brandColor,
                                   }}
-                                  className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                                  className="
+                                    mt-0.5
+                                    flex
+                                    h-8
+                                    w-8
+                                    shrink-0
+                                    items-center
+                                    justify-center
+                                    rounded-full
+                                  "
                                 >
                                   <Bot
                                     size={
@@ -1108,8 +1880,8 @@ export default function ChatWidget({
                                 </div>
                               )}
 
-                            <div>
-                              {/* Message bubble */}
+                            <div className="min-w-0">
+                              {/* MESSAGE BUBBLE */}
 
                               <div
                                 className={`
@@ -1123,7 +1895,7 @@ export default function ChatWidget({
                                     isAI
                                       ? isDark
                                         ? "rounded-tl-md bg-slate-800 text-slate-100"
-                                        : "rounded-tl-md bg-white text-slate-800"
+                                        : "rounded-tl-md border border-slate-100 bg-white text-slate-800"
                                       : "rounded-tr-md text-white"
                                   }
                                 `}
@@ -1141,7 +1913,7 @@ export default function ChatWidget({
                                 )}
                               </div>
 
-                              {/* Time */}
+                              {/* TIME */}
 
                               <div
                                 className={`
@@ -1177,7 +1949,7 @@ export default function ChatWidget({
                               </div>
                             </div>
 
-                            {/* Customer avatar */}
+                            {/* CUSTOMER AVATAR */}
 
                             {!isAI && (
                               <div
@@ -1187,7 +1959,16 @@ export default function ChatWidget({
                                   color:
                                     brandColor,
                                 }}
-                                className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                                className="
+                                  mt-0.5
+                                  flex
+                                  h-8
+                                  w-8
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                "
                               >
                                 <User
                                   size={
@@ -1208,7 +1989,7 @@ export default function ChatWidget({
 
                   {loading &&
                     showTypingIndicator && (
-                      <div className="flex items-start gap-2.5">
+                      <div className="flex items-start gap-2">
                         {showAiAvatar && (
                           <div
                             style={{
@@ -1217,9 +1998,21 @@ export default function ChatWidget({
                               color:
                                 brandColor,
                             }}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                            className="
+                              flex
+                              h-8
+                              w-8
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-full
+                            "
                           >
-                            <Bot size={16} />
+                            <Bot
+                              size={
+                                16
+                              }
+                            />
                           </div>
                         )}
 
@@ -1229,12 +2022,12 @@ export default function ChatWidget({
                             rounded-tl-md
                             px-4
                             py-3
+                            shadow-sm
                             ${
                               isDark
                                 ? "bg-slate-800"
                                 : "bg-white"
                             }
-                            shadow-sm
                           `}
                         >
                           <div className="flex items-center gap-1.5">
@@ -1243,7 +2036,12 @@ export default function ChatWidget({
                                 backgroundColor:
                                   brandColor,
                               }}
-                              className="h-1.5 w-1.5 animate-bounce rounded-full"
+                              className="
+                                h-1.5
+                                w-1.5
+                                animate-bounce
+                                rounded-full
+                              "
                             />
 
                             <span
@@ -1251,7 +2049,13 @@ export default function ChatWidget({
                                 backgroundColor:
                                   brandColor,
                               }}
-                              className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:120ms]"
+                              className="
+                                h-1.5
+                                w-1.5
+                                animate-bounce
+                                rounded-full
+                                [animation-delay:120ms]
+                              "
                             />
 
                             <span
@@ -1259,7 +2063,13 @@ export default function ChatWidget({
                                 backgroundColor:
                                   brandColor,
                               }}
-                              className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:240ms]"
+                              className="
+                                h-1.5
+                                w-1.5
+                                animate-bounce
+                                rounded-full
+                                [animation-delay:240ms]
+                              "
                             />
                           </div>
                         </div>
@@ -1275,7 +2085,7 @@ export default function ChatWidget({
               </div>
 
               {/* =================================================
-                  INPUT
+                  INPUT AREA
                   ================================================= */}
 
               <div
@@ -1290,18 +2100,20 @@ export default function ChatWidget({
                   }
                 `}
               >
-                <div className="flex items-end gap-2">
-                  {/* Input */}
+                {/* =================================================
+                    IMAGE PREVIEW
+                    ================================================= */}
 
+                {selectedImage && (
                   <div
                     className={`
+                      mb-3
                       flex
-                      min-h-[48px]
-                      flex-1
                       items-center
-                      rounded-2xl
+                      gap-3
+                      rounded-xl
                       border
-                      px-4
+                      p-2
                       ${
                         isDark
                           ? "border-slate-700 bg-slate-900"
@@ -1309,7 +2121,179 @@ export default function ChatWidget({
                       }
                     `}
                   >
-                    <input
+                    <img
+                      src={
+                        selectedImage
+                      }
+                      alt={
+                        selectedImageName ||
+                        "Selected product"
+                      }
+                      className="
+                        h-14
+                        w-14
+                        rounded-lg
+                        object-cover
+                      "
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`
+                          truncate
+                          text-xs
+                          font-semibold
+                          ${
+                            isDark
+                              ? "text-slate-200"
+                              : "text-slate-700"
+                          }
+                        `}
+                      >
+                        {selectedImageName ||
+                          "Product image"}
+                      </p>
+
+                      <p
+                        className={`
+                          mt-0.5
+                          text-[11px]
+                          ${
+                            isDark
+                              ? "text-slate-500"
+                              : "text-slate-400"
+                          }
+                        `}
+                      >
+                        Image ready
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        removeSelectedImage
+                      }
+                      disabled={
+                        loading
+                      }
+                      className="
+                        flex
+                        h-7
+                        w-7
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-full
+                        text-slate-400
+                        transition
+                        hover:bg-slate-200
+                        hover:text-slate-700
+                        disabled:opacity-40
+                      "
+                      aria-label="Remove image"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                )}
+
+                {/* =================================================
+                    IMAGE ERROR
+                    ================================================= */}
+
+                {imageError && (
+                  <div
+                    className="
+                      mb-2
+                      rounded-lg
+                      bg-red-50
+                      px-3
+                      py-2
+                      text-xs
+                      font-medium
+                      text-red-600
+                    "
+                  >
+                    {imageError}
+                  </div>
+                )}
+
+                {/* =================================================
+                    INPUT ROW
+                    ================================================= */}
+
+                <div className="flex items-end gap-2">
+                  {/* HIDDEN FILE */}
+
+                  <input
+                    ref={
+                      fileInputRef
+                    }
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={
+                      handleImageSelect
+                    }
+                    className="hidden"
+                  />
+
+                  {/* ATTACH */}
+
+                  <button
+                    type="button"
+                    onClick={
+                      openImageSelector
+                    }
+                    disabled={
+                      loading
+                    }
+                    className={`
+                      flex
+                      h-12
+                      w-12
+                      shrink-0
+                      items-center
+                      justify-center
+                      rounded-2xl
+                      border
+                      transition
+                      ${
+                        isDark
+                          ? "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                          : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                      }
+                      disabled:cursor-not-allowed
+                      disabled:opacity-40
+                    `}
+                    aria-label="Upload product image"
+                    title="Upload product image"
+                  >
+                    <Paperclip
+                      size={18}
+                    />
+                  </button>
+
+                  {/* TEXTAREA */}
+
+                  <div
+                    className={`
+                      flex
+                      min-h-[48px]
+                      flex-1
+                      items-end
+                      rounded-2xl
+                      border
+                      px-4
+                      py-2
+                      ${
+                        isDark
+                          ? "border-slate-700 bg-slate-900"
+                          : "border-slate-200 bg-slate-50"
+                      }
+                    `}
+                  >
+                    <textarea
                       ref={
                         inputRef
                       }
@@ -1317,7 +2301,7 @@ export default function ChatWidget({
                         message
                       }
                       onChange={(e) =>
-                        setMessage(
+                        handleMessageChange(
                           e.target.value
                         )
                       }
@@ -1327,11 +2311,22 @@ export default function ChatWidget({
                       disabled={
                         loading
                       }
-                      placeholder="Ask me anything..."
+                      rows={1}
+                      maxLength={4000}
+                      placeholder={
+                        selectedImage
+                          ? "Add a message..."
+                          : "Message..."
+                      }
                       className={`
+                        max-h-[120px]
+                        min-h-[28px]
                         w-full
+                        resize-none
                         bg-transparent
+                        py-1
                         text-sm
+                        leading-6
                         outline-none
                         ${
                           isDark
@@ -1342,29 +2337,90 @@ export default function ChatWidget({
                     />
                   </div>
 
-                  {/* Send */}
+                  {/* SEND */}
 
                   <button
                     type="button"
                     onClick={
-                      sendMessage
+                      () =>
+                        void sendMessage()
                     }
                     disabled={
                       loading ||
-                      !message.trim()
+                      (
+                        !message.trim() &&
+                        !selectedImage
+                      )
                     }
                     style={{
                       backgroundColor:
                         brandColor,
                     }}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="
+                      flex
+                      h-12
+                      w-12
+                      shrink-0
+                      items-center
+                      justify-center
+                      rounded-2xl
+                      text-white
+                      shadow-md
+                      transition
+                      hover:opacity-90
+                      active:scale-95
+                      disabled:cursor-not-allowed
+                      disabled:opacity-40
+                    "
                     aria-label="Send message"
                   >
-                    <Send size={19} />
+                    <Send size={18} />
                   </button>
                 </div>
 
-                {/* Powered by */}
+                {/* =================================================
+                    INPUT FOOTER
+                    ================================================= */}
+
+                <div className="mt-2 flex items-center justify-between px-1">
+                  <span
+                    className={`
+                      text-[10px]
+                      ${
+                        isDark
+                          ? "text-slate-600"
+                          : "text-slate-400"
+                      }
+                    `}
+                  >
+                    Enter to send · Shift+Enter
+                    for a new line
+                  </span>
+
+                  {message.length >
+                    0 && (
+                    <span
+                      className={`
+                        text-[10px]
+                        ${
+                          message.length >
+                          3800
+                            ? "text-red-500"
+                            : isDark
+                            ? "text-slate-600"
+                            : "text-slate-400"
+                        }
+                      `}
+                    >
+                      {message.length}
+                      /4000
+                    </span>
+                  )}
+                </div>
+
+                {/* =================================================
+                    POWERED BY
+                    ================================================= */}
 
                 {showPoweredBy && (
                   <div
@@ -1374,7 +2430,7 @@ export default function ChatWidget({
                       text-[10px]
                       ${
                         isDark
-                          ? "text-slate-500"
+                          ? "text-slate-600"
                           : "text-slate-400"
                       }
                     `}
@@ -1385,6 +2441,43 @@ export default function ChatWidget({
                     </span>
                   </div>
                 )}
+
+                {/* =================================================
+                    CLEAR SESSION
+                    ================================================= */}
+
+                {!preview &&
+                  visitorSessionId && (
+                    <button
+                      type="button"
+                      onClick={
+                        clearConversationSession
+                      }
+                      disabled={
+                        loading
+                      }
+                      className={`
+                        mx-auto
+                        mt-2
+                        flex
+                        items-center
+                        gap-1
+                        text-[10px]
+                        transition
+                        ${
+                          isDark
+                            ? "text-slate-600 hover:text-slate-400"
+                            : "text-slate-400 hover:text-slate-600"
+                        }
+                      `}
+                    >
+                      <Trash2
+                        size={11}
+                      />
+
+                      Clear session
+                    </button>
+                  )}
               </div>
             </>
           )}
@@ -1410,7 +2503,8 @@ export default function ChatWidget({
           }}
           className={`
             fixed
-            bottom-6
+            bottom-4
+            sm:bottom-6
             ${positionClass}
             z-[9999]
             flex
@@ -1420,18 +2514,24 @@ export default function ChatWidget({
             justify-center
             rounded-full
             text-white
-            shadow-[0_10px_30px_rgba(0,0,0,0.2)]
+            shadow-[0_10px_35px_rgba(0,0,0,0.2)]
             transition
             hover:scale-105
+            active:scale-95
           `}
           aria-label={
             open
               ? "Close chat"
               : "Open chat"
           }
+          title={
+            open
+              ? "Close chat"
+              : "Open chat"
+          }
         >
           {open ? (
-            <X size={23} />
+            <X size={22} />
           ) : (
             <MessageCircle
               size={23}
@@ -1439,6 +2539,38 @@ export default function ChatWidget({
           )}
         </button>
       )}
+      {/* =================================================
+          IMAGE ZOOM PREVIEW
+          ================================================= */}
+
+      {zoomImage && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setZoomImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Uploaded image preview"
+        >
+          <img
+            src={zoomImage}
+            alt="Uploaded image preview"
+            className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setZoomImage(null)}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow-lg transition hover:bg-white"
+            aria-label="Close preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
     </>
   );
 }
+
+
+

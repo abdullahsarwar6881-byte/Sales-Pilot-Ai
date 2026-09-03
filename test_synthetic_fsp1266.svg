@@ -1,0 +1,8 @@
+<svg width="800" height="800" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="800" fill="#F5E6C8"/>
+  <text x="400" y="300" font-family="Arial, sans-serif" font-size="60" font-weight="bold" fill="#111" text-anchor="middle">FSP1266-YELLOW</text>
+  <text x="400" y="400" font-family="Arial, sans-serif" font-size="44" fill="#222" text-anchor="middle">Embroidered Printed Lawn 2 PCS</text>
+  <text x="400" y="480" font-family="Arial, sans-serif" font-size="40" fill="#444" text-anchor="middle">Unstitched Yellow Suit</text>
+  <rect x="250" y="580" width="300" height="80" rx="10" fill="#22c55e"/>
+  <text x="400" y="635" font-family="Arial, sans-serif" font-size="40" fill="#fff" text-anchor="middle">IN STOCK</text>
+</svg>

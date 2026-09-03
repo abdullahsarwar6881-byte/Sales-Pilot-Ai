@@ -1,0 +1,1 @@
+﻿record('C. conservative text', /(couldn|not able|cannot|can.t find|unable|didn.t|don.t find|no match|similar)/i.test(text) || p.length===0, text.slice(0,150));

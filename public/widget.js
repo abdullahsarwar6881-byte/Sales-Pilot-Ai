@@ -3,62 +3,28 @@
 
   // =====================================================
   // SALES PILOT WIDGET
+  // Professional ChatGPT-style customer experience
   // =====================================================
-
-  // -----------------------------------------------------
-  // GET INSTALLATION SCRIPT
-  // -----------------------------------------------------
 
   const script =
     document.currentScript ||
-    document.querySelector(
-      'script[data-profile]'
-    );
+    document.querySelector('script[data-profile]');
 
   if (!script) {
-    console.error(
-      "Sales Pilot: Installation script not found."
-    );
-
+    console.error("Sales Pilot: Installation script not found.");
     return;
   }
 
-  // -----------------------------------------------------
-  // PROFILE ID
-  // -----------------------------------------------------
-
-  const profileId =
-    script.getAttribute(
-      "data-profile"
-    );
+  const profileId = script.getAttribute("data-profile");
 
   if (!profileId) {
-    console.error(
-      "Sales Pilot: data-profile is missing."
-    );
-
+    console.error("Sales Pilot: data-profile is missing.");
     return;
   }
 
-  // -----------------------------------------------------
-  // API BASE
-  // -----------------------------------------------------
-
   const API_BASE =
-    script.getAttribute(
-      "data-api"
-    ) ||
+    script.getAttribute("data-api") ||
     window.location.origin;
-
-  console.log(
-    "Sales Pilot: API Base:",
-    API_BASE
-  );
-
-  console.log(
-    "Sales Pilot: Profile ID:",
-    profileId
-  );
 
   // =====================================================
   // VISITOR SESSION
@@ -68,27 +34,17 @@
 
   try {
     visitorSessionId =
-      localStorage.getItem(
-        "salespilot_visitor_session"
-      );
+      localStorage.getItem("salespilot_visitor_session");
 
     if (!visitorSessionId) {
-      if (
+      visitorSessionId =
         window.crypto &&
-        typeof window.crypto.randomUUID ===
-          "function"
-      ) {
-        visitorSessionId =
-          window.crypto.randomUUID();
-      } else {
-        visitorSessionId =
-          "visitor_" +
-          Date.now() +
-          "_" +
-          Math.random()
-            .toString(36)
-            .substring(2);
-      }
+        typeof window.crypto.randomUUID === "function"
+          ? window.crypto.randomUUID()
+          : "visitor_" +
+            Date.now() +
+            "_" +
+            Math.random().toString(36).substring(2);
 
       localStorage.setItem(
         "salespilot_visitor_session",
@@ -101,9 +57,7 @@
       error
     );
 
-    visitorSessionId =
-      "visitor_" +
-      Date.now();
+    visitorSessionId = "visitor_" + Date.now();
   }
 
   // =====================================================
@@ -111,58 +65,21 @@
   // =====================================================
 
   const defaultConfig = {
-    // ---------------------------------------------------
-    // Appearance
-    // ---------------------------------------------------
-
-    aiName:
-      "Sales Pilot AI",
-
-    welcomeMessage:
-      "👋 Hi! How can I help you today?",
-
-    brandColor:
-      "#6366F1",
-
-    position:
-      "Bottom Right",
-
-    theme:
-      "Light",
-
-    size:
-      "Medium",
-
-    radius:
-      "Rounded",
-
-    // ---------------------------------------------------
-    // Behavior
-    // ---------------------------------------------------
-
-    autoOpen:
-      false,
-
-    showTypingIndicator:
-      true,
-
-    soundNotifications:
-      false,
-
-    showAiAvatar:
-      true,
-
-    collectVisitorName:
-      false,
-
-    collectVisitorEmail:
-      false,
-
-    enableAnimations:
-      true,
-
-    showPoweredBy:
-      true,
+    aiName: "Sales Pilot AI",
+    welcomeMessage: "Ã°Å¸â€˜â€¹ Hi! How can I help you today?",
+    brandColor: "#6366F1",
+    position: "Bottom Right",
+    theme: "Light",
+    size: "Medium",
+    radius: "Rounded",
+    autoOpen: false,
+    showTypingIndicator: true,
+    soundNotifications: false,
+    showAiAvatar: true,
+    collectVisitorName: false,
+    collectVisitorEmail: false,
+    enableAnimations: true,
+    showPoweredBy: true,
   };
 
   // =====================================================
@@ -175,55 +92,25 @@
         profileId
       )}`;
 
-    console.log(
-      "Sales Pilot: Loading configuration:",
-      url
-    );
-
     try {
-      const response =
-        await fetch(
-          url,
-          {
-            method:
-              "GET",
-
-            cache:
-              "no-store",
-
-            headers: {
-              Accept:
-                "application/json",
-            },
-          }
-        );
-
-      console.log(
-        "Sales Pilot: Config response:",
-        response.status
-      );
+      const response = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
       if (!response.ok) {
-        const errorText =
-          await response.text();
-
         console.error(
           "Sales Pilot: Widget config request failed:",
-          errorText
+          await response.text()
         );
 
-        return {
-          ...defaultConfig,
-        };
+        return { ...defaultConfig };
       }
 
-      const config =
-        await response.json();
-
-      console.log(
-        "Sales Pilot: Configuration received:",
-        config
-      );
+      const config = await response.json();
 
       return {
         ...defaultConfig,
@@ -235,9 +122,7 @@
         error
       );
 
-      return {
-        ...defaultConfig,
-      };
+      return { ...defaultConfig };
     }
   }
 
@@ -246,39 +131,11 @@
   // =====================================================
 
   async function initializeWidget() {
-    console.log(
-      "Sales Pilot: Initializing widget..."
-    );
-
-    // ---------------------------------------------------
-    // PREVENT DUPLICATE WIDGET
-    // ---------------------------------------------------
-
-    const existingWidget =
-      document.getElementById(
-        "salespilot-widget"
-      );
-
-    if (existingWidget) {
-      console.warn(
-        "Sales Pilot: Widget already exists."
-      );
-
+    if (document.getElementById("salespilot-widget")) {
       return;
     }
 
-    // ---------------------------------------------------
-    // LOAD CONFIGURATION
-    // ---------------------------------------------------
-
-    const config =
-      await loadWidgetConfig();
-
-    console.log(
-      "Sales Pilot: Final widget configuration:",
-      config
-    );
-
+    const config = await loadWidgetConfig();
     createWidget(config);
   }
 
@@ -287,352 +144,168 @@
   // =====================================================
 
   function createWidget(config) {
-    // ===================================================
-    // APPEARANCE
-    // ===================================================
-
     const aiName =
-      config.aiName ||
-      defaultConfig.aiName;
+      config.aiName || defaultConfig.aiName;
 
     const welcomeMessage =
-      config.welcomeMessage ||
-      defaultConfig.welcomeMessage;
+      config.welcomeMessage || defaultConfig.welcomeMessage;
 
     const brandColor =
-      config.brandColor ||
-      defaultConfig.brandColor;
+      config.brandColor || defaultConfig.brandColor;
 
     const position =
-      config.position ||
-      defaultConfig.position;
+      config.position || defaultConfig.position;
 
     const theme =
-      config.theme ||
-      defaultConfig.theme;
+      config.theme || defaultConfig.theme;
 
     const size =
-      config.size ||
-      defaultConfig.size;
+      config.size || defaultConfig.size;
 
     const radius =
-      config.radius ||
-      defaultConfig.radius;
+      config.radius || defaultConfig.radius;
 
-    // ===================================================
-    // BEHAVIOR
-    // ===================================================
-
-    const autoOpen =
-      config.autoOpen === true;
-
+    const autoOpen = config.autoOpen === true;
     const showTypingIndicator =
       config.showTypingIndicator !== false;
-
     const soundNotifications =
       config.soundNotifications === true;
-
     const showAiAvatar =
       config.showAiAvatar !== false;
-
     const collectVisitorName =
       config.collectVisitorName === true;
-
     const collectVisitorEmail =
       config.collectVisitorEmail === true;
-
     const enableAnimations =
       config.enableAnimations !== false;
-
     const showPoweredBy =
       config.showPoweredBy !== false;
 
-    // ===================================================
-    // NORMALIZE THEME
-    // ===================================================
-
     const normalizedTheme =
-      String(theme)
-        .trim()
-        .toLowerCase();
+      String(theme).trim().toLowerCase();
 
-    const isDark =
-      normalizedTheme === "dark";
+    const isDark = normalizedTheme === "dark";
 
-    // ===================================================
-    // POSITION
-    // ===================================================
+    let horizontalPosition = "right: 24px;";
+    let verticalPosition = "bottom: 24px;";
 
-    let horizontalPosition =
-      "right: 24px;";
-
-    let verticalPosition =
-      "bottom: 24px;";
-
-    if (
-      position ===
-      "Bottom Left"
-    ) {
-      horizontalPosition =
-        "left: 24px;";
-
-      verticalPosition =
-        "bottom: 24px;";
+    if (position === "Bottom Left") {
+      horizontalPosition = "left: 24px;";
     }
 
-    if (
-      position ===
-      "Top Right"
-    ) {
-      horizontalPosition =
-        "right: 24px;";
-
-      verticalPosition =
-        "top: 24px;";
+    if (position === "Top Right") {
+      verticalPosition = "top: 24px;";
     }
 
-    if (
-      position ===
-      "Top Left"
-    ) {
-      horizontalPosition =
-        "left: 24px;";
-
-      verticalPosition =
-        "top: 24px;";
+    if (position === "Top Left") {
+      horizontalPosition = "left: 24px;";
+      verticalPosition = "top: 24px;";
     }
 
-    // ===================================================
-    // SIZE
-    // ===================================================
+    let chatWidth = "380px";
+    let chatHeight = "560px";
+    let buttonSize = "60px";
 
-    let chatWidth =
-      "360px";
-
-    let chatHeight =
-      "520px";
-
-    let buttonSize =
-      "60px";
-
-    if (
-      size === "Small"
-    ) {
-      chatWidth =
-        "320px";
-
-      chatHeight =
-        "450px";
-
-      buttonSize =
-        "54px";
+    if (size === "Small") {
+      chatWidth = "330px";
+      chatHeight = "480px";
+      buttonSize = "54px";
     }
 
-    if (
-      size === "Large"
-    ) {
-      chatWidth =
-        "420px";
-
-      chatHeight =
-        "620px";
-
-      buttonSize =
-        "66px";
+    if (size === "Large") {
+      chatWidth = "430px";
+      chatHeight = "650px";
+      buttonSize = "66px";
     }
 
-    // ===================================================
-    // RADIUS
-    // ===================================================
+    let chatRadius = "20px";
 
-    let chatRadius =
-      "20px";
-
-    if (
-      radius === "Square"
-    ) {
-      chatRadius =
-        "8px";
-    }
-
-    if (
-      radius === "Soft"
-    ) {
-      chatRadius =
-        "14px";
-    }
-
-    if (
-      radius === "Pill"
-    ) {
-      chatRadius =
-        "32px";
-    }
-
-    // ===================================================
-    // THEME COLORS
-    // ===================================================
+    if (radius === "Square") chatRadius = "8px";
+    if (radius === "Soft") chatRadius = "14px";
+    if (radius === "Pill") chatRadius = "32px";
 
     const chatBackground =
-      isDark
-        ? "#0f172a"
-        : "#ffffff";
+      isDark ? "#0f172a" : "#ffffff";
 
     const messagesBackground =
-      isDark
-        ? "#020617"
-        : "#f8fafc";
+      isDark ? "#020617" : "#f8fafc";
 
     const aiMessageBackground =
-      isDark
-        ? "#1e293b"
-        : "#ffffff";
+      isDark ? "#1e293b" : "#ffffff";
 
     const aiMessageText =
-      isDark
-        ? "#f8fafc"
-        : "#1e293b";
+      isDark ? "#f8fafc" : "#172033";
 
     const inputBackground =
-      isDark
-        ? "#1e293b"
-        : "#ffffff";
+      isDark ? "#1e293b" : "#ffffff";
 
     const inputText =
-      isDark
-        ? "#f8fafc"
-        : "#0f172a";
+      isDark ? "#f8fafc" : "#0f172a";
 
     const inputBorder =
-      isDark
-        ? "#475569"
-        : "#d1d5db";
+      isDark ? "#475569" : "#d9dee8";
 
     const mainBorder =
-      isDark
-        ? "#334155"
-        : "#e5e7eb";
+      isDark ? "#334155" : "#e7eaf0";
 
     const placeholderColor =
-      isDark
-        ? "#94a3b8"
-        : "#64748b";
+      isDark ? "#94a3b8" : "#7b8494";
 
     const mutedText =
-      isDark
-        ? "#94a3b8"
-        : "#64748b";
-
-    // ===================================================
-    // ANIMATION
-    // ===================================================
+      isDark ? "#94a3b8" : "#64748b";
 
     const transitionDuration =
-      enableAnimations
-        ? "0.2s"
-        : "0s";
+      enableAnimations ? "0.2s" : "0s";
 
     // ===================================================
-    // CREATE CONTAINER
+    // CONTAINER
     // ===================================================
 
-    const container =
-      document.createElement(
-        "div"
-      );
+    const container = document.createElement("div");
 
-    container.id =
-      "salespilot-widget";
+    container.id = "salespilot-widget";
+    container.setAttribute("data-profile", profileId);
 
-    container.setAttribute(
-      "data-profile",
-      profileId
-    );
-
-    document.body.appendChild(
-      container
-    );
+    document.body.appendChild(container);
 
     // ===================================================
-    // CREATE STYLES
+    // STYLES
     // ===================================================
 
-    const style =
-      document.createElement(
-        "style"
-      );
+    const style = document.createElement("style");
 
-    style.id =
-      "salespilot-widget-styles";
+    style.id = "salespilot-widget-styles";
 
     style.textContent = `
       #salespilot-widget {
         position: fixed;
-
         ${horizontalPosition}
-
         ${verticalPosition}
-
         z-index: 2147483647;
-
         font-family:
           Inter,
           -apple-system,
           BlinkMacSystemFont,
           "Segoe UI",
           sans-serif;
-
         line-height: normal;
       }
 
-      /* =========================================
-         FLOATING BUTTON
-      ========================================= */
-
       #salespilot-button {
-        width:
-          ${buttonSize};
-
-        height:
-          ${buttonSize};
-
-        display:
-          flex;
-
-        align-items:
-          center;
-
-        justify-content:
-          center;
-
-        padding:
-          0;
-
-        border:
-          none;
-
-        border-radius:
-          50%;
-
-        background:
-          ${brandColor};
-
-        color:
-          #ffffff;
-
-        cursor:
-          pointer;
-
-        font-size:
-          26px;
-
-        line-height:
-          1;
-
-        box-shadow:
-          0 10px 30px
-          rgba(0, 0, 0, 0.25);
-
+        width: ${buttonSize};
+        height: ${buttonSize};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: ${brandColor};
+        color: #fff;
+        cursor: pointer;
+        font-size: 25px;
+        line-height: 1;
+        box-shadow: 0 10px 30px rgba(0,0,0,.22);
         transition:
           transform ${transitionDuration} ease,
           box-shadow ${transitionDuration} ease,
@@ -640,297 +313,266 @@
       }
 
       #salespilot-button:hover {
-        transform:
-          ${
-            enableAnimations
-              ? "scale(1.05)"
-              : "none"
-          };
-
-        box-shadow:
-          0 14px 35px
-          rgba(0, 0, 0, 0.30);
+        transform: ${enableAnimations ? "scale(1.05)" : "none"};
+        box-shadow: 0 14px 35px rgba(0,0,0,.28);
       }
 
       #salespilot-button:focus {
-        outline:
-          3px solid
-          ${hexToRgba(
-            brandColor,
-            0.35
-          )};
-
-        outline-offset:
-          3px;
+        outline: 3px solid ${hexToRgba(brandColor, .28)};
+        outline-offset: 3px;
       }
-
-      /* =========================================
-         CHAT
-      ========================================= */
 
       #salespilot-chat {
         position: absolute;
-
-        ${
-          position.includes("Left")
-            ? "left: 0;"
-            : "right: 0;"
-        }
-
-        ${
-          position.includes("Top")
-            ? "top: 75px;"
-            : "bottom: 75px;"
-        }
-
-        width:
-          ${chatWidth};
-
-        height:
-          ${chatHeight};
-
-        display:
-          none;
-
-        flex-direction:
-          column;
-
-        overflow:
-          hidden;
-
-        background:
-          ${chatBackground};
-
-        border:
-          1px solid
-          ${mainBorder};
-
-        border-radius:
-          ${chatRadius};
-
-        box-shadow:
-          0 20px 60px
-          rgba(0, 0, 0, 0.25);
-
-        ${
-          enableAnimations
-            ? `
-              animation:
-                salespilotOpen
-                0.2s
-                ease-out;
-            `
-            : ""
-        }
+        ${position.includes("Left") ? "left: 0;" : "right: 0;"}
+        ${position.includes("Top") ? "top: 75px;" : "bottom: 75px;"}
+        width: ${chatWidth};
+        height: ${chatHeight};
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+        background: ${chatBackground};
+        border: 1px solid ${mainBorder};
+        border-radius: ${chatRadius};
+        box-shadow: 0 20px 60px rgba(0,0,0,.24);
+        isolation: isolate;
       }
 
       ${
         enableAnimations
           ? `
-            @keyframes salespilotOpen {
+        #salespilot-chat.salespilot-opening {
+          animation: salespilotOpen .2s ease-out;
+        }
 
-              from {
-                opacity: 0;
+        @keyframes salespilotOpen {
+          from {
+            opacity: 0;
+            transform: translateY(10px) scale(.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
 
-                transform:
-                  translateY(10px)
-                  scale(0.98);
-              }
-
-              to {
-                opacity: 1;
-
-                transform:
-                  translateY(0)
-                  scale(1);
-              }
-            }
-
-            @keyframes salespilotTyping {
-
-              0% {
-                opacity: 0.35;
-              }
-
-              50% {
-                opacity: 1;
-              }
-
-              100% {
-                opacity: 0.35;
-              }
-            }
-          `
+        @keyframes salespilotTyping {
+          0%, 100% { opacity: .35; }
+          50% { opacity: 1; }
+        }
+      `
           : ""
       }
 
-      /* =========================================
-         HEADER
-      ========================================= */
-
       #salespilot-header {
-        flex-shrink:
-          0;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 16px 18px;
+        background: ${brandColor};
+        color: #fff;
+      }
 
-        padding:
-          18px;
-
-        background:
-          ${brandColor};
-
-        color:
-          #ffffff;
+      .salespilot-header-avatar {
+        width: 34px;
+        height: 34px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(255,255,255,.18);
+        font-size: 16px;
       }
 
       #salespilot-header-title {
-        font-size:
-          17px;
-
-        font-weight:
-          700;
-
-        line-height:
-          1.3;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.3;
       }
 
       #salespilot-header-subtitle {
-        margin-top:
-          4px;
-
-        font-size:
-          12px;
-
-        line-height:
-          1.3;
-
-        color:
-          rgba(
-            255,
-            255,
-            255,
-            0.85
-          );
+        margin-top: 2px;
+        font-size: 11px;
+        line-height: 1.3;
+        color: rgba(255,255,255,.82);
       }
 
-      /* =========================================
-         MESSAGES
-      ========================================= */
-
       #salespilot-messages {
-        flex:
-          1;
-
-        min-height:
-          0;
-
-        padding:
-          16px;
-
-        overflow-y:
-          auto;
-
-        background:
-          ${messagesBackground};
+        flex: 1;
+        min-height: 0;
+        padding: 16px;
+        overflow-y: auto;
+        background: ${messagesBackground};
+        scroll-behavior: smooth;
       }
 
       .salespilot-message-row {
-        display:
-          flex;
-
-        align-items:
-          flex-start;
-
-        gap:
-          8px;
-
-        margin-bottom:
-          12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 13px;
       }
 
       .salespilot-message {
-        max-width:
-          82%;
-
-        padding:
-          10px 13px;
-
-        border-radius:
-          14px;
-
-        font-size:
-          14px;
-
-        line-height:
-          1.45;
-
-        word-break:
-          break-word;
+        max-width: 84%;
+        padding: 11px 14px;
+        border-radius: 15px;
+        font-size: 14px;
+        line-height: 1.5;
+        word-break: break-word;
+        white-space: pre-wrap;
       }
 
       .salespilot-ai {
-        margin-right:
-          auto;
-
-        background:
-          ${aiMessageBackground};
-
-        color:
-          ${aiMessageText};
-
-        border:
-          1px solid
-          ${mainBorder};
+        margin-right: auto;
+        background: ${aiMessageBackground};
+        color: ${aiMessageText};
+        border: 1px solid ${mainBorder};
+        box-shadow: 0 1px 2px rgba(0,0,0,.03);
       }
 
       .salespilot-user {
-        margin-left:
-          auto;
+        margin-left: auto;
+        background: ${brandColor};
+        color: #fff;
+        border: 1px solid transparent;
+      }
 
-        background:
-          ${brandColor};
-
-        color:
-          #ffffff;
-
-        border:
-          1px solid
-          transparent;
+      .salespilot-avatar {
+        width: 30px;
+        height: 30px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: ${brandColor};
+        color: #fff;
+        font-size: 14px;
       }
 
       /* =========================================
-         AVATAR
+         PRODUCT CARDS
       ========================================= */
 
-      .salespilot-avatar {
-        width:
-          30px;
+      .salespilot-products {
+        width: min(100%, 310px);
+        margin: -2px 0 15px 38px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
 
-        height:
-          30px;
+      .salespilot-product-card {
+        overflow: hidden;
+        border: 1px solid ${mainBorder};
+        border-radius: 14px;
+        background: ${chatBackground};
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
+      }
 
-        flex-shrink:
-          0;
+      .salespilot-product-image-wrap {
+        position: relative;
+        width: 100%;
+        height: 155px;
+        overflow: hidden;
+        background: ${isDark ? "#1e293b" : "#f1f5f9"};
+      }
 
-        display:
-          flex;
+      .salespilot-product-image {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
 
-        align-items:
-          center;
+      .salespilot-product-body {
+        padding: 12px;
+      }
 
-        justify-content:
-          center;
+      .salespilot-product-name {
+        margin: 0 0 6px;
+        color: ${aiMessageText};
+        font-size: 14px;
+        font-weight: 650;
+        line-height: 1.35;
+      }
 
-        border-radius:
-          50%;
+      .salespilot-product-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
 
-        background:
-          ${brandColor};
+      .salespilot-product-price {
+        color: ${aiMessageText};
+        font-size: 15px;
+        font-weight: 700;
+      }
 
-        color:
-          #ffffff;
+      .salespilot-product-stock {
+        font-size: 11px;
+        font-weight: 600;
+        color: ${mutedText};
+        text-align: right;
+      }
 
-        font-size:
-          15px;
+      .salespilot-product-stock.salespilot-in-stock {
+        color: #15803d;
+      }
+
+      .salespilot-product-stock.salespilot-out-of-stock {
+        color: #dc2626;
+      }
+
+      .salespilot-product-link {
+        width: 100%;
+        min-height: 38px;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 9px 12px;
+        border: none;
+        border-radius: 10px;
+        background: ${brandColor};
+        color: #fff !important;
+        text-decoration: none !important;
+        font-size: 13px;
+        font-weight: 650;
+        cursor: pointer;
+        transition:
+          opacity ${transitionDuration} ease,
+          transform ${transitionDuration} ease;
+      }
+
+      .salespilot-product-link:hover {
+        opacity: .9;
+        transform: ${enableAnimations ? "translateY(-1px)" : "none"};
+      }
+
+      .salespilot-product-link-icon {
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      .salespilot-catalog-link {
+        display: inline-flex;
+        align-items: center;
+        margin: -2px 0 14px 38px;
+        padding: 8px 11px;
+        border: 1px solid ${mainBorder};
+        border-radius: 9px;
+        background: ${chatBackground};
+        color: ${brandColor} !important;
+        text-decoration: none !important;
+        font-size: 12px;
+        font-weight: 650;
       }
 
       /* =========================================
@@ -938,53 +580,23 @@
       ========================================= */
 
       .salespilot-typing {
-        display:
-          inline-flex;
-
-        align-items:
-          center;
-
-        gap:
-          4px;
-
-        padding:
-          11px 14px;
-
-        border-radius:
-          14px;
-
-        background:
-          ${aiMessageBackground};
-
-        border:
-          1px solid
-          ${mainBorder};
-
-        color:
-          ${aiMessageText};
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 11px 14px;
+        border-radius: 14px;
+        background: ${aiMessageBackground};
+        border: 1px solid ${mainBorder};
       }
 
       .salespilot-typing-dot {
-        width:
-          5px;
-
-        height:
-          5px;
-
-        border-radius:
-          50%;
-
-        background:
-          ${aiMessageText};
-
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: ${aiMessageText};
         ${
           enableAnimations
-            ? `
-              animation:
-                salespilotTyping
-                1.2s
-                infinite;
-            `
+            ? "animation: salespilotTyping 1.2s infinite;"
             : ""
         }
       }
@@ -992,16 +604,13 @@
       ${
         enableAnimations
           ? `
-            .salespilot-typing-dot:nth-child(2) {
-              animation-delay:
-                0.15s;
-            }
+      .salespilot-typing-dot:nth-child(2) {
+        animation-delay: .15s;
+      }
 
-            .salespilot-typing-dot:nth-child(3) {
-              animation-delay:
-                0.30s;
-            }
-          `
+      .salespilot-typing-dot:nth-child(3) {
+        animation-delay: .30s;
+      }`
           : ""
       }
 
@@ -1010,131 +619,61 @@
       ========================================= */
 
       #salespilot-input-area {
-        flex-shrink:
-          0;
-
-        display:
-          flex;
-
-        gap:
-          8px;
-
-        padding:
-          12px;
-
-        background:
-          ${chatBackground};
-
-        border-top:
-          1px solid
-          ${mainBorder};
+        flex-shrink: 0;
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        background: ${chatBackground};
+        border-top: 1px solid ${mainBorder};
       }
 
       #salespilot-input {
-        min-width:
-          0;
-
-        flex:
-          1;
-
-        padding:
-          10px 12px;
-
-        border:
-          1px solid
-          ${inputBorder};
-
-        border-radius:
-          12px;
-
-        outline:
-          none;
-
-        background:
-          ${inputBackground};
-
-        color:
-          ${inputText};
-
-        font-family:
-          inherit;
-
-        font-size:
-          14px;
+        min-width: 0;
+        flex: 1;
+        height: 42px;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid ${inputBorder};
+        border-radius: 12px;
+        outline: none;
+        background: ${inputBackground};
+        color: ${inputText};
+        font-family: inherit;
+        font-size: 14px;
       }
 
       #salespilot-input::placeholder {
-        color:
-          ${placeholderColor};
+        color: ${placeholderColor};
       }
 
       #salespilot-input:focus {
-        border-color:
-          ${brandColor};
-
-        box-shadow:
-          0 0 0 3px
-          ${hexToRgba(
-            brandColor,
-            0.15
-          )};
+        border-color: ${brandColor};
+        box-shadow: 0 0 0 3px ${hexToRgba(brandColor, .13)};
       }
 
       #salespilot-send {
-        width:
-          42px;
-
-        height:
-          42px;
-
-        flex-shrink:
-          0;
-
-        display:
-          flex;
-
-        align-items:
-          center;
-
-        justify-content:
-          center;
-
-        padding:
-          0;
-
-        border:
-          none;
-
-        border-radius:
-          12px;
-
-        background:
-          ${brandColor};
-
-        color:
-          #ffffff;
-
-        cursor:
-          pointer;
-
-        font-size:
-          18px;
-
-        line-height:
-          1;
+        width: 42px;
+        height: 42px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 12px;
+        background: ${brandColor};
+        color: #fff;
+        cursor: pointer;
+        font-size: 18px;
       }
 
       #salespilot-send:hover {
-        opacity:
-          0.9;
+        opacity: .9;
       }
 
       #salespilot-send:disabled {
-        opacity:
-          0.5;
-
-        cursor:
-          not-allowed;
+        opacity: .5;
+        cursor: not-allowed;
       }
 
       /* =========================================
@@ -1142,298 +681,141 @@
       ========================================= */
 
       #salespilot-visitor-form {
-        position:
-          absolute;
-
-        inset:
-          0;
-
-        z-index:
-          20;
-
-        display:
-          none;
-
-        flex-direction:
-          column;
-
-        justify-content:
-          center;
-
-        padding:
-          24px;
-
-        background:
-          ${chatBackground};
-
-        color:
-          ${aiMessageText};
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        padding: 24px;
+        background: ${chatBackground};
+        color: ${aiMessageText};
       }
 
       #salespilot-visitor-form-title {
-        margin-bottom:
-          8px;
-
-        font-size:
-          20px;
-
-        font-weight:
-          700;
+        margin-bottom: 8px;
+        font-size: 20px;
+        font-weight: 700;
       }
 
       #salespilot-visitor-form-description {
-        margin-bottom:
-          20px;
-
-        font-size:
-          14px;
-
-        line-height:
-          1.5;
-
-        color:
-          ${mutedText};
+        margin-bottom: 20px;
+        font-size: 14px;
+        line-height: 1.5;
+        color: ${mutedText};
       }
 
       .salespilot-form-field {
-        margin-bottom:
-          12px;
+        margin-bottom: 12px;
       }
 
       .salespilot-form-field label {
-        display:
-          block;
-
-        margin-bottom:
-          6px;
-
-        font-size:
-          13px;
-
-        font-weight:
-          600;
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 600;
       }
 
       .salespilot-form-field input {
-        width:
-          100%;
-
-        box-sizing:
-          border-box;
-
-        padding:
-          11px 12px;
-
-        border:
-          1px solid
-          ${inputBorder};
-
-        border-radius:
-          10px;
-
-        outline:
-          none;
-
-        background:
-          ${inputBackground};
-
-        color:
-          ${inputText};
-
-        font-family:
-          inherit;
-
-        font-size:
-          14px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 11px 12px;
+        border: 1px solid ${inputBorder};
+        border-radius: 10px;
+        outline: none;
+        background: ${inputBackground};
+        color: ${inputText};
+        font-family: inherit;
+        font-size: 14px;
       }
 
       .salespilot-form-field input:focus {
-        border-color:
-          ${brandColor};
-
-        box-shadow:
-          0 0 0 3px
-          ${hexToRgba(
-            brandColor,
-            0.12
-          )};
+        border-color: ${brandColor};
+        box-shadow: 0 0 0 3px ${hexToRgba(brandColor, .12)};
       }
 
       #salespilot-start-chat {
-        width:
-          100%;
-
-        padding:
-          12px;
-
-        margin-top:
-          8px;
-
-        border:
-          none;
-
-        border-radius:
-          12px;
-
-        background:
-          ${brandColor};
-
-        color:
-          #ffffff;
-
-        font-family:
-          inherit;
-
-        font-size:
-          14px;
-
-        font-weight:
-          600;
-
-        cursor:
-          pointer;
+        width: 100%;
+        padding: 12px;
+        margin-top: 8px;
+        border: none;
+        border-radius: 12px;
+        background: ${brandColor};
+        color: #fff;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
       }
-
-      /* =========================================
-         POWERED BY
-      ========================================= */
 
       #salespilot-powered-by {
-        flex-shrink:
-          0;
-
-        padding:
-          8px;
-
-        text-align:
-          center;
-
-        font-size:
-          10px;
-
-        color:
-          ${isDark
-            ? "#64748b"
-            : "#94a3b8"};
-
-        background:
-          ${chatBackground};
-
-        border-top:
-          1px solid
-          ${mainBorder};
+        flex-shrink: 0;
+        padding: 7px;
+        text-align: center;
+        font-size: 10px;
+        color: ${isDark ? "#64748b" : "#9aa2af"};
+        background: ${chatBackground};
+        border-top: 1px solid ${mainBorder};
       }
 
-      /* =========================================
-         MOBILE
-      ========================================= */
-
       @media (max-width: 480px) {
-
         #salespilot-widget {
-          right:
-            18px;
-
-          left:
-            auto;
-
-          bottom:
-            18px;
-
-          top:
-            auto;
+          right: 18px;
+          left: auto;
+          bottom: 18px;
+          top: auto;
         }
 
         #salespilot-chat {
-          position:
-            fixed;
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          bottom: 86px;
+          width: calc(100vw - 24px);
+          height: 70vh;
+          max-height: 650px;
+        }
 
-          left:
-            12px;
-
-          right:
-            12px;
-
-          bottom:
-            86px;
-
-          width:
-            calc(100vw - 24px);
-
-          height:
-            70vh;
-
-          max-height:
-            650px;
+        .salespilot-products,
+        .salespilot-catalog-link {
+          margin-left: 0;
         }
       }
     `;
 
-    document.head.appendChild(
-      style
-    );
+    document.head.appendChild(style);
 
     // ===================================================
     // CHAT HTML
     // ===================================================
 
-    const chat =
-      document.createElement(
-        "div"
-      );
-
-    chat.id =
-      "salespilot-chat";
+    const chat = document.createElement("div");
+    chat.id = "salespilot-chat";
 
     chat.innerHTML = `
       <div id="salespilot-header">
+        <div class="salespilot-header-avatar">Ã¢Å“Â¦</div>
 
-        <div id="salespilot-header-title">
-          ${escapeHTML(aiName)}
-        </div>
-
-        <div id="salespilot-header-subtitle">
-          AI Customer Support
-        </div>
-
-      </div>
-
-      <div id="salespilot-messages">
-
-        <div class="salespilot-message-row">
-
-          ${
-            showAiAvatar
-              ? `
-                <div class="salespilot-avatar">
-                  🤖
-                </div>
-              `
-              : ""
-          }
-
-          <div
-            class="
-              salespilot-message
-              salespilot-ai
-            "
-          >
-            ${escapeHTML(
-              welcomeMessage
-            )}
+        <div>
+          <div id="salespilot-header-title">
+            ${escapeHTML(aiName)}
           </div>
 
+          <div id="salespilot-header-subtitle">
+            AI Customer Support
+          </div>
         </div>
-
       </div>
 
-      <div id="salespilot-input-area">
+      <div id="salespilot-messages"></div>
 
+      <div id="salespilot-input-area">
         <input
           id="salespilot-input"
           type="text"
           placeholder="Ask a question..."
           autocomplete="off"
+          aria-label="Message"
         />
 
         <button
@@ -1441,173 +823,129 @@
           type="button"
           aria-label="Send message"
         >
-          ↑
+          Ã¢â€ â€˜
         </button>
-
       </div>
 
       ${
         showPoweredBy
           ? `
-            <div id="salespilot-powered-by">
-              Powered by Sales Pilot
-            </div>
-          `
+        <div id="salespilot-powered-by">
+          Powered by Sales Pilot
+        </div>
+      `
           : ""
       }
 
       ${
-        collectVisitorName ||
-        collectVisitorEmail
+        collectVisitorName || collectVisitorEmail
           ? `
-            <div id="salespilot-visitor-form">
+        <div id="salespilot-visitor-form">
+          <div id="salespilot-visitor-form-title">
+            Before we start
+          </div>
 
-              <div id="salespilot-visitor-form-title">
-                Before we start 👋
-              </div>
+          <div id="salespilot-visitor-form-description">
+            Tell us a little about yourself so our AI can better assist you.
+          </div>
 
-              <div id="salespilot-visitor-form-description">
-                Tell us a little about yourself so our AI can better assist you.
-              </div>
+          ${
+            collectVisitorName
+              ? `
+            <div class="salespilot-form-field">
+              <label for="salespilot-visitor-name">
+                Your name
+              </label>
 
-              ${
-                collectVisitorName
-                  ? `
-                    <div class="salespilot-form-field">
-
-                      <label
-                        for="salespilot-visitor-name"
-                      >
-                        Your name
-                      </label>
-
-                      <input
-                        id="salespilot-visitor-name"
-                        type="text"
-                        placeholder="Enter your name"
-                        autocomplete="name"
-                      />
-
-                    </div>
-                  `
-                  : ""
-              }
-
-              ${
-                collectVisitorEmail
-                  ? `
-                    <div class="salespilot-form-field">
-
-                      <label
-                        for="salespilot-visitor-email"
-                      >
-                        Email address
-                      </label>
-
-                      <input
-                        id="salespilot-visitor-email"
-                        type="email"
-                        placeholder="you@example.com"
-                        autocomplete="email"
-                      />
-
-                    </div>
-                  `
-                  : ""
-              }
-
-              <button
-                id="salespilot-start-chat"
-                type="button"
-              >
-                Start Chat
-              </button>
-
+              <input
+                id="salespilot-visitor-name"
+                type="text"
+                placeholder="Enter your name"
+                autocomplete="name"
+              />
             </div>
           `
+              : ""
+          }
+
+          ${
+            collectVisitorEmail
+              ? `
+            <div class="salespilot-form-field">
+              <label for="salespilot-visitor-email">
+                Email address
+              </label>
+
+              <input
+                id="salespilot-visitor-email"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+              />
+            </div>
+          `
+              : ""
+          }
+
+          <button
+            id="salespilot-start-chat"
+            type="button"
+          >
+            Start Chat
+          </button>
+        </div>
+      `
           : ""
       }
     `;
 
-    container.appendChild(
-      chat
-    );
+    container.appendChild(chat);
 
     // ===================================================
     // FLOATING BUTTON
     // ===================================================
 
-    const button =
-      document.createElement(
-        "button"
-      );
+    const button = document.createElement("button");
 
-    button.id =
-      "salespilot-button";
-
-    button.type =
-      "button";
-
+    button.id = "salespilot-button";
+    button.type = "button";
     button.setAttribute(
       "aria-label",
       "Open Sales Pilot chat"
     );
+    button.innerHTML = "Ã°Å¸â€™Â¬";
 
-    button.innerHTML =
-      "💬";
-
-    container.appendChild(
-      button
-    );
+    container.appendChild(button);
 
     // ===================================================
     // ELEMENTS
     // ===================================================
 
     const messages =
-      chat.querySelector(
-        "#salespilot-messages"
-      );
+      chat.querySelector("#salespilot-messages");
 
     const input =
-      chat.querySelector(
-        "#salespilot-input"
-      );
+      chat.querySelector("#salespilot-input");
 
     const send =
-      chat.querySelector(
-        "#salespilot-send"
-      );
+      chat.querySelector("#salespilot-send");
 
     const visitorForm =
-      chat.querySelector(
-        "#salespilot-visitor-form"
-      );
+      chat.querySelector("#salespilot-visitor-form");
 
     const visitorNameInput =
-      chat.querySelector(
-        "#salespilot-visitor-name"
-      );
+      chat.querySelector("#salespilot-visitor-name");
 
     const visitorEmailInput =
-      chat.querySelector(
-        "#salespilot-visitor-email"
-      );
+      chat.querySelector("#salespilot-visitor-email");
 
     const startChatButton =
-      chat.querySelector(
-        "#salespilot-start-chat"
-      );
+      chat.querySelector("#salespilot-start-chat");
 
-    if (
-      !messages ||
-      !input ||
-      !send
-    ) {
+    if (!messages || !input || !send) {
       console.error(
         "Sales Pilot: Widget elements could not be created."
       );
-
       return;
     }
 
@@ -1616,77 +954,42 @@
     // ===================================================
 
     let customerName = null;
-
     let customerEmail = null;
-
-    // ---------------------------------------------------
-    // LOAD REMEMBERED VISITOR INFORMATION
-    // ---------------------------------------------------
 
     try {
       customerName =
-        localStorage.getItem(
-          "salespilot_customer_name"
-        );
+        localStorage.getItem("salespilot_customer_name");
 
       customerEmail =
-        localStorage.getItem(
-          "salespilot_customer_email"
-        );
+        localStorage.getItem("salespilot_customer_email");
     } catch {
-      customerName =
-        null;
-
-      customerEmail =
-        null;
+      customerName = null;
+      customerEmail = null;
     }
 
-    // ===================================================
-    // CHECK VISITOR INFORMATION
-    // ===================================================
-
     function needsVisitorInformation() {
-      if (
-        collectVisitorName &&
-        !customerName
-      ) {
+      if (collectVisitorName && !customerName) {
         return true;
       }
 
-      if (
-        collectVisitorEmail &&
-        !customerEmail
-      ) {
+      if (collectVisitorEmail && !customerEmail) {
         return true;
       }
 
       return false;
     }
 
-    // ===================================================
-    // SHOW VISITOR FORM
-    // ===================================================
-
     function showVisitorForm() {
-      if (!visitorForm) {
-        return;
-      }
+      if (!visitorForm) return;
 
-      visitorForm.style.display =
-        "flex";
+      visitorForm.style.display = "flex";
 
       if (
         collectVisitorName &&
         !customerName &&
         visitorNameInput
       ) {
-        setTimeout(
-          function () {
-            visitorNameInput.focus();
-          },
-          50
-        );
-
+        setTimeout(() => visitorNameInput.focus(), 50);
         return;
       }
 
@@ -1695,46 +998,26 @@
         !customerEmail &&
         visitorEmailInput
       ) {
-        setTimeout(
-          function () {
-            visitorEmailInput.focus();
-          },
-          50
-        );
+        setTimeout(() => visitorEmailInput.focus(), 50);
       }
     }
-
-    // ===================================================
-    // HIDE VISITOR FORM
-    // ===================================================
 
     function hideVisitorForm() {
-      if (!visitorForm) {
-        return;
+      if (visitorForm) {
+        visitorForm.style.display = "none";
       }
-
-      visitorForm.style.display =
-        "none";
     }
-
-    // ===================================================
-    // SAVE VISITOR INFORMATION
-    // ===================================================
 
     function saveVisitorInformation() {
       try {
-        if (
-          customerName
-        ) {
+        if (customerName) {
           localStorage.setItem(
             "salespilot_customer_name",
             customerName
           );
         }
 
-        if (
-          customerEmail
-        ) {
+        if (customerEmail) {
           localStorage.setItem(
             "salespilot_customer_email",
             customerEmail
@@ -1745,101 +1028,51 @@
       }
     }
 
-    // ===================================================
-    // START CHAT
-    // ===================================================
-
     function startChat() {
-      // -----------------------------------------------
-      // NAME
-      // -----------------------------------------------
-
-      if (
-        collectVisitorName &&
-        !customerName
-      ) {
+      if (collectVisitorName && !customerName) {
         customerName =
           visitorNameInput
             ? visitorNameInput.value.trim()
             : "";
 
         if (!customerName) {
-          alert(
-            "Please enter your name."
-          );
-
-          if (visitorNameInput) {
-            visitorNameInput.focus();
-          }
-
+          alert("Please enter your name.");
+          if (visitorNameInput) visitorNameInput.focus();
           return;
         }
       }
 
-      // -----------------------------------------------
-      // EMAIL
-      // -----------------------------------------------
-
-      if (
-        collectVisitorEmail &&
-        !customerEmail
-      ) {
+      if (collectVisitorEmail && !customerEmail) {
         customerEmail =
           visitorEmailInput
             ? visitorEmailInput.value.trim()
             : "";
 
         if (!customerEmail) {
-          alert(
-            "Please enter your email address."
-          );
-
-          if (visitorEmailInput) {
-            visitorEmailInput.focus();
-          }
-
+          alert("Please enter your email address.");
+          if (visitorEmailInput) visitorEmailInput.focus();
           return;
         }
 
-        const emailValid =
-          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        if (
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
             customerEmail
-          );
-
-        if (!emailValid) {
-          alert(
-            "Please enter a valid email address."
-          );
-
-          if (visitorEmailInput) {
-            visitorEmailInput.focus();
-          }
-
+          )
+        ) {
+          alert("Please enter a valid email address.");
+          if (visitorEmailInput) visitorEmailInput.focus();
           return;
         }
       }
 
-      // -----------------------------------------------
-      // SAVE
-      // -----------------------------------------------
-
       saveVisitorInformation();
-
       hideVisitorForm();
 
-      setTimeout(
-        function () {
-          input.focus();
-        },
-        50
-      );
+      setTimeout(() => input.focus(), 50);
     }
 
     if (startChatButton) {
-      startChatButton.addEventListener(
-        "click",
-        startChat
-      );
+      startChatButton.addEventListener("click", startChat);
     }
 
     // ===================================================
@@ -1847,32 +1080,20 @@
     // ===================================================
 
     function playNotificationSound() {
-      if (
-        !soundNotifications
-      ) {
-        return;
-      }
+      if (!soundNotifications) return;
 
       try {
         const AudioContext =
           window.AudioContext ||
           window.webkitAudioContext;
 
-        if (!AudioContext) {
-          return;
-        }
+        if (!AudioContext) return;
 
-        const audioContext =
-          new AudioContext();
+        const audioContext = new AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
 
-        const oscillator =
-          audioContext.createOscillator();
-
-        const gain =
-          audioContext.createGain();
-
-        oscillator.type =
-          "sine";
+        oscillator.type = "sine";
 
         oscillator.frequency.setValueAtTime(
           660,
@@ -1881,8 +1102,7 @@
 
         oscillator.frequency.exponentialRampToValueAtTime(
           880,
-          audioContext.currentTime +
-            0.12
+          audioContext.currentTime + 0.12
         );
 
         gain.gain.setValueAtTime(
@@ -1892,37 +1112,25 @@
 
         gain.gain.exponentialRampToValueAtTime(
           0.08,
-          audioContext.currentTime +
-            0.02
+          audioContext.currentTime + 0.02
         );
 
         gain.gain.exponentialRampToValueAtTime(
           0.0001,
-          audioContext.currentTime +
-            0.16
+          audioContext.currentTime + 0.16
         );
 
-        oscillator.connect(
-          gain
-        );
-
-        gain.connect(
-          audioContext.destination
-        );
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
 
         oscillator.start();
-
         oscillator.stop(
-          audioContext.currentTime +
-            0.16
+          audioContext.currentTime + 0.16
         );
 
-        setTimeout(
-          function () {
-            audioContext.close();
-          },
-          300
-        );
+        setTimeout(() => {
+          audioContext.close();
+        }, 300);
       } catch (error) {
         console.warn(
           "Sales Pilot: Could not play notification sound.",
@@ -1936,138 +1144,82 @@
     // ===================================================
 
     function createTypingIndicator() {
-      const row =
-        document.createElement(
-          "div"
-        );
+      const row = document.createElement("div");
 
-      row.className =
-        "salespilot-message-row";
+      row.className = "salespilot-message-row";
+      row.id = "salespilot-typing-row";
 
-      row.id =
-        "salespilot-typing-row";
+      if (showAiAvatar) {
+        const avatar = document.createElement("div");
 
-      if (
-        showAiAvatar
-      ) {
-        const avatar =
-          document.createElement(
-            "div"
-          );
+        avatar.className = "salespilot-avatar";
+        avatar.textContent = "Ã¢Å“Â¦";
 
-        avatar.className =
-          "salespilot-avatar";
-
-        avatar.textContent =
-          "🤖";
-
-        row.appendChild(
-          avatar
-        );
+        row.appendChild(avatar);
       }
 
-      const typing =
-        document.createElement(
-          "div"
-        );
+      const typing = document.createElement("div");
 
-      typing.className =
-        "salespilot-typing";
+      typing.className = "salespilot-typing";
 
       typing.innerHTML = `
-        <span
-          class="salespilot-typing-dot"
-        ></span>
-
-        <span
-          class="salespilot-typing-dot"
-        ></span>
-
-        <span
-          class="salespilot-typing-dot"
-        ></span>
+        <span class="salespilot-typing-dot"></span>
+        <span class="salespilot-typing-dot"></span>
+        <span class="salespilot-typing-dot"></span>
       `;
 
-      row.appendChild(
-        typing
-      );
+      row.appendChild(typing);
+      messages.appendChild(row);
 
-      messages.appendChild(
-        row
-      );
-
-      messages.scrollTop =
-        messages.scrollHeight;
+      scrollToBottom();
 
       return row;
     }
 
     // ===================================================
-    // ADD MESSAGE
+    // SCROLL
     // ===================================================
 
-    function addMessage(
-      text,
-      sender
-    ) {
-      const row =
-        document.createElement(
-          "div"
-        );
+    function scrollToBottom() {
+      requestAnimationFrame(() => {
+        messages.scrollTop = messages.scrollHeight;
+      });
+    }
 
-      row.className =
-        "salespilot-message-row";
+    // ===================================================
+    // ADD TEXT MESSAGE
+    // ===================================================
 
-      if (
-        sender === "ai" &&
-        showAiAvatar
-      ) {
-        const avatar =
-          document.createElement(
-            "div"
-          );
+    function addMessage(text, sender) {
+      const row = document.createElement("div");
 
-        avatar.className =
-          "salespilot-avatar";
+      row.className = "salespilot-message-row";
 
-        avatar.textContent =
-          "🤖";
+      if (sender === "ai" && showAiAvatar) {
+        const avatar = document.createElement("div");
 
-        row.appendChild(
-          avatar
-        );
+        avatar.className = "salespilot-avatar";
+        avatar.textContent = "Ã¢Å“Â¦";
+
+        row.appendChild(avatar);
       }
 
-      const message =
-        document.createElement(
-          "div"
-        );
+      const message = document.createElement("div");
 
       message.className =
         "salespilot-message " +
-        (
-          sender === "user"
-            ? "salespilot-user"
-            : "salespilot-ai"
-        );
+        (sender === "user"
+          ? "salespilot-user"
+          : "salespilot-ai");
 
-      message.textContent =
-        String(text);
+      message.textContent = String(text || "");
 
-      row.appendChild(
-        message
-      );
+      row.appendChild(message);
+      messages.appendChild(row);
 
-      messages.appendChild(
-        row
-      );
+      scrollToBottom();
 
-      messages.scrollTop =
-        messages.scrollHeight;
-
-      if (
-        sender === "ai"
-      ) {
+      if (sender === "ai") {
         playNotificationSound();
       }
 
@@ -2075,130 +1227,563 @@
     }
 
     // ===================================================
+    // PRODUCT NORMALIZATION
+    // Handles different backend field names safely.
+    // ===================================================
+
+    function normalizeProduct(product) {
+      if (!product || typeof product !== "object") {
+        return null;
+      }
+
+      const name =
+        product.name ||
+        product.title ||
+        product.productName ||
+        "";
+
+      const price =
+        product.price ??
+        product.salePrice ??
+        product.priceFormatted ??
+        product.formattedPrice ??
+        "";
+
+      const image =
+        product.image ||
+        product.imageUrl ||
+        product.image_url ||
+        product.featuredImage ||
+        product.featured_image ||
+        product.thumbnail ||
+        "";
+
+      const url =
+        product.url ||
+        product.productUrl ||
+        product.product_url ||
+        product.onlineStoreUrl ||
+        product.online_store_url ||
+        product.handleUrl ||
+        "";
+
+      const available =
+        typeof product.available === "boolean"
+          ? product.available
+          : typeof product.inStock === "boolean"
+            ? product.inStock
+            : typeof product.in_stock === "boolean"
+              ? product.in_stock
+              : null;
+
+      const inventory =
+        product.inventory ??
+        product.inventoryQuantity ??
+        product.inventory_quantity ??
+        null;
+
+      const vendor =
+        product.vendor ||
+        product.brand ||
+        "";
+
+      return {
+        ...product,
+        name: String(name).trim(),
+        price: String(price || "").trim(),
+        image: String(image || "").trim(),
+        url: String(url || "").trim(),
+        available,
+        inventory,
+        vendor: String(vendor || "").trim(),
+      };
+    }
+
+    function normalizeProducts(products) {
+      if (!Array.isArray(products)) return [];
+
+      const seen = new Set();
+
+      return products
+        .map(normalizeProduct)
+        .filter((product) => {
+          if (!product || !product.name) return false;
+
+          const key =
+            product.url ||
+            product.name.toLowerCase();
+
+          if (seen.has(key)) return false;
+
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 3);
+    }
+
+    // ===================================================
+    // REMOVE RAW PRODUCT URLS FROM AI TEXT
+    // ===================================================
+
+    function cleanAssistantProductText(text) {
+      let value = String(text || "");
+
+      // Remove standalone http/https URLs.
+      value = value.replace(
+        /https?:\/\/[^\s<>"')]+/gi,
+        ""
+      );
+
+      // Remove empty lines created by URL removal.
+      value = value.replace(
+        /\n[ \t]*\n[ \t]*\n+/g,
+        "\n\n"
+      );
+
+      // Remove common "View Product" text from the AI response.
+      value = value.replace(
+        /\[?\s*view\s+product\s*(?:Ã¢â€ â€™|->|Ã¢â€ â€”)?\s*\]?/gi,
+        ""
+      );
+
+      // Remove leftover excessive whitespace.
+      return value
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    // ===================================================
+    // CREATE SHORT, NATURAL PRODUCT INTRO
+    // =====================================================
+
+    function buildProductIntro(originalText, products) {
+      const cleanText =
+        cleanAssistantProductText(originalText);
+
+      if (!products.length) {
+        return cleanText;
+      }
+
+      // Use the AI's short, natural lead-in whenever it already exists and
+      // is concise. The product cards carry names, prices, images, and
+      // links below. We only synthesize a brief neutral intro when the AI
+      // left none or pasted a raw product dump instead.
+      if (cleanText && cleanText.length <= 180 && !looksLikeProductDump(cleanText)) {
+        return cleanText;
+      }
+
+      const first = products[0];
+
+      if (products.length === 1) {
+        const priceText = first.price
+          ? ` It is currently ${first.price}.`
+          : "";
+
+        const availabilityText =
+          first.available === true
+            ? " It is in stock."
+            : first.available === false
+              ? " It is currently out of stock."
+              : "";
+
+        return (
+          `One option is available: ` +
+          `the ${first.name}.` +
+          priceText +
+          availabilityText
+        ).trim();
+      }
+
+      return (
+        `Here are a few matching options. ` +
+        `Take a look and let me know if you want more detail on any of them.`
+      );
+    }
+
+    function looksLikeProductDump(text) {
+      const value = String(text || "");
+
+      const lineCount =
+        value.split(/\n/).filter(Boolean).length;
+
+      const productMarkers =
+        (
+          value.match(
+            /(?:rs\.?|price|in stock|out of stock|available|low stock|https?:\/\/|Ã¢â‚¬â€|- )/gi
+          ) || []
+        ).length;
+
+      return (
+        lineCount >= 4 ||
+        productMarkers >= 4 ||
+        value.length > 300
+      );
+    }
+
+    // ===================================================
+    // PRODUCT CARDS
+    // =====================================================
+
+    function renderProductCards(products) {
+      const normalized = normalizeProducts(products);
+
+      if (!normalized.length) {
+        return null;
+      }
+
+      const wrapper = document.createElement("div");
+
+      wrapper.className = "salespilot-products";
+
+      normalized.forEach((product) => {
+        const card = document.createElement("div");
+
+        card.className = "salespilot-product-card";
+
+        // Image
+        if (product.image) {
+          const imageWrap =
+            document.createElement("div");
+
+          imageWrap.className =
+            "salespilot-product-image-wrap";
+
+          const image =
+            document.createElement("img");
+
+          image.className =
+            "salespilot-product-image";
+
+          image.src = product.image;
+          image.alt = product.name;
+          image.loading = "lazy";
+          image.referrerPolicy = "no-referrer";
+
+          image.addEventListener(
+            "error",
+            () => {
+              imageWrap.remove();
+            },
+            { once: true }
+          );
+
+          imageWrap.appendChild(image);
+          card.appendChild(imageWrap);
+        }
+
+        const body =
+          document.createElement("div");
+
+        body.className =
+          "salespilot-product-body";
+
+        const name =
+          document.createElement("div");
+
+        name.className =
+          "salespilot-product-name";
+
+        name.textContent =
+          product.name;
+
+        body.appendChild(name);
+
+        const meta =
+          document.createElement("div");
+
+        meta.className =
+          "salespilot-product-meta";
+
+        if (product.price) {
+          const price =
+            document.createElement("div");
+
+          price.className =
+            "salespilot-product-price";
+
+          price.textContent =
+            product.price;
+
+          meta.appendChild(price);
+        }
+
+        if (
+          product.available !== null ||
+          product.inventory !== null
+        ) {
+          const stock =
+            document.createElement("div");
+
+          stock.className =
+            "salespilot-product-stock";
+
+          if (product.available === true) {
+            stock.textContent =
+              product.inventory !== null &&
+              Number.isFinite(Number(product.inventory))
+                ? `In stock Ã‚Â· ${product.inventory} left`
+                : "In stock";
+
+            stock.classList.add(
+              "salespilot-in-stock"
+            );
+          } else if (product.available === false) {
+            stock.textContent =
+              "Currently unavailable";
+
+            stock.classList.add(
+              "salespilot-out-of-stock"
+            );
+          } else {
+            stock.textContent =
+              "Availability not listed";
+          }
+
+          meta.appendChild(stock);
+        }
+
+        if (meta.children.length) {
+          body.appendChild(meta);
+        }
+
+        // IMPORTANT:
+        // Product URL is rendered only as a button.
+        // It is never printed as raw text.
+        if (product.url) {
+          const link =
+            document.createElement("a");
+
+          link.className =
+            "salespilot-product-link";
+
+          link.href =
+            product.url;
+
+          link.target =
+            "_blank";
+
+          link.rel =
+            "noopener noreferrer";
+
+          link.setAttribute(
+            "aria-label",
+            `View ${product.name}`
+          );
+
+          link.innerHTML = `
+            <span>View Product</span>
+            <span class="salespilot-product-link-icon">Ã¢â€ â€”</span>
+          `;
+
+          body.appendChild(link);
+        }
+
+        card.appendChild(body);
+        wrapper.appendChild(card);
+      });
+
+      messages.appendChild(wrapper);
+
+      scrollToBottom();
+
+      return wrapper;
+    }
+
+    // ===================================================
+    // CATALOG LINK
+    // ===================================================
+
+    function renderCatalogLink(url) {
+      if (!url) return;
+
+      const safeUrl = String(url).trim();
+
+      if (!/^https?:\/\//i.test(safeUrl)) {
+        return;
+      }
+
+      const link =
+        document.createElement("a");
+
+      link.className =
+        "salespilot-catalog-link";
+
+      link.href =
+        safeUrl;
+
+      link.target =
+        "_blank";
+
+      link.rel =
+        "noopener noreferrer";
+
+      link.textContent =
+        "Browse full catalog Ã¢â€ â€”";
+
+      messages.appendChild(link);
+
+      scrollToBottom();
+    }
+
+    // ===================================================
+    // SITE LINK
+    // ===================================================
+
+    function renderSiteLink(url) {
+      if (!url) return;
+
+      const safeUrl = String(url).trim();
+
+      if (!/^https?:\/\//i.test(safeUrl)) {
+        return;
+      }
+
+      const link =
+        document.createElement("a");
+
+      link.className =
+        "salespilot-catalog-link";
+
+      link.href =
+        safeUrl;
+
+      link.target =
+        "_blank";
+
+      link.rel =
+        "noopener noreferrer";
+
+      link.textContent =
+        "Visit our website \u2197";
+
+      messages.appendChild(link);
+
+      scrollToBottom();
+    }
+
+    // ===================================================
+    // RENDER AI RESPONSE
+    // =====================================================
+
+    function renderAIResponse(data) {
+      const products =
+        normalizeProducts(
+          Array.isArray(data?.products)
+            ? data.products
+            : Array.isArray(data?.productCards)
+              ? data.productCards
+              : []
+        );
+
+      const rawResponse =
+        data?.response ||
+        data?.message ||
+        "";
+
+      const responseText =
+        buildProductIntro(
+          rawResponse,
+          products
+        );
+
+      if (responseText) {
+        addMessage(responseText, "ai");
+      }
+
+      if (products.length) {
+        renderProductCards(products);
+      }
+
+      if (
+        data?.catalogUrl &&
+        typeof data.catalogUrl === "string"
+      ) {
+        renderCatalogLink(data.catalogUrl);
+      }
+
+      if (
+        data?.siteUrl &&
+        typeof data.siteUrl === "string"
+      ) {
+        renderSiteLink(data.siteUrl);
+      }
+    }
+
+    // ===================================================
     // SEND MESSAGE
     // ===================================================
 
+    let sending = false;
+
     async function sendMessage() {
+      if (sending) return;
+
       const message =
         input.value.trim();
 
-      if (!message) {
-        return;
-      }
+      if (!message) return;
 
-      // -------------------------------------------------
-      // COLLECT INFORMATION FIRST
-      // -------------------------------------------------
-
-      if (
-        needsVisitorInformation()
-      ) {
+      if (needsVisitorInformation()) {
         showVisitorForm();
-
         return;
       }
 
-      // -------------------------------------------------
-      // USER MESSAGE
-      // -------------------------------------------------
+      input.value = "";
 
-      input.value =
-        "";
+      addMessage(message, "user");
 
-      addMessage(
-        message,
-        "user"
-      );
+      sending = true;
+      send.disabled = true;
 
-      send.disabled =
-        true;
+      let typingIndicator = null;
+      let loadingMessage = null;
 
-      // -------------------------------------------------
-      // TYPING
-      // -------------------------------------------------
-
-      let typingIndicator =
-        null;
-
-      let loadingMessage =
-        null;
-
-      if (
-        showTypingIndicator
-      ) {
+      if (showTypingIndicator) {
         typingIndicator =
           createTypingIndicator();
       } else {
         loadingMessage =
-          addMessage(
-            "Thinking...",
-            "ai"
-          );
+          addMessage("Thinking...", "ai");
       }
 
       try {
-        // -----------------------------------------------
-        // API REQUEST
-        // -----------------------------------------------
-
         const response =
           await fetch(
             `${API_BASE}/api/chat`,
             {
-              method:
-                "POST",
-
+              method: "POST",
               headers: {
                 "Content-Type":
                   "application/json",
-
                 Accept:
                   "application/json",
               },
-
-              body:
-                JSON.stringify({
-                  message,
-
-                  profileId,
-
-                  visitorSessionId,
-
-                  customerName,
-
-                  customerEmail,
-                }),
+              body: JSON.stringify({
+                message,
+                profileId,
+                visitorSessionId,
+                customerName,
+                customerEmail,
+              }),
             }
           );
 
         let data = {};
 
         try {
-          data =
-            await response.json();
+          data = await response.json();
         } catch {
           data = {};
         }
 
-        // -----------------------------------------------
-        // REMOVE LOADING
-        // -----------------------------------------------
-
-        if (
-          typingIndicator
-        ) {
+        if (typingIndicator) {
           typingIndicator.remove();
         }
 
-        if (
-          loadingMessage
-        ) {
+        if (loadingMessage) {
           loadingMessage.remove();
         }
-
-        // -----------------------------------------------
-        // API ERROR
-        // -----------------------------------------------
 
         if (!response.ok) {
           throw new Error(
@@ -2207,13 +1792,7 @@
           );
         }
 
-        // -----------------------------------------------
-        // SESSION
-        // -----------------------------------------------
-
-        if (
-          data.visitorSessionId
-        ) {
+        if (data.visitorSessionId) {
           visitorSessionId =
             data.visitorSessionId;
 
@@ -2227,30 +1806,18 @@
           }
         }
 
-        // -----------------------------------------------
-        // RESPONSE
-        // -----------------------------------------------
-
-        addMessage(
-          data.response ||
-            "Sorry, I couldn't answer that.",
-          "ai"
-        );
+        renderAIResponse(data);
       } catch (error) {
         console.error(
           "Sales Pilot chat error:",
           error
         );
 
-        if (
-          typingIndicator
-        ) {
+        if (typingIndicator) {
           typingIndicator.remove();
         }
 
-        if (
-          loadingMessage
-        ) {
+        if (loadingMessage) {
           loadingMessage.remove();
         }
 
@@ -2259,9 +1826,8 @@
           "ai"
         );
       } finally {
-        send.disabled =
-          false;
-
+        sending = false;
+        send.disabled = false;
         input.focus();
       }
     }
@@ -2270,65 +1836,49 @@
     // OPEN / CLOSE
     // ===================================================
 
-    let opened =
-      false;
+    let opened = false;
 
     function openWidget() {
-      if (opened) {
-        return;
+      if (opened) return;
+
+      opened = true;
+
+      chat.style.display = "flex";
+
+      if (enableAnimations) {
+        chat.classList.remove(
+          "salespilot-opening"
+        );
+
+        void chat.offsetWidth;
+
+        chat.classList.add(
+          "salespilot-opening"
+        );
       }
 
-      opened =
-        true;
-
-      chat.style.display =
-        "flex";
-
-      button.innerHTML =
-        "×";
+      button.innerHTML = "Ãƒâ€”";
 
       button.setAttribute(
         "aria-label",
         "Close Sales Pilot chat"
       );
 
-      // -----------------------------------------------
-      // SHOW VISITOR FORM
-      // -----------------------------------------------
-
-      if (
-        needsVisitorInformation()
-      ) {
+      if (needsVisitorInformation()) {
         showVisitorForm();
-
         return;
       }
 
-      // -----------------------------------------------
-      // FOCUS INPUT
-      // -----------------------------------------------
-
-      setTimeout(
-        function () {
-          input.focus();
-        },
-        50
-      );
+      setTimeout(() => input.focus(), 50);
     }
 
     function closeWidget() {
-      if (!opened) {
-        return;
-      }
+      if (!opened) return;
 
-      opened =
-        false;
+      opened = false;
+      chat.style.display = "none";
 
-      chat.style.display =
-        "none";
-
-      button.innerHTML =
-        "💬";
+      button.innerHTML = "Ã°Å¸â€™Â¬";
 
       button.setAttribute(
         "aria-label",
@@ -2336,97 +1886,55 @@
       );
     }
 
-    button.addEventListener(
-      "click",
-      function () {
-        if (opened) {
-          closeWidget();
-        } else {
-          openWidget();
-        }
+    button.addEventListener("click", () => {
+      if (opened) {
+        closeWidget();
+      } else {
+        openWidget();
       }
-    );
-
-    // ===================================================
-    // SEND BUTTON
-    // ===================================================
+    });
 
     send.addEventListener(
       "click",
       sendMessage
     );
 
-    // ===================================================
-    // ENTER KEY
-    // ===================================================
-
     input.addEventListener(
       "keydown",
-      function (event) {
-        if (
-          event.key ===
-          "Enter"
-        ) {
+      (event) => {
+        if (event.key === "Enter") {
           event.preventDefault();
-
           sendMessage();
         }
       }
     );
 
     // ===================================================
+    // WELCOME MESSAGE
+    // ===================================================
+
+    addMessage(
+      welcomeMessage,
+      "ai"
+    );
+
+    // ===================================================
     // AUTO OPEN
     // ===================================================
 
-    if (
-      autoOpen
-    ) {
+    if (autoOpen) {
       setTimeout(
-        function () {
-          openWidget();
-        },
-        enableAnimations
-          ? 700
-          : 0
+        openWidget,
+        enableAnimations ? 700 : 0
       );
     }
 
     // ===================================================
     // DEBUG
-    // =====================================================
+    // ===================================================
 
     console.log(
-      "Sales Pilot widget initialized successfully:",
-      {
-        profileId,
-
-        appearance: {
-          aiName,
-          welcomeMessage,
-          brandColor,
-          position,
-          theme,
-          size,
-          radius,
-        },
-
-        behavior: {
-          autoOpen,
-          showTypingIndicator,
-          soundNotifications,
-          showAiAvatar,
-          collectVisitorName,
-          collectVisitorEmail,
-          enableAnimations,
-          showPoweredBy,
-        },
-
-        visitor: {
-          customerName,
-          customerEmail,
-          visitorSessionId,
-        },
-      }
+      "Sales Pilot widget initialized successfully."
     );
   }
 
@@ -2434,13 +1942,9 @@
   // ESCAPE HTML
   // =====================================================
 
-  function escapeHTML(
-    value
-  ) {
+  function escapeHTML(value) {
     const div =
-      document.createElement(
-        "div"
-      );
+      document.createElement("div");
 
     div.textContent =
       String(value);
@@ -2449,66 +1953,39 @@
   }
 
   // =====================================================
-  // HEX → RGBA
+  // HEX Ã¢â€ â€™ RGBA
   // =====================================================
 
-  function hexToRgba(
-    hex,
-    alpha
-  ) {
-    if (
-      typeof hex !==
-      "string"
-    ) {
+  function hexToRgba(hex, alpha) {
+    if (typeof hex !== "string") {
       return `rgba(99, 102, 241, ${alpha})`;
     }
 
     let clean =
       hex
-        .replace(
-          "#",
-          ""
-        )
+        .replace("#", "")
         .trim();
 
-    if (
-      clean.length ===
-      3
-    ) {
+    if (clean.length === 3) {
       clean =
         clean
           .split("")
-          .map(
-            function (char) {
-              return (
-                char +
-                char
-              );
-            }
-          )
+          .map((char) => char + char)
           .join("");
     }
 
-    if (
-      clean.length !==
-      6
-    ) {
+    if (clean.length !== 6) {
       return `rgba(99, 102, 241, ${alpha})`;
     }
 
     const number =
-      parseInt(
-        clean,
-        16
-      );
+      parseInt(clean, 16);
 
     const r =
-      (number >> 16) &
-      255;
+      (number >> 16) & 255;
 
     const g =
-      (number >> 8) &
-      255;
+      (number >> 8) & 255;
 
     const b =
       number & 255;
@@ -2520,16 +1997,11 @@
   // START WIDGET
   // =====================================================
 
-  if (
-    document.readyState ===
-    "loading"
-  ) {
+  if (document.readyState === "loading") {
     document.addEventListener(
       "DOMContentLoaded",
       initializeWidget,
-      {
-        once: true,
-      }
+      { once: true }
     );
   } else {
     initializeWidget();
