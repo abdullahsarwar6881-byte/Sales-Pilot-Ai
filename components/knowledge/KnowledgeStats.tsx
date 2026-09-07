@@ -26,7 +26,7 @@ export default function KnowledgeStats({
       title: "Documents",
       value: documents,
       icon: FileText,
-      color: "from-blue-500 to-cyan-500",
+      color: "from-indigo-600 to-violet-600",
     },
     {
       title: "Website Pages",

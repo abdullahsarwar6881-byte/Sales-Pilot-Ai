@@ -1301,6 +1301,7 @@ export async function executeAction(
       // =================================================
 
       case "get_order_status": {
+        const storeContext = safeParameters.storeContext as any;
         const profileId =
           getProfileId(
             safeParameters
@@ -1312,50 +1313,42 @@ export async function executeAction(
               safeParameters.order_number
           );
 
-        if (!profileId) {
+        const email =
+          typeof safeParameters.email === "string"
+            ? safeParameters.email
+            : undefined;
+
+        const isMerchant =
+          safeParameters.isMerchant === true;
+
+        if (!storeContext && !profileId) {
           return {
             success: false,
-
             error:
-              "Profile information is missing.",
+              "Store information is missing.",
           };
         }
 
         if (!orderNumber) {
           return {
             success: false,
-
             error:
               "Please provide your order number, for example #1001.",
           };
         }
 
-        const order =
+        const lookup =
           await getOrder(
-            profileId,
-            orderNumber
+            storeContext || profileId,
+            orderNumber,
+            { email, isMerchant }
           );
 
-        if (!order) {
-          return {
-            success: true,
-
-            data: {
-              found: false,
-
-              orderNumber,
-            },
-          };
-        }
-
         return {
-          success: true,
-
-          data: {
-            found: true,
-
-            order,
-          },
+          success: lookup.success,
+          data: lookup,
+          message: lookup.message,
+          error: lookup.error,
         };
       }
 
@@ -1364,6 +1357,7 @@ export async function executeAction(
       // =================================================
 
       case "get_order_details": {
+        const storeContext = safeParameters.storeContext as any;
         const profileId =
           getProfileId(
             safeParameters
@@ -1375,50 +1369,42 @@ export async function executeAction(
               safeParameters.order_number
           );
 
-        if (!profileId) {
+        const email =
+          typeof safeParameters.email === "string"
+            ? safeParameters.email
+            : undefined;
+
+        const isMerchant =
+          safeParameters.isMerchant === true;
+
+        if (!storeContext && !profileId) {
           return {
             success: false,
-
             error:
-              "Profile information is missing.",
+              "Store information is missing.",
           };
         }
 
         if (!orderNumber) {
           return {
             success: false,
-
             error:
               "Please provide your order number, for example #1001.",
           };
         }
 
-        const order =
+        const lookup =
           await getOrder(
-            profileId,
-            orderNumber
+            storeContext || profileId,
+            orderNumber,
+            { email, isMerchant }
           );
 
-        if (!order) {
-          return {
-            success: true,
-
-            data: {
-              found: false,
-
-              orderNumber,
-            },
-          };
-        }
-
         return {
-          success: true,
-
-          data: {
-            found: true,
-
-            order,
-          },
+          success: lookup.success,
+          data: lookup,
+          message: lookup.message,
+          error: lookup.error,
         };
       }
 

@@ -16,7 +16,7 @@
     "@sfpy/atoms": "^0.3.7",
     "@sfpy/node-core": "^0.3.5",
     "@sfpy/node-sdk": "^3.0.2",
-    "@shopify/app-bridge-react": "^4.2.12",
+    "@shopify/app-bridge-react": "^4.2.13",
     "@shopify/app-bridge-types": "^0.7.2",
     "@shopify/shopify-api": "^13.1.0",
     "@supabase/ssr": "^0.12.4",

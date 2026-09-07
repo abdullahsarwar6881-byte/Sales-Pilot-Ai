@@ -61,6 +61,27 @@ const LINK_WORDS = [
   "get this",
 ];
 
+const SIMILAR_WORDS = [
+  "similar",
+  "like this",
+  "like that",
+  "something like",
+  "anything like",
+  "other like",
+  "more like",
+  "same style",
+  "same type",
+  "similar style",
+  "similar type",
+  "recommend something similar",
+  "recommend similar",
+  "show similar",
+  "suggest similar",
+  "another one like",
+  "other options like",
+  "similar to",
+];
+
 const OBJECTION_WORDS = [
   "don't like",
   "dont like",
@@ -107,6 +128,21 @@ function normalize(value: unknown) {
 }
 
 // =====================================================
+// CHECK SIMILAR PRODUCT REQUEST
+// =====================================================
+
+export function isSimilarProductRequest(message: string): boolean {
+  const text = normalize(message);
+  if (!text) return false;
+  return (
+    SIMILAR_WORDS.some((word) => text.includes(word)) ||
+    /\b(?:similar|like\s+(?:this|that|the|these|those)|more\s+like|other\s+(?:options?|products?|items?)\s+like|recommend\s+(?:something\s+)?similar|alternative|alternatives|another\s+one\s+like)\b/i.test(
+      text
+    )
+  );
+}
+
+// =====================================================
 // CHECK OBJECTION OR ALTERNATIVE REQUEST
 // =====================================================
 
@@ -115,6 +151,7 @@ export function isObjectionOrAlternative(message: string): boolean {
   if (!text) return false;
   return (
     OBJECTION_WORDS.some((word) => text.includes(word)) ||
+    isSimilarProductRequest(text) ||
     /\b(?:don'?t\s+like|dislike|not\s+(?:for\s+me|my\s+style)|show\s+(?:me\s+)?(?:something\s+else|another|different)|something\s+else|different\s+(?:one|color|style|option)|other\s+options?|alternatives?)\b/i.test(
       text
     )
@@ -145,6 +182,7 @@ export function isProductFollowUp(
       ...AVAILABILITY_WORDS,
       ...MATERIAL_WORDS,
       ...LINK_WORDS,
+      ...SIMILAR_WORDS,
       ...OBJECTION_WORDS,
       ...PRODUCT_REFERENCE_WORDS,
     ].some((word) =>
@@ -154,6 +192,7 @@ export function isProductFollowUp(
   return (
     hasReference ||
     hasProductQuestion ||
+    isSimilarProductRequest(text) ||
     isObjectionOrAlternative(text)
   );
 }

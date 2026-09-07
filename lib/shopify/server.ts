@@ -17,6 +17,27 @@ if (!apiSecretKey) {
   throw new Error("Missing SHOPIFY_API_SECRET");
 }
 
+const appUrlStr =
+  process.env.SHOPIFY_APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "http://localhost:3000";
+
+let parsedHostName = "localhost:3000";
+let parsedHostScheme: "http" | "https" = "http";
+
+try {
+  const url = new URL(
+    appUrlStr.startsWith("http://") || appUrlStr.startsWith("https://")
+      ? appUrlStr
+      : `https://${appUrlStr}`
+  );
+  parsedHostName = url.host;
+  parsedHostScheme = url.protocol === "http:" ? "http" : "https";
+} catch {
+  parsedHostName = "localhost:3000";
+  parsedHostScheme = "http";
+}
+
 export const shopify = shopifyApi({
   apiKey,
   apiSecretKey,
@@ -28,8 +49,8 @@ export const shopify = shopifyApi({
     "read_customers",
   ],
 
-  hostName: "localhost:3000",
-  hostScheme: "http",
+  hostName: parsedHostName,
+  hostScheme: parsedHostScheme,
 
   apiVersion: ApiVersion.July26,
 

@@ -80,8 +80,9 @@ function containsAny(
   text: string,
   phrases: readonly string[]
 ): boolean {
+  const lowerText = text.toLowerCase();
   return phrases.some((phrase) => {
-    return text.includes(
+    return lowerText.includes(
       phrase.toLowerCase()
     );
   });
@@ -177,7 +178,7 @@ function extractNumbers(
 //
 // =====================================================
 
-function extractOrderNumber(
+export function extractOrderNumber(
   message: string
 ): string | null {
   const text = normalize(message);
@@ -228,12 +229,27 @@ function extractOrderNumber(
 // ORDER NUMBER EXISTS
 // =====================================================
 
-function hasOrderNumber(
+export function hasOrderNumber(
   message: string
 ): boolean {
   return Boolean(
     extractOrderNumber(message)
   );
+}
+
+// =====================================================
+// EMAIL EXTRACTION
+// =====================================================
+
+export function extractEmail(
+  message: string
+): string | null {
+  if (!message || typeof message !== "string") {
+    return null;
+  }
+
+  const match = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  return match ? match[0].toLowerCase() : null;
 }
 
 // =====================================================
@@ -245,12 +261,23 @@ const HUMAN_HANDOFF_PHRASES = [
   "talk to a human",
   "speak to human",
   "speak to a human",
-
   "talk with a human",
   "speak with a human",
 
+  "speak to a person",
+  "talk to a person",
+  "speak with a person",
+  "talk with a person",
+
   "human support",
   "live support",
+  "human agent",
+  "live agent",
+
+  "customer support",
+  "customer service",
+  "talk to support",
+  "speak to support",
 
   "contact support",
   "contact a human",
@@ -261,27 +288,54 @@ const HUMAN_HANDOFF_PHRASES = [
 
   "speak with someone",
   "speak to someone",
-
   "talk with someone",
   "talk to someone",
 
+  "connect me to support",
+  "connect me with support",
   "connect me to an agent",
   "connect me with an agent",
-
   "connect me to a human",
   "connect me with a human",
 
-  "human agent",
-  "live agent",
+  "let me talk to someone",
+  "let me speak to someone",
+  "let me talk to an agent",
+  "let me speak to an agent",
+  "let me talk to a human",
+  "let me speak to a human",
 
   "speak with an agent",
   "talk to an agent",
 
+  "agent please",
+  "human please",
+  "representative please",
+  "representative",
+
   "i want a human",
   "i need a human",
+  "i want a real person",
+  "i need a real person",
+  "i need human help",
+  "i need human support",
 
   "i want to speak to someone",
   "i need to speak to someone",
+  "i want to talk to someone",
+  "i need to talk to someone",
+
+  "can i speak with a real person",
+  "can i speak to a real person",
+  "can i speak to customer support",
+  "can i speak with customer support",
+
+  "transfer me to a human",
+  "transfer me to an agent",
+  "transfer to agent",
+  "transfer to human",
+  "operator please",
+  "speak to an operator",
 ];
 
 function detectHumanHandoff(
@@ -301,6 +355,17 @@ function detectHumanHandoff(
       action: "handoff_to_human",
       parameters: {},
     };
+  }
+
+  // Token check for short phrases like "agent", "representative"
+  const tokens = text.split(" ").filter(Boolean);
+  if (tokens.length <= 3) {
+    if (tokens.includes("agent") || tokens.includes("representative") || tokens.includes("human")) {
+      return {
+        action: "handoff_to_human",
+        parameters: {},
+      };
+    }
   }
 
   return null;
@@ -374,6 +439,27 @@ const ORDER_STATUS_PHRASES = [
   "is the order on the way",
 
   "order on the way",
+
+  "what is the tracking number",
+  "what is my tracking number",
+  "whats my tracking number",
+  "what's my tracking number",
+  "tracking number",
+  "tracking link",
+  "track my shipment",
+  "track shipment",
+  "where is my delivery",
+  "check my order",
+  "check order",
+  "check order status",
+  "lookup order",
+  "look up order",
+  "look up my order",
+  "lookup my order",
+  "order status for",
+  "status of my order",
+  "status for my order",
+  "status of order",
 ];
 
 const ORDER_STATUS_WORDS = [
@@ -384,7 +470,7 @@ const ORDER_STATUS_WORDS = [
   "delivery",
 ];
 
-function looksLikeOrderStatus(
+export function looksLikeOrderStatus(
   text: string
 ): boolean {
   if (
@@ -419,13 +505,17 @@ function looksLikeOrderStatus(
 
 function detectOrderStatus(
   text: string,
-  orderNumber: string | null
+  orderNumber: string | null,
+  rawMessage?: string
 ): DetectionResult {
   if (
     !looksLikeOrderStatus(text)
   ) {
     return null;
   }
+
+  const email =
+    extractEmail(rawMessage || text);
 
   console.log(
     "ORDER STATUS ACTION DETECTED"
@@ -436,11 +526,19 @@ function detectOrderStatus(
     orderNumber
   );
 
+  if (email) {
+    console.log(
+      "EMAIL:",
+      email
+    );
+  }
+
   return {
     action: "get_order_status",
 
     parameters: {
       orderNumber,
+      email,
     },
   };
 }
@@ -478,13 +576,21 @@ const ORDER_DETAIL_PHRASES = [
   "what products are in the order",
 
   "what did i buy",
+  "what items did i buy",
   "what have i bought",
+  "what did i purchase",
+  "what items did i purchase",
+  "what did i order",
+  "what items did i order",
+  "items i bought",
+  "items in my order",
+  "what is in my order",
 
   "show my order",
   "show me my order",
 ];
 
-function looksLikeOrderDetails(
+export function looksLikeOrderDetails(
   text: string
 ): boolean {
   if (
@@ -517,13 +623,17 @@ function looksLikeOrderDetails(
 
 function detectOrderDetails(
   text: string,
-  orderNumber: string | null
+  orderNumber: string | null,
+  rawMessage?: string
 ): DetectionResult {
   if (
     !looksLikeOrderDetails(text)
   ) {
     return null;
   }
+
+  const email =
+    extractEmail(rawMessage || text);
 
   console.log(
     "ORDER DETAILS ACTION DETECTED"
@@ -534,11 +644,19 @@ function detectOrderDetails(
     orderNumber
   );
 
+  if (email) {
+    console.log(
+      "EMAIL:",
+      email
+    );
+  }
+
   return {
     action: "get_order_details",
 
     parameters: {
       orderNumber,
+      email,
     },
   };
 }
@@ -1299,6 +1417,18 @@ export function detectAction(
     return null;
   }
 
+  const isContactQuestion =
+    /\b(whatsapp|wa\.me|phone|tel|telephone|cell|call|mobile|email|e-mail|mail|contact|address|located|location|hours|timings|timing|opening hours|store locator|branches|branch)\b/i.test(
+      text
+    );
+
+  if (isContactQuestion) {
+    console.log(
+      "CONTACT QUERY DETECTED - SKIPPING ACTION ROUTER"
+    );
+    return null;
+  }
+
   console.log(
     "================================="
   );
@@ -1357,7 +1487,8 @@ export function detectAction(
   const orderStatusAction =
     detectOrderStatus(
       text,
-      orderNumber
+      orderNumber,
+      originalMessage
     );
 
   if (orderStatusAction) {
@@ -1371,7 +1502,8 @@ export function detectAction(
   const orderDetailsAction =
     detectOrderDetails(
       text,
-      orderNumber
+      orderNumber,
+      originalMessage
     );
 
   if (orderDetailsAction) {

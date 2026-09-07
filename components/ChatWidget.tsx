@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -20,7 +21,9 @@ import {
   Trash2,
   Sparkles,
   RotateCcw,
+  Headphones,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 // =====================================================
 // PROPS
@@ -60,6 +63,10 @@ interface Props {
   enableAnimations?: boolean;
 
   showPoweredBy?: boolean;
+
+  initialVisitorSessionId?: string;
+
+  onOpenChange?: (open: boolean) => void;
 }
 
 // =====================================================
@@ -69,7 +76,9 @@ interface Props {
 interface Message {
   id: string;
 
-  sender: "ai" | "customer";
+  sender: "ai" | "customer" | "human" | "system";
+
+  role?: "user" | "assistant" | "system";
 
   content: string;
 
@@ -80,6 +89,80 @@ interface Message {
   products?: any[];
 
   siteUrl?: string;
+
+  agentName?: string;
+}
+
+function mapDatabaseMessage(message: any): Message | null {
+  if (!message) return null;
+
+  const rawSender = String(message.sender || "").toLowerCase();
+  const rawRole = String(message.role || "").toLowerCase();
+  const id = String(message.id || "");
+  const content = String(message.content || "");
+  const timestamp =
+    message.created_at || message.timestamp
+      ? new Date(message.created_at || message.timestamp)
+      : new Date();
+
+  if (rawSender === "customer" || rawRole === "user") {
+    return {
+      id,
+      role: "user",
+      content,
+      sender: "customer",
+      timestamp,
+      products: message.products,
+      imageUrl: message.imageUrl,
+    };
+  }
+
+  if (rawSender === "human") {
+    return {
+      id,
+      role: "assistant",
+      content,
+      sender: "human",
+      timestamp,
+      products: message.products,
+      imageUrl: message.imageUrl,
+      agentName: message.agentName,
+    };
+  }
+
+  if (rawSender === "system" || rawRole === "system") {
+    return {
+      id,
+      role: "system",
+      content,
+      sender: "system",
+      timestamp,
+      products: message.products,
+      imageUrl: message.imageUrl,
+    };
+  }
+
+  if (rawSender === "ai" || rawRole === "assistant") {
+    return {
+      id,
+      role: "assistant",
+      content,
+      sender: "ai",
+      timestamp,
+      products: message.products,
+      imageUrl: message.imageUrl,
+    };
+  }
+
+  return {
+    id,
+    role: "assistant",
+    content,
+    sender: "ai",
+    timestamp,
+    products: message.products,
+    imageUrl: message.imageUrl,
+  };
 }
 
 
@@ -148,6 +231,10 @@ export default function ChatWidget({
   enableAnimations = true,
 
   showPoweredBy = true,
+
+  initialVisitorSessionId,
+
+  onOpenChange,
 }: Props) {
   // ===================================================
   // STATE
@@ -197,6 +284,12 @@ const [zoomImage, setZoomImage] =
 
   const [sending, setSending] =
     useState(false);
+
+  const [conversationId, setConversationId] =
+    useState<string | null>(null);
+
+  const [conversationMode, setConversationMode] =
+    useState<"ai" | "waiting_for_human" | "human" | "resolved">("ai");
 
   // ===================================================
   // REFS
@@ -258,9 +351,64 @@ const [zoomImage, setZoomImage] =
   }, []);
 
   // ===================================================
-  // LOAD SESSION
+  // LOAD SESSION & CONVERSATION HISTORY (FALLBACK SYNC - STEP 8)
   // ===================================================
 
+  const syncMessages = useCallback(async () => {
+    if (!profileId || !visitorSessionId) return;
+    try {
+      const res = await fetch(
+        `/api/chat?widgetIdentifier=${encodeURIComponent(
+          profileId
+        )}&visitorSessionId=${encodeURIComponent(visitorSessionId)}`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) {
+        if (data.conversationId) {
+          setConversationId(String(data.conversationId));
+        }
+        if (data.status === "waiting_for_human") {
+          setConversationMode("waiting_for_human");
+        } else if (
+          data.status === "human_active" ||
+          (data.assignedTo && data.assignedTo !== "ai" && data.status !== "resolved")
+        ) {
+          setConversationMode("human");
+        } else if (data.status === "resolved") {
+          setConversationMode("resolved");
+        } else if (data.status === "ai_active") {
+          setConversationMode("ai");
+        }
+
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages((previous) => {
+            const welcomeMsg = previous.find((m) => m.id === "welcome");
+            const existingIds = new Set(previous.map((m) => String(m.id)));
+            const incomingMapped = data.messages
+              .map(mapDatabaseMessage)
+              .filter((m: Message | null): m is Message => m !== null);
+
+            // Replace single welcome message if real database history exists
+            if (previous.length === 1 && welcomeMsg && incomingMapped.length > 0) {
+              return incomingMapped;
+            }
+
+            const newItems = incomingMapped.filter(
+              (m: Message) => !existingIds.has(String(m.id))
+            );
+            if (newItems.length === 0) return previous;
+            return [...previous, ...newItems];
+          });
+          setShowSuggestions(false);
+        }
+      }
+    } catch (err) {
+      console.error("[ChatWidget] Sync messages error:", err);
+    }
+  }, [profileId, visitorSessionId]);
+
+  // Initialize or restore visitor session ID
   useEffect(() => {
     if (
       !mounted ||
@@ -274,17 +422,245 @@ const [zoomImage, setZoomImage] =
       `sales-pilot-session-${profileId}`;
 
     const existingSession =
+      initialVisitorSessionId ||
       localStorage.getItem(storageKey);
 
     if (existingSession) {
-      setVisitorSessionId(
-        existingSession
-      );
+      setVisitorSessionId(existingSession);
+      localStorage.setItem(storageKey, existingSession);
+    } else {
+      const newSession =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem(storageKey, newSession);
+      setVisitorSessionId(newSession);
     }
   }, [
     profileId,
     mounted,
+    initialVisitorSessionId,
   ]);
+
+  // Synchronize on visitorSessionId change
+  useEffect(() => {
+    if (visitorSessionId) {
+      syncMessages();
+    }
+  }, [visitorSessionId, syncMessages]);
+
+  // Window focus listener for fallback synchronization (Step 8)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleFocus = () => {
+      console.log("[ChatWidget] Window focused — synchronizing latest messages...");
+      syncMessages();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [syncMessages]);
+
+  // ===================================================
+  // SUPABASE REALTIME SUBSCRIPTION (STEPS 1, 2, 3, 4, 5)
+  // ===================================================
+
+  useEffect(() => {
+    if (!mounted || !conversationId) {
+      return;
+    }
+
+    // Step 1: Log active conversation ID
+    console.log(
+      "[ChatWidget] ACTIVE CONVERSATION ID:",
+      conversationId
+    );
+
+    const supabase = createClient();
+    const channelName = `widget-conversation-${conversationId}`;
+
+    const handleIncomingRealtimeMessage = (rawMessage: any) => {
+      // Step 1: Log incoming payload
+      console.log(
+        "[ChatWidget] REALTIME PAYLOAD:",
+        rawMessage
+      );
+
+      // Step 4: Map message using centralized mapper
+      const mappedMessage = mapDatabaseMessage(rawMessage);
+
+      // Step 1: Log mapped message
+      console.log(
+        "[ChatWidget] MAPPED MESSAGE:",
+        mappedMessage
+      );
+
+      if (!mappedMessage) return;
+
+      // Step 5: Deduplicate strictly by database message ID
+      setMessages((previous) => {
+        const alreadyExists = previous.some(
+          (item) => String(item.id) === String(mappedMessage.id)
+        );
+
+        if (alreadyExists) {
+          console.log(
+            "[ChatWidget] DUPLICATE IGNORED:",
+            mappedMessage.id
+          );
+          return previous;
+        }
+
+        // Step 1: Log state insertion
+        console.log(
+          "[ChatWidget] STATE INSERTION:",
+          mappedMessage
+        );
+
+        return [...previous, mappedMessage];
+      });
+
+      if (mappedMessage.sender === "human" || mappedMessage.sender === "ai") {
+        playNotificationSound();
+      }
+    };
+
+    // Step 2 & 3: Configure channel with exact table, event, schema, and filter
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversation_messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          console.log(
+            "[ChatWidget] Received message:",
+            payload.new
+          );
+          handleIncomingRealtimeMessage(payload.new);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+          filter: `id=eq.${conversationId}`,
+        },
+        (payload) => {
+          console.log(
+            "[ChatWidget] Conversation status update:",
+            payload.new
+          );
+          const updatedConv = payload.new as any;
+          if (!updatedConv) return;
+          const s = String(updatedConv.status || "").toLowerCase();
+          if (s === "waiting_for_human") {
+            setConversationMode("waiting_for_human");
+          } else if (
+            s === "human_active" ||
+            (updatedConv.assigned_to && updatedConv.assigned_to !== "ai" && s !== "resolved")
+          ) {
+            setConversationMode("human");
+          } else if (s === "resolved") {
+            setConversationMode("resolved");
+          } else if (s === "ai_active") {
+            setConversationMode("ai");
+          }
+        }
+      )
+      .on("broadcast", { event: "new_message" }, (payload) => {
+        console.log(
+          "[ChatWidget] Broadcast message:",
+          payload.payload
+        );
+        if (payload.payload) {
+          handleIncomingRealtimeMessage(payload.payload);
+        }
+      })
+      .on("broadcast", { event: "status_change" }, (payload) => {
+        console.log(
+          "[ChatWidget] Broadcast status change:",
+          payload.payload
+        );
+        const { status, assignedTo } = payload.payload || {};
+        if (status === "waiting_for_human") {
+          setConversationMode("waiting_for_human");
+        } else if (
+          status === "human_active" ||
+          (assignedTo && assignedTo !== "ai" && status !== "resolved")
+        ) {
+          setConversationMode("human");
+        } else if (status === "resolved") {
+          setConversationMode("resolved");
+        } else if (status === "ai_active") {
+          setConversationMode("ai");
+        }
+      })
+      .subscribe((status) => {
+        // Step 1: Log subscription status
+        console.log(
+          "[ChatWidget] REALTIME STATUS:",
+          status
+        );
+        console.log(
+          "[ChatWidget] Subscription:",
+          status
+        );
+        if (status === "SUBSCRIBED") {
+          syncMessages();
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, mounted, syncMessages]);
+
+  // ===================================================
+  // POSTMESSAGE SYNCHRONIZATION WITH HOST IFRAME
+  // ===================================================
+
+  useEffect(() => {
+    if (onOpenChange) {
+      onOpenChange(open);
+    }
+
+    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage(
+          {
+            type: "salespilot:state",
+            open,
+            position,
+            theme,
+            size,
+          },
+          "*"
+        );
+      } catch {}
+    }
+  }, [open, position, theme, size, onOpenChange]);
+
+  useEffect(() => {
+    if (visitorSessionId && typeof window !== "undefined" && window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage(
+          {
+            type: "salespilot:session",
+            visitorSessionId,
+          },
+          "*"
+        );
+      } catch {}
+    }
+  }, [visitorSessionId]);
 
   // ===================================================
   // AUTO SCROLL
@@ -832,7 +1208,30 @@ const [zoomImage, setZoomImage] =
       }
 
       // =================================================
-      // AI RESPONSE
+      // SYNC CONVERSATION MODE
+      // =================================================
+
+      if (data?.conversationId) {
+        setConversationId(String(data.conversationId));
+      }
+      if (data?.status === "waiting_for_human") {
+        setConversationMode("waiting_for_human");
+      } else if (
+        data?.status === "human_active" ||
+        (data?.assignedTo && data.assignedTo !== "ai" && data?.status !== "resolved")
+      ) {
+        setConversationMode("human");
+      } else if (data?.status === "resolved") {
+        setConversationMode("resolved");
+      }
+
+      // If in human mode and no text response returned, message was forwarded to human agent
+      if (data?.status === "human_active" && !data?.response) {
+        return;
+      }
+
+      // =================================================
+      // AI / HANDOVER RESPONSE
       // =================================================
 
       const aiResponse =
@@ -1017,6 +1416,16 @@ const [zoomImage, setZoomImage] =
   function startNewConversation() {
     if (loading) {
       return;
+    }
+
+    if (typeof window !== "undefined" && profileId) {
+      const storageKey = `sales-pilot-session-${profileId}`;
+      const newSession =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `sess-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem(storageKey, newSession);
+      setVisitorSessionId(newSession);
     }
 
     setMessages([
@@ -1448,7 +1857,7 @@ const [zoomImage, setZoomImage] =
                 </div>
 
                 <span
-                  className="
+                  className={`
                     absolute
                     bottom-0
                     right-0
@@ -1457,8 +1866,16 @@ const [zoomImage, setZoomImage] =
                     rounded-full
                     border-2
                     border-white
-                    bg-emerald-400
-                  "
+                    ${
+                      conversationMode === "waiting_for_human"
+                        ? "bg-amber-400 animate-pulse"
+                        : conversationMode === "human"
+                        ? "bg-emerald-400"
+                        : conversationMode === "resolved"
+                        ? "bg-slate-300"
+                        : "bg-emerald-400"
+                    }
+                  `}
                 />
               </div>
 
@@ -1466,21 +1883,33 @@ const [zoomImage, setZoomImage] =
 
               <div className="min-w-0">
                 <h3 className="truncate text-[15px] font-bold">
-                  {aiName}
+                  {conversationMode === "human" ? "Support Agent" : aiName}
                 </h3>
 
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/80">
-                  <span>
-                    Online
-                  </span>
-
-                  <span className="opacity-50">
-                    ·
-                  </span>
-
-                  <span>
-                    Support
-                  </span>
+                  {conversationMode === "waiting_for_human" ? (
+                    <>
+                      <span className="font-medium text-amber-200">Connecting</span>
+                      <span className="opacity-50">·</span>
+                      <span>Support team notified</span>
+                    </>
+                  ) : conversationMode === "human" ? (
+                    <>
+                      <span className="font-medium text-emerald-200">Live Support</span>
+                      <span className="opacity-50">·</span>
+                      <span>Agent connected</span>
+                    </>
+                  ) : conversationMode === "resolved" ? (
+                    <>
+                      <span>Resolved</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Online</span>
+                      <span className="opacity-50">·</span>
+                      <span>AI Support</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1743,6 +2172,22 @@ const [zoomImage, setZoomImage] =
                 `}
               >
                 <div className="space-y-4">
+                  {/* HANDOVER STATUS BANNER */}
+                  {conversationMode === "waiting_for_human" && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-center text-xs text-amber-800 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+                      <span className="font-semibold">Connecting you with our support team...</span>
+                      <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                        A team member has been notified and will join this conversation shortly.
+                      </p>
+                    </div>
+                  )}
+
+                  {conversationMode === "resolved" && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-100 p-2.5 text-center text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                      ✓ This conversation has been marked as resolved.
+                    </div>
+                  )}
+
                   {/* =================================================
                       SUGGESTIONS
                       ================================================= */}
@@ -1820,9 +2265,27 @@ const [zoomImage, setZoomImage] =
 
                   {messages.map(
                     (msg) => {
-                      const isAI =
-                        msg.sender ===
-                        "ai";
+                      // System message: render as centered notification pill
+                      if (msg.sender === "system" || msg.role === "system") {
+                        return (
+                          <div key={msg.id} className="my-2 flex justify-center">
+                            <div
+                              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium shadow-xs ${
+                                isDark
+                                  ? "border-slate-700 bg-slate-800 text-slate-300"
+                                  : "border-slate-200 bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              <Headphones size={12} className="shrink-0 text-indigo-500" />
+                              <span>{msg.content}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isCustomer = msg.sender === "customer" || msg.role === "user";
+                      const isHuman = msg.sender === "human";
+                      const isAI = !isCustomer && !isHuman;
 
                       return (
                         <div
@@ -1832,9 +2295,9 @@ const [zoomImage, setZoomImage] =
                           className={`
                             flex
                             ${
-                              isAI
-                                ? "justify-start"
-                                : "justify-end"
+                              isCustomer
+                                ? "justify-end"
+                                : "justify-start"
                             }
                           `}
                         >
@@ -1844,45 +2307,52 @@ const [zoomImage, setZoomImage] =
                               max-w-[90%]
                               gap-2
                               ${
-                                isAI
-                                  ? "items-start"
-                                  : "items-end"
+                                isCustomer
+                                  ? "items-end"
+                                  : "items-start"
                               }
                             `}
                           >
-                            {/* AI AVATAR */}
+                            {/* AI OR HUMAN AGENT AVATAR */}
+                            {!isCustomer && (
+                              <div
+                                style={{
+                                  backgroundColor: isHuman
+                                    ? "#10B98118"
+                                    : `${brandColor}18`,
+                                  color: isHuman ? "#10B981" : brandColor,
+                                }}
+                                className="
+                                  mt-0.5
+                                  flex
+                                  h-8
+                                  w-8
+                                  shrink-0
+                                  items-center
+                                  justify-center
+                                  rounded-full
+                                "
+                              >
+                                {isHuman ? (
+                                  <Headphones size={16} />
+                                ) : showAiAvatar ? (
+                                  <Bot size={16} />
+                                ) : (
+                                  <Sparkles size={16} />
+                                )}
+                              </div>
+                            )}
 
-                            {isAI &&
-                              showAiAvatar && (
-                                <div
-                                  style={{
-                                    backgroundColor:
-                                      `${brandColor}18`,
-                                    color:
-                                      brandColor,
-                                  }}
-                                  className="
-                                    mt-0.5
-                                    flex
-                                    h-8
-                                    w-8
-                                    shrink-0
-                                    items-center
-                                    justify-center
-                                    rounded-full
-                                  "
-                                >
-                                  <Bot
-                                    size={
-                                      16
-                                    }
-                                  />
+                            <div className="min-w-0">
+                              {/* AGENT BADGE */}
+                              {isHuman && (
+                                <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <span>{msg.agentName || "Support Agent"}</span>
+                                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                 </div>
                               )}
 
-                            <div className="min-w-0">
                               {/* MESSAGE BUBBLE */}
-
                               <div
                                 className={`
                                   rounded-2xl
@@ -1892,7 +2362,7 @@ const [zoomImage, setZoomImage] =
                                   leading-6
                                   shadow-sm
                                   ${
-                                    isAI
+                                    !isCustomer
                                       ? isDark
                                         ? "rounded-tl-md bg-slate-800 text-slate-100"
                                         : "rounded-tl-md border border-slate-100 bg-white text-slate-800"
@@ -1900,7 +2370,7 @@ const [zoomImage, setZoomImage] =
                                   }
                                 `}
                                 style={
-                                  !isAI
+                                  isCustomer
                                     ? {
                                         backgroundColor:
                                           brandColor,
@@ -1914,14 +2384,13 @@ const [zoomImage, setZoomImage] =
                               </div>
 
                               {/* TIME */}
-
                               <div
                                 className={`
                                   mt-1.5
                                   px-1
                                   text-[10px]
                                   ${
-                                    isAI
+                                    !isCustomer
                                       ? "text-left"
                                       : "text-right"
                                   }
@@ -1936,7 +2405,7 @@ const [zoomImage, setZoomImage] =
                                   msg.timestamp
                                 )}
 
-                                {!isAI && (
+                                {isCustomer && (
                                   <span className="ml-1">
                                     <Check
                                       size={
@@ -1950,8 +2419,7 @@ const [zoomImage, setZoomImage] =
                             </div>
 
                             {/* CUSTOMER AVATAR */}
-
-                            {!isAI && (
+                            {isCustomer && (
                               <div
                                 style={{
                                   backgroundColor:

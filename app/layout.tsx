@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import Script from "next/script";
 import ThemeProvider from "@/components/theme/ThemeProvider";
 
 export const metadata: Metadata = {
@@ -13,25 +12,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const shopifyApiKey =
-    process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || "";
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* =====================================================
-            SHOPIFY APP BRIDGE
-            ===================================================== */}
-
-        <meta
-          name="shopify-api-key"
-          content={shopifyApiKey}
-        />
-
-        <Script
-          src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
-          strategy="beforeInteractive"
-        />
 
         {/* =====================================================
             FONTS

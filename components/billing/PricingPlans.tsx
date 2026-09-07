@@ -215,11 +215,6 @@ export default function PricingPlans({
                 </span>
 
                 <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
-                  {plan.limits.conversations.toLocaleString()}{" "}
-                  AI conversations/month
-                </span>
-
-                <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
                   {plan.limits.knowledgePages.toLocaleString()}{" "}
                   knowledge pages
                 </span>
@@ -259,11 +254,11 @@ export default function PricingPlans({
                     plan.id
                   )
                 }
-                className={`mt-7 flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${
+                className={`mt-7 flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all ${
                   isCurrent
                     ? "cursor-default border border-border bg-muted text-muted-foreground"
                     : isPopular
-                      ? "bg-foreground text-background hover:opacity-90"
+                      ? "bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 text-white shadow-sm hover:from-indigo-500 hover:to-violet-500 shadow-indigo-500/20"
                       : "border border-border bg-background text-foreground hover:bg-muted"
                 }`}
               >

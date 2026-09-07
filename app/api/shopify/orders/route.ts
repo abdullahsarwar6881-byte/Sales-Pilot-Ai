@@ -25,7 +25,6 @@ const ORDERS_QUERY = `
           id
           firstName
           lastName
-          email
         }
 
         lineItems(first: 20) {
@@ -45,6 +44,18 @@ const ORDERS_QUERY = `
               id
               title
             }
+          }
+        }
+
+        fulfillments {
+          id
+          status
+          createdAt
+          updatedAt
+          trackingInfo {
+            number
+            url
+            company
           }
         }
       }

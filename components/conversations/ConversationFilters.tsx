@@ -7,10 +7,10 @@ interface Props {
 
 const filters = [
   "All",
-  "Unread",
+  "Open",
+  "Resolved",
   "AI",
   "Human",
-  "Resolved",
 ];
 
 export default function ConversationFilters({

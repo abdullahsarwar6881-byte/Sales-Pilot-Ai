@@ -83,7 +83,7 @@ export async function resolveMerchantFromWidget(
 
   const supabase = getAdminClient();
 
-  // 1. Try finding widget in widget_settings by id (UUID) or user_id
+  // 1. Try finding widget in widget_settings by id (UUID), user_id, or public_id
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
 
   let widgetRow: Record<string, any> | null = null;
@@ -96,13 +96,20 @@ export async function resolveMerchantFromWidget(
       .maybeSingle();
     widgetRow = data;
   } else {
-    // If a custom string public_id is used
-    const { data } = await supabase
-      .from("widget_settings")
-      .select("*")
-      .eq("id", cleanId)
-      .maybeSingle();
-    widgetRow = data;
+    // If a custom string public_id is used (e.g. spw_...)
+    try {
+      const { data, error } = await supabase
+        .from("widget_settings")
+        .select("*")
+        .eq("public_id", cleanId)
+        .maybeSingle();
+
+      if (!error && data) {
+        widgetRow = data;
+      }
+    } catch {
+      // Column may be pending migration
+    }
   }
 
   let merchantId: string | null = null;
@@ -110,7 +117,7 @@ export async function resolveMerchantFromWidget(
 
   if (widgetRow) {
     merchantId = widgetRow.user_id;
-    widgetPublicId = widgetRow.id;
+    widgetPublicId = widgetRow.public_id || widgetRow.id;
   } else if (isUuid) {
     // Fallback check in profiles table
     const { data: profile } = await supabase
@@ -164,6 +171,22 @@ export async function resolveMerchantFromWidget(
     for (const store of shopifyStores) {
       if (store.shop_domain) allowedDomains.push(store.shop_domain);
     }
+  }
+
+  // 2d. Explicit custom domains from widget_domains table
+  try {
+    const { data: customDomains, error: cdErr } = await supabase
+      .from("widget_domains")
+      .select("domain")
+      .eq("user_id", merchantId);
+
+    if (!cdErr && customDomains && customDomains.length > 0) {
+      for (const item of customDomains) {
+        if (item.domain) allowedDomains.push(item.domain);
+      }
+    }
+  } catch {
+    // Table may be pending migration
   }
 
   return {

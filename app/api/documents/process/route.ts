@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authenticateUser, createUserClient, getAdminClient } from "@/lib/supabase/serverAuth";
 
 import { extractDocument } from "@/lib/documents/extractDocument";
 import { classifyContent } from "@/lib/ai/classifyContent";
@@ -43,17 +43,8 @@ export async function POST(
       );
     }
 
-    const supabase =
-      await createClient();
-
-
-    const {
-      data: {
-        user
-      }
-    } =
-      await supabase.auth.getUser();
-
+    const auth = await authenticateUser(req);
+    const user = auth?.user;
 
     if (!user) {
       return NextResponse.json(
@@ -65,6 +56,10 @@ export async function POST(
         }
       );
     }
+
+    const supabase = auth.token
+      ? createUserClient(auth.token)
+      : getAdminClient();
 
 
     const {

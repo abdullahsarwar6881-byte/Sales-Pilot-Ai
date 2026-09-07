@@ -192,8 +192,6 @@ export default function SettingsPage() {
 
       <AISettings />
 
-
-
       <NotificationSettings />
 
 

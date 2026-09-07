@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface LogoProps {
   collapsed?: boolean;
@@ -9,24 +10,26 @@ interface LogoProps {
 export default function Logo({
   collapsed = false,
 }: LogoProps) {
+  const searchParams = useSearchParams();
+  const search = searchParams?.toString();
+  const targetHref = search ? `/dashboard?${search}` : "/dashboard";
+
   return (
     <Link
-      href="/dashboard"
-      className="flex items-center gap-3"
+      href={targetHref}
+      className="flex items-center gap-3 group"
     >
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-500 to-blue-500 shadow-lg shadow-indigo-200 transition-transform duration-300 hover:scale-105">
-        <span className="bg-gradient-to-br from-white to-slate-100 bg-clip-text text-2xl font-black tracking-tight text-transparent">
-          S
-        </span>
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#5B3DF5] text-white font-black text-xl shadow-md shadow-[#5B3DF5]/20 transition-transform duration-200 group-hover:scale-105 shrink-0">
+        S
       </div>
 
       {!collapsed && (
-        <div className="flex flex-col">
-          <span className="text-lg font-bold tracking-tight text-slate-900">
+        <div className="flex flex-col min-w-0">
+          <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
             Sales Pilot
           </span>
 
-          <span className="-mt-1 text-xs text-slate-500">
+          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 leading-tight">
             AI Customer Support
           </span>
         </div>

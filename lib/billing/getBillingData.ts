@@ -4,6 +4,10 @@ import {
   BILLING_PLANS,
   type BillingPlanId,
 } from "@/lib/billing/plans";
+import {
+  getMerchantMonthlyUsage,
+  getCurrentBillingPeriod,
+} from "@/lib/usage/usageEngine";
 
 export async function getBillingData() {
   const supabase = await createClient();
@@ -13,16 +17,43 @@ export async function getBillingData() {
   // =========================================================
 
   const {
-    data: { user },
+    data: authData,
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError) {
-    throw userError;
-  }
+  const user = authData?.user;
 
-  if (!user) {
-    throw new Error("User is not authenticated.");
+  if (userError || !user) {
+    const defaultPlan = BILLING_PLANS.starter;
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return {
+      user: null,
+      subscription: null,
+      plan: defaultPlan,
+      usage: {
+        conversations: 0,
+        conversationLimit: defaultPlan.limits.conversations,
+        websites: 0,
+        websiteLimit: defaultPlan.limits.websites,
+        knowledgePages: 0,
+        knowledgePageLimit: defaultPlan.limits.knowledgePages,
+      },
+      aiUsage: {
+        messagesUsed: 0,
+        messageLimit: defaultPlan.limits.conversations,
+        responses: 0,
+        embeddings: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCost: 0,
+        periodStart: now,
+        periodEnd,
+        billingPeriod: getCurrentBillingPeriod(now),
+      },
+      transactions: [],
+    };
   }
 
   // =========================================================
@@ -148,6 +179,17 @@ export async function getBillingData() {
   }
 
   // =========================================================
+  // REAL MONTHLY AI USAGE
+  // =========================================================
+
+  const currentPeriodKey = getCurrentBillingPeriod(periodStart);
+  const monthlyAiUsage = await getMerchantMonthlyUsage(
+    supabase,
+    user.id,
+    currentPeriodKey
+  );
+
+  // =========================================================
   // RETURN BILLING DATA
   // =========================================================
 
@@ -200,6 +242,24 @@ export async function getBillingData() {
 
       knowledgePageLimit:
         plan.limits.knowledgePages,
+    },
+
+    // =======================================================
+    // AI USAGE & COST PROTECTION
+    // =======================================================
+
+    aiUsage: {
+      messagesUsed: monthlyAiUsage.aiMessages,
+      messageLimit: plan.limits.conversations,
+      responses: monthlyAiUsage.aiResponses,
+      embeddings: monthlyAiUsage.embeddingRequests,
+      inputTokens: monthlyAiUsage.inputTokens,
+      outputTokens: monthlyAiUsage.outputTokens,
+      totalTokens: monthlyAiUsage.totalTokens,
+      estimatedCost: monthlyAiUsage.estimatedCost,
+      periodStart,
+      periodEnd,
+      billingPeriod: currentPeriodKey,
     },
 
     // =======================================================

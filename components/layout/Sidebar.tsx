@@ -4,8 +4,14 @@ import Link from "next/link";
 import Logo from "./Logo";
 import SidebarItem from "./SidebarItem";
 import { navigation } from "@/lib/navigation";
+import { useSearchParams } from "next/navigation";
+import { Crown, ArrowRight } from "lucide-react";
 
 export default function Sidebar() {
+  const searchParams = useSearchParams();
+  const search = searchParams?.toString();
+  const billingHref = search ? `/dashboard/billing?${search}` : "/dashboard/billing";
+
   return (
     <aside
       className="
@@ -15,43 +21,31 @@ export default function Sidebar() {
         z-40
         flex
         h-screen
-        w-72
+        w-60
+        lg:w-64
         flex-col
         border-r
-        border-theme
-        bg-sidebar
-        text-sidebar-foreground
+        border-slate-200/80
+        dark:border-white/10
+        bg-white
+        dark:bg-[#090b10]
+        text-slate-900
+        dark:text-slate-100
         transition-colors
+        duration-200
       "
     >
       {/* -------------------------------- */}
       {/* LOGO */}
       {/* -------------------------------- */}
-
-      <div
-        className="
-          border-b
-          border-theme
-          px-6
-          py-6
-        "
-      >
+      <div className="px-6 py-6 border-b border-slate-100 dark:border-white/5">
         <Logo />
       </div>
 
       {/* -------------------------------- */}
       {/* NAVIGATION */}
       {/* -------------------------------- */}
-
-      <nav
-        className="
-          flex-1
-          space-y-2
-          overflow-y-auto
-          px-4
-          py-6
-        "
-      >
+      <nav className="flex-1 space-y-1.5 overflow-y-auto px-4 py-6">
         {navigation.map((item) => (
           <SidebarItem
             key={item.href}
@@ -65,72 +59,46 @@ export default function Sidebar() {
       {/* -------------------------------- */}
       {/* UPGRADE CARD */}
       {/* -------------------------------- */}
+      <div className="p-4 border-t border-slate-100 dark:border-white/5">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-[#12151d] p-4 relative overflow-hidden group">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+            <Crown className="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" />
+            <span>Upgrade to Pro</span>
+          </div>
 
-      <div
-        className="
-          border-t
-          border-theme
-          p-4
-        "
-      >
-        <div
-          className="
-            rounded-2xl
-            bg-gradient-to-r
-            from-indigo-600
-            to-violet-600
-            p-4
-            text-white
-          "
-        >
-          <p
-            className="
-              text-sm
-              font-semibold
-            "
-          >
-            Upgrade to Pro
-          </p>
-
-          <p
-            className="
-              mt-1.5
-              text-xs
-              text-indigo-100
-              leading-relaxed
-            "
-          >
-            Unlock AI automation,
-            analytics and unlimited
-            conversations.
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-normal">
+            Unlock AI automation, analytics and unlimited conversations.
           </p>
 
           <Link
-            href="/dashboard/billing"
+            href={billingHref}
             className="
               mt-3.5
               flex
               w-full
               items-center
               justify-center
+              gap-1.5
               rounded-xl
-              bg-white
-              py-2
+              bg-gradient-to-r
+              from-[#5B3DF5]
+              to-[#7C5CFC]
+              hover:from-[#4E2DE8]
+              hover:to-[#6B4BE8]
+              py-2.5
               text-xs
-              font-semibold
-              text-indigo-700
+              font-bold
+              text-white
               shadow-sm
+              shadow-[#5B3DF5]/20
               transition-all
               duration-150
-              hover:bg-slate-50
+              hover:scale-[1.01]
               active:scale-[0.98]
-              active:bg-slate-100
-              focus-visible:outline-none
-              focus-visible:ring-2
-              focus-visible:ring-white
             "
           >
-            Upgrade
+            <span>Upgrade</span>
+            <ArrowRight size={13} />
           </Link>
         </div>
       </div>

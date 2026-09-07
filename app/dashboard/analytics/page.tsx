@@ -40,189 +40,68 @@ Loading analytics...
 
 
 return (
+  <div className="min-h-screen bg-background text-foreground p-8">
+    <h1 className="text-3xl font-bold text-foreground">
+      Analytics Dashboard
+    </h1>
 
-<div className="
-min-h-screen
-bg-[#0F172A]
-text-white
-p-8
-">
+    <div className="grid grid-cols-4 gap-6 mt-8">
+      <Card
+        title="Total Chats"
+        value={data.totalChats}
+      />
 
+      <Card
+        title="AI Solved %"
+        value={`${data.aiSolvedPercentage}%`}
+      />
 
-<h1 className="
-text-3xl
-font-bold
-">
+      <Card
+        title="Human Takeovers"
+        value={data.humanTakeovers}
+      />
 
-Analytics Dashboard
+      <Card
+        title="Active AI Agents"
+        value="Online"
+      />
+    </div>
 
-</h1>
+    <div className="mt-10 bg-card border border-theme rounded-2xl p-6">
+      <h2 className="text-xl font-bold text-foreground mb-5">
+        Popular Questions
+      </h2>
 
-
-
-<div className="
-grid
-grid-cols-4
-gap-6
-mt-8
-">
-
-
-
-<Card
-title="Total Chats"
-value={data.totalChats}
-/>
-
-
-
-<Card
-title="AI Solved %"
-value={`${data.aiSolvedPercentage}%`}
-/>
-
-
-
-<Card
-title="Human Takeovers"
-value={data.humanTakeovers}
-/>
-
-
-
-<Card
-title="Active AI Agents"
-value="Online"
-/>
-
-
-
-</div>
-
-
-
-
-
-<div className="
-mt-10
-bg-slate-900
-rounded-2xl
-p-6
-">
-
-
-<h2 className="
-text-xl
-font-bold
-mb-5
-">
-
-Popular Questions
-
-</h2>
-
-
-
-{
-data.popularQuestions.map(
-(q:any,index:number)=>(
-
-
-<div
-key={index}
-className="
-border-b
-border-slate-800
-py-3
-flex
-justify-between
-"
->
-
-
-<span>
-{q.question}
-</span>
-
-
-<span className="
-text-indigo-400
-">
-
-{q.count}
-
-</span>
-
-
-</div>
-
-
-)
-
-)
-
+      {data.popularQuestions.map((q: any, index: number) => (
+        <div
+          key={index}
+          className="border-b border-theme py-3 flex justify-between text-muted-foreground"
+        >
+          <span className="text-foreground">{q.question}</span>
+          <span className="text-indigo-400 font-semibold">{q.count}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 }
 
+function Card({
+  title,
+  value,
+}: {
+  title: string;
+  value: any;
+}) {
+  return (
+    <div className="bg-card border border-theme rounded-2xl p-6 shadow-xs">
+      <p className="text-muted-foreground text-sm">
+        {title}
+      </p>
 
-
-</div>
-
-
-
-
-</div>
-
-)
-
-}
-
-
-
-
-function Card(
-{
-title,
-value
-}:{
-title:string,
-value:any
-}
-){
-
-return (
-
-<div className="
-bg-slate-900
-border
-border-slate-800
-rounded-2xl
-p-6
-">
-
-
-<p className="
-text-slate-400
-text-sm
-">
-
-{title}
-
-</p>
-
-
-<h2 className="
-text-3xl
-font-bold
-mt-3
-">
-
-{value}
-
-</h2>
-
-
-</div>
-
-)
-
+      <h2 className="text-3xl font-bold text-foreground mt-3">
+        {value}
+      </h2>
+    </div>
+  );
 }

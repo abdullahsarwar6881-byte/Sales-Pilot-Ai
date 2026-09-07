@@ -1,6 +1,7 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Navbar from "@/components/layout/Navbar";
 import PageContainer from "@/components/layout/PageContainer";
+import AuthGuard from "@/components/auth/AuthGuard";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -10,34 +11,36 @@ export default function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* =========================================
-          SIDEBAR
-          ========================================= */}
+    <AuthGuard>
+      <div className="min-h-screen bg-background text-foreground">
+        {/* =========================================
+            SIDEBAR
+            ========================================= */}
 
-      <Sidebar />
+        <Sidebar />
 
-      {/* =========================================
-          MAIN APPLICATION AREA
-          ========================================= */}
+        {/* =========================================
+            MAIN APPLICATION AREA
+            ========================================= */}
 
-      <div className="ml-72 flex min-h-screen min-w-0 flex-1 flex-col bg-background">
-        {/* =======================================
-            TOP NAVBAR
-            ======================================= */}
+        <div className="ml-60 lg:ml-64 flex min-h-screen min-w-0 flex-1 flex-col bg-background">
+          {/* =======================================
+              TOP NAVBAR
+              ======================================= */}
 
-        <Navbar />
+          <Navbar />
 
-        {/* =======================================
-            PAGE CONTENT
-            ======================================= */}
+          {/* =======================================
+              PAGE CONTENT
+              ======================================= */}
 
-        <main className="min-w-0 flex-1">
-          <PageContainer>
-            {children}
-          </PageContainer>
-        </main>
+          <main className="min-w-0 flex-1">
+            <PageContainer>
+              {children}
+            </PageContainer>
+          </main>
+        </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }

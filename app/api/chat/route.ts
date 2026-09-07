@@ -12,19 +12,63 @@ import {
 import {
   createEmptyConversationContext,
 } from "@/lib/ai/conversationContext";
-import { createEmbedding } from "@/lib/ai/embeddings";
-import { chatWithAI } from "@/lib/ai/chat";
+import { createEmbedding, createEmbeddingWithUsage } from "@/lib/ai/embeddings";
+import { chatWithAI, chatWithAIWithUsage } from "@/lib/ai/chat";
+import { resolveMerchantFromWidget } from "@/lib/security/widgetAuth";
+import {
+  checkVisitorRateLimit,
+  acquireRequestLock,
+  releaseRequestLock,
+  extractClientIp,
+} from "@/lib/security/rateLimiter";
+import {
+  getMerchantPlanAndLimit,
+  reserveMerchantQuota,
+  reconcileMerchantQuota,
+  recordAiUsage,
+} from "@/lib/usage/usageEngine";
 import { loadWebsiteContext, buildWebsiteContextForAI } from "@/lib/site/capabilities";
 
-import { detectAction } from "@/lib/actions/detectAction";
+import { createClient as createServerSupabase } from "@/lib/supabase/server";
+import {
+  VerifiedStoreContext,
+  LookupOrderResponse,
+  GENERIC_VERIFICATION_FAILURE_MESSAGE,
+  SHOPIFY_UNAVAILABLE_MESSAGE,
+  formatFriendlyFulfillmentStatus,
+} from "@/lib/shopify/orders";
+import {
+  getConversationOrderContext,
+  setConversationPendingOrder,
+  setConversationVerifiedOrder,
+  clearConversationOrderContext,
+  type ConversationOrderContext,
+} from "@/lib/shopify/orderContext";
+import {
+  detectAction,
+  extractEmail,
+  looksLikeOrderStatus,
+  looksLikeOrderDetails,
+} from "@/lib/actions/detectAction";
 import { executeAction } from "@/lib/actions/actionRouter";
+import {
+  isAIAllowedForConversation,
+  requestHumanHandover,
+  detectHandoverIntent,
+} from "@/lib/handover/handoverManager";
 
 import type { ActionRequest } from "@/lib/actions/types";
 
 import {
   searchAndRankProducts,
   findExactProduct,
+  parsePriceConstraint,
+  matchesPriceConstraint,
+  getProductNumericPrice,
+  findSimilarProducts,
+  type PriceConstraint,
 } from "@/lib/products/searchProducts";
+import { isSimilarProductRequest } from "@/lib/products/resolveProductContext";
 import { retrieveVisualCandidates } from "@/lib/products/visualCandidateRetrieval";
 import { isVisualEmbeddingAvailable } from "@/lib/products/visualEmbedding";
 import { extractVisionFeatures } from "@/lib/products/multimodalMatch";
@@ -32,12 +76,6 @@ import {
   PLANS,
   type PlanId,
 } from "@/lib/billing/plans";
-import {
-  resolveMerchantFromWidget,
-  isOriginAllowed,
-  getCorsHeaders,
-} from "@/lib/security/widgetAuth";
-import { checkRateLimit, getClientIp } from "@/lib/security/rateLimit";
 
 // =====================================================
 // SUPABASE ADMIN CLIENT
@@ -89,22 +127,11 @@ const productContextMemory =
 // follow-up turn ("is this available?", "its link") stays honest about whether
 // the image was an EXACT verified match or only similar/no-match.
 const imageMatchMemory =
-  new Map<
-    string,
-    {
-      matchType: "exact" | "high_confidence" | "similar" | "no_match";
-      exactProductId?: string | null;
-      exactProduct?: any | null;
-    }
-  >();
+  new Map<string, { matchType: "exact" | "high_confidence" | "similar" | "no_match"; exactProductId?: string | null }>();
 
 function rememberImageMatch(
   key: string,
-  imageMatch: {
-    matchType: "exact" | "high_confidence" | "similar" | "no_match";
-    exactProductId?: string | null;
-    exactProduct?: any | null;
-  } | null
+  imageMatch: { matchType: "exact" | "high_confidence" | "similar" | "no_match"; exactProductId?: string | null } | null
 ) {
   if (imageMatch && imageMatch.matchType) {
     imageMatchMemory.set(key, imageMatch);
@@ -1225,50 +1252,134 @@ function aiRequestedOrderNumber(
 
 function detectContextualOrderAction(
   message: string,
-  history: any[]
+  history: any[],
+  orderContext?: ConversationOrderContext | null
 ): ActionRequest | null {
   const orderNumber =
     extractOrderNumber(
       message
     );
 
-  if (!orderNumber) {
-    return null;
-  }
-
-  const directAction =
-    detectAction(
+  const email =
+    extractEmail(
       message
     );
 
-  if (
-    directAction &&
-    (
-      directAction.action ===
-        "get_order_status" ||
-      directAction.action ===
-        "get_order_details"
-    )
-  ) {
-    return directAction;
+  // 1. Direct order number provided in message
+  if (orderNumber) {
+    const directAction =
+      detectAction(
+        message
+      );
+
+    const actionName =
+      directAction && directAction.action === "get_order_details"
+        ? "get_order_details"
+        : "get_order_status";
+
+    return {
+      action: actionName,
+      parameters: {
+        orderNumber,
+        email,
+      },
+    };
   }
 
+  // 2. User replied with email and there is a pending order in context
+  if (email && orderContext?.pendingOrderNumber) {
+    return {
+      action: "get_order_status",
+      parameters: {
+        orderNumber: orderContext.pendingOrderNumber,
+        email,
+      },
+    };
+  }
+
+  // 3. User asks an order follow-up and has an active verified order in context
+  if (orderContext?.verifiedOrderNumber) {
+    const directAction = detectAction(message);
+
+    // If user message is an explicit product search or human handoff, do not hijack it
+    if (directAction && directAction.action === "search_products") {
+      return null;
+    }
+    if (directAction && directAction.action === "handoff_to_human") {
+      return directAction;
+    }
+
+    // If detectAction identified an order action (e.g. "what items did I buy?", "has it shipped yet?")
+    if (directAction && directAction.action === "get_order_details") {
+      return {
+        action: "get_order_details",
+        parameters: {
+          orderNumber: orderContext.verifiedOrderNumber,
+          email: orderContext.verifiedEmail || undefined,
+          isVerifiedFollowUp: true,
+        },
+      };
+    }
+
+    if (directAction && directAction.action === "get_order_status") {
+      return {
+        action: "get_order_status",
+        parameters: {
+          orderNumber: orderContext.verifiedOrderNumber,
+          email: orderContext.verifiedEmail || undefined,
+          isVerifiedFollowUp: true,
+        },
+      };
+    }
+
+    const normalized = message.toLowerCase().trim();
+    const isDetailFollowUp =
+      looksLikeOrderDetails(normalized) ||
+      /\b(what('s| is| was) in it|what did i (get|buy|order|purchase)|show (the )?items|list (the )?items|what items did i (get|buy|order)|which items did i (get|buy|order))\b/i.test(normalized);
+
+    const isStatusFollowUp =
+      looksLikeOrderStatus(normalized) ||
+      /\b(has it shipped|did it ship|is it shipped|when will it arrive|when is it arriving|tracking link|tracking number|where is (it|my package)|what('s| is) the status|is it on the way)\b/i.test(normalized);
+
+    if (isDetailFollowUp) {
+      return {
+        action: "get_order_details",
+        parameters: {
+          orderNumber: orderContext.verifiedOrderNumber,
+          email: orderContext.verifiedEmail || undefined,
+          isVerifiedFollowUp: true,
+        },
+      };
+    }
+
+    if (isStatusFollowUp) {
+      return {
+        action: "get_order_status",
+        parameters: {
+          orderNumber: orderContext.verifiedOrderNumber,
+          email: orderContext.verifiedEmail || undefined,
+          isVerifiedFollowUp: true,
+        },
+      };
+    }
+  }
+
+  // 4. AI previously asked for an order number
   if (
     aiRequestedOrderNumber(
       history
     )
   ) {
-    const actionRequest:
-      ActionRequest = {
-      action:
-        "get_order_status",
-
-      parameters: {
-        orderNumber,
-      },
-    };
-
-    return actionRequest;
+    const extractedNum = extractOrderNumber(message);
+    if (extractedNum) {
+      return {
+        action: "get_order_status",
+        parameters: {
+          orderNumber: extractedNum,
+          email,
+        },
+      };
+    }
   }
 
   return null;
@@ -1723,11 +1834,6 @@ function detectImageIntent(
     "is this available", "in stock", "find it",
     "what is this", "identify", "product", "item",
     "show me", "recommend", "match", "similar",
-    "do you have", "do you sell", "have this", "sell this",
-    "looking for", "want this", "need this",
-    "available", "dress", "shirt", "shoes", "shoe",
-    "outfit", "suit", "pants", "bag", "jacket",
-    "fabric", "lawn", "chiffon", "silk", "cotton",
   ];
 
   if (
@@ -1773,18 +1879,16 @@ function detectImageIntent(
     return "problem";
   }
 
-  // A detailed visual description with product characteristics
+  // A detailed visual description with no explicit ask
+  // is a product-identification/price candidate.
   if (
-    description.includes("product type:") ||
-    description.includes("distinctive design features") ||
-    description.includes("search keywords to use") ||
-    /\b(?:dress|shirt|suit|outfit|lawn|shoes?|bag|handbag|jacket|kurta|maxi|hoodie|apparel)\b/i.test(description) ||
-    description.length >= 30
+    description.length >= 30 &&
+    !message
   ) {
     return "product";
   }
 
-  return "product";
+  return "information";
 }
 
 // =====================================================
@@ -1822,51 +1926,11 @@ function buildImageSearchQuery(
 //   category, color) but there is no verified unique identifier match.
 // - "no_match": nothing reasonably close exists in the catalog.
 
-// Extract the base product code from a catalog row. Some sources (raw crawled
-// pages) store the SKU only inside the scraped content (e.g. "SKU:
-// FSP1266-YELLOW-2000000221311"). We surface a normalized base SKU so the
-// exact-match fast path works against the full catalog, not just the
-// text-search subset that already carries a sku field.
-function extractSkuFromContent(product: any): string {
-  const direct = String(
-    product?.sku || product?.variant_sku || product?.product_code || ""
-  ).trim();
-  if (direct) return direct;
-
-  const raw = String(
-    product?.content || product?.description || product?.body_html || product?.html || ""
-  );
-  if (!raw) return "";
-
-  const patterns = [
-    /\bSKU\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})/i,
-    /\b(?:MODEL|STYLE|PRODUCT)\s*(?:NO|CODE|NUMBER|#)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})/i,
-    /\b([A-Z]{1,4}\d{2,}[A-Za-z0-9._-]*[A-Z0-9]?)\b/i,
-  ];
-  for (const pattern of patterns) {
-    const m = raw.match(pattern);
-    const code = m && m[1] ? String(m[1]).trim() : "";
-    if (
-      code &&
-      code.length >= 4 &&
-      /[A-Za-z]/.test(code) &&
-      /\d/.test(code)
-    ) {
-      // Strip a trailing long numeric inventory suffix (e.g.
-      // FSP1266-YELLOW-2000000221311 -> FSP1266-YELLOW).
-      const stripped = code.replace(/-\d{6,}$/, "");
-      return stripped || code;
-    }
-  }
-  return "";
-}
-
 async function determineImageMatchType(
   imageDescription: string,
   products: any[],
   options?: {
     imageDataUrl?: string;
-    imageName?: string | null;
     visualIndexRows?: any[];
   }
 ): Promise<{
@@ -1880,7 +1944,6 @@ async function determineImageMatchType(
     textMatch: number;
     visualSimilarity: number;
     metadataSimilarity: number;
-    filenameMatch?: boolean;
   };
 }> {
   const descText = normalizeContextText(imageDescription);
@@ -1897,71 +1960,6 @@ async function determineImageMatchType(
   }
 
   // =================================================
-  // 0. FILENAME / SLUG MATCH (Downloaded Store Image)
-  //    A customer who downloads an image directly from the
-  //    merchant store will upload a file named after the
-  //    product handle/slug or SKU. This is a 100% exact match.
-  // =================================================
-  const rawImageName = options?.imageName;
-  if (rawImageName && typeof rawImageName === "string") {
-    const cleanFileName = rawImageName
-      .toLowerCase()
-      .replace(/\.[a-z0-9]+$/i, "")
-      .replace(/[-_]?(?:1024x1024|large|medium|small|thumb|preview|banner|crop|square)/gi, "")
-      .replace(/[_\s]+/g, "-")
-      .trim();
-
-    if (cleanFileName.length >= 4) {
-      for (const product of list) {
-        const rawUrl = String(
-          product?.productUrl || product?.page_url || product?.url || ""
-        ).toLowerCase();
-        let slug = "";
-        try {
-          const pathname = new URL(rawUrl, "https://example.com").pathname;
-          slug = pathname.split("/").filter(Boolean).pop() || "";
-        } catch {
-          slug = rawUrl.split("/").filter(Boolean).pop() || "";
-        }
-        slug = slug.replace(/\.[a-z0-9]+$/i, "").trim();
-
-        const sku = normalizeContextText(extractSkuFromContent(product));
-
-        const isExactSlug =
-          slug.length >= 5 &&
-          (cleanFileName === slug ||
-            cleanFileName.includes(slug) ||
-            slug.includes(cleanFileName));
-
-        const isExactSku =
-          sku.length >= 4 &&
-          (cleanFileName === sku ||
-            cleanFileName.includes(sku) ||
-            cleanFileName.replace(/[^a-z0-9]/g, "") === sku.replace(/[^a-z0-9]/g, ""));
-
-        if (isExactSlug || isExactSku) {
-          console.log(
-            `EXACT IMAGE MATCH VIA FILENAME/SLUG: "${rawImageName}" matched product "${product?.displayName || product?.name || product?.title}" (slug: ${slug}, sku: ${sku})`
-          );
-          return {
-            matchType: "exact",
-            exactProduct: product,
-            product: product,
-            confidence: 1.0,
-            signals: {
-              skuMatch: Boolean(isExactSku),
-              textMatch: 1,
-              visualSimilarity: 1,
-              metadataSimilarity: 1,
-              filenameMatch: true,
-            },
-          };
-        }
-      }
-    }
-  }
-
-  // =================================================
   // 1. STRONG IDENTITY SIGNALS (SKU / model / title)
   //    This is the existing, hard-verified fast path.
   //    It is NEVER weakened by the new visual layer.
@@ -1969,7 +1967,7 @@ async function determineImageMatchType(
   const skuMatches: any[] = [];
   for (const product of list) {
     const sku = normalizeContextText(
-      extractSkuFromContent(product)
+      product?.sku || product?.variant_sku || product?.id || product?.external_id
     );
     if (sku && sku.length >= 3) {
       const descHasSku = descText.includes(sku);
@@ -2021,12 +2019,18 @@ async function determineImageMatchType(
   // =================================================
   // 2. MULTIMODAL VISUAL + TEXTUAL SCORING
   //    When no concrete identifier is readable, use layered
-  //    feature similarity to decide exact / high_confidence / similar.
+  //    feature similarity to decide high_confidence / similar.
+  //    We never claim exactness here; exactness requires an
+  //    identifier (SKU/model/title).
   // =================================================
   const { matchCustomerImageToProducts } = await import("@/lib/products/multimodalMatch");
   const features = extractVisionFeatures(imageDescription);
 
   // Multi-stage candidate retrieval + evidence-based decision.
+  // retrieveVisualCandidates ranks the catalog by feature/metadata scoring and
+  // (only when a real visual-embedding provider is live) by vector similarity.
+  // We then run the final decision over just the top candidates so expensive
+  // reasoning never scans the whole catalog.
   let scored;
   try {
     const candidates = await retrieveVisualCandidates({
@@ -2045,15 +2049,6 @@ async function determineImageMatchType(
     scored = matchCustomerImageToProducts(features, list);
   }
 
-  if (scored.matchType === "exact" && scored.product) {
-    return {
-      matchType: "exact",
-      exactProduct: scored.product,
-      product: scored.product,
-      confidence: scored.confidence,
-      signals: scored.signals,
-    };
-  }
   if (scored.matchType === "high_confidence" && scored.product) {
     return {
       matchType: "high_confidence",
@@ -2081,6 +2076,7 @@ async function determineImageMatchType(
     confidence: scored.confidence,
     signals: scored.signals,
   };
+
 }
 // =====================================================
 // PRODUCT CONVERSATION CONTEXT
@@ -2093,31 +2089,6 @@ function normalizeContextText(
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
-}
-
-// =====================================================
-// CHECK OBJECTION OR ALTERNATIVE REQUEST
-// =====================================================
-
-function isObjectionOrAlternativeRequest(message: string): boolean {
-  const text = normalizeContextText(message);
-  if (!text) return false;
-  return (
-    /\b(?:don'?t\s+like|dislike|not\s+(?:for\s+me|my\s+style|what\s+i|liking)|show\s+(?:me\s+)?(?:something\s+else|another|different)|something\s+else|different\s+(?:one|color|style|option)|other\s+options?|alternatives?)\b/i.test(
-      text
-    ) ||
-    [
-      "don't like",
-      "dont like",
-      "dislike",
-      "not for me",
-      "something else",
-      "different option",
-      "another one",
-      "other options",
-      "alternatives",
-    ].some((w) => text.includes(w))
-  );
 }
 
 // =====================================================
@@ -2147,7 +2118,6 @@ function isProductFollowUp(
     "its",
     "one",
     "ones",
-    "the",
   ];
 
   const followUpWords = [
@@ -2185,38 +2155,7 @@ function isProductFollowUp(
     "open this",
     "visit",
     "order",
-    "material",
-    "materials",
-    "fabric",
-    "fabrics",
-    "cloth",
-    "quality",
-    "texture",
-    "made of",
-    "details",
-    "don't like",
-    "dont like",
-    "dislike",
-    "not for me",
-    "something else",
-    "different",
-    "another",
-    "other options",
-    "alternatives",
   ];
-
-  if (isObjectionOrAlternativeRequest(text)) {
-    return true;
-  }
-
-  // Explicit fabric/material questions about the active item
-  if (
-    /\b(?:tell\s+me\s+about\s+(?:the\s+)?(?:fabric|material|details)|what\s+(?:is\s+it\s+)?made\s+of|fabric\s+details)\b/i.test(
-      text
-    )
-  ) {
-    return true;
-  }
 
   const hasReference =
     referenceWords.some(
@@ -2293,15 +2232,14 @@ function selectReferencedProduct(
     return null;
   }
 
-  const text =
-    normalizeContextText(message);
+  const text = normalizeContextText(message);
 
   // The cheapest / cheaper one.
   if (
     /(cheapest|cheaper|least expensive|most affordable)/i.test(text)
   ) {
     const priced = products
-      .map((product: any, index: number) => ({
+      .map((product: any) => ({
         product,
         price: parseFloat(
           String(
@@ -2320,31 +2258,68 @@ function selectReferencedProduct(
     }
   }
 
-  // Ordinal references: first/second/third/last.
-  const ordinalMatch = /(?:^|\s)(first|second|third|fourth|fifth|last)\s+one?/i.exec(text);
+  // Ordinal references: first/second/third/last or #1/#2/#3 or 1st/2nd/3rd.
+  const ordinalMatch = /(?:^|\s)(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th|#?1|#?2|#?3)\b/i.exec(text);
   if (ordinalMatch) {
-    const ordinals = ["first", "second", "third", "fourth", "fifth"];
-    const rawOrdinal = ordinalMatch[1].toLowerCase();
+    const rawOrdinal = ordinalMatch[1].toLowerCase().replace("#", "");
     if (rawOrdinal === "last") {
       return products[products.length - 1] || null;
     }
-    const rank = ordinals.indexOf(rawOrdinal);
-    if (rank >= 0 && products[rank]) {
-      return products[rank];
+    const map: Record<string, number> = {
+      first: 0, "1st": 0, "1": 0,
+      second: 1, "2nd": 1, "2": 1,
+      third: 2, "3rd": 2, "3": 2,
+      fourth: 3, "4th": 3, "4": 3,
+      fifth: 4, "5th": 4, "5": 4,
+    };
+    const idx = map[rawOrdinal];
+    if (typeof idx === "number" && products[idx]) {
+      return products[idx];
     }
   }
 
-  // Generic references: this one / that one / it / the one.
+  // Descriptor keyword match (e.g. "the embroidered one", "the peach one", "the lawn dress")
+  const words = text
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length >= 3 &&
+        !["the", "one", "this", "that", "product", "item", "show", "tell", "about", "similar", "like", "recommend", "how", "much", "price", "is"].includes(w)
+    );
+
+  if (words.length > 0) {
+    let bestMatch = null;
+    let bestScore = 0;
+
+    for (const p of products) {
+      const pText = normalizeContextText(
+        [p.displayName, p.name, p.title, p.displayCollection, p.description].filter(Boolean).join(" ")
+      );
+      let matchCount = 0;
+      for (const w of words) {
+        if (pText.includes(w)) matchCount++;
+      }
+      if (matchCount > bestScore) {
+        bestScore = matchCount;
+        bestMatch = p;
+      }
+    }
+
+    if (bestScore > 0 && bestMatch) {
+      return bestMatch;
+    }
+  }
+
+  // Generic references: this one / that one / it / the one / this product / this piece.
   const genericRef =
-    /this one|that one|the one|this product|that product|\bit\b|which one|the one you showed|the product you showed/i.test(text);
+    /this one|that one|the one|this product|that product|\bit\b|which one|the one you showed|the product you showed|this piece|this item/i.test(text);
 
   if (genericRef) {
     return products[0];
   }
 
-  // If nothing specific is referenced, keep all products so the UI can
-  // still render the verified cards.
-  return null;
+  // Default to first product in memory
+  return products[0] || null;
 }
 
 // =====================================================
@@ -2680,32 +2655,52 @@ async function safeProductSearch(
   profileId: string,
   query: string
 ) {
-  const { data, error } = await supabaseAdmin
+  // Current MVP mode: Website Crawler / Knowledge Base only.
+  // Shopify retrieval is bypassed for MVP.
+  const SHOPIFY_RETRIEVAL_ENABLED = false;
+
+  const kpPromise = supabaseAdmin
     .from("knowledge_pages")
     .select("id, user_id, title, page_url, content, page_type")
     .eq("user_id", profileId)
     .limit(1000);
 
-  if (error) {
-    console.error("SAFE PRODUCT SEARCH ERROR:", error);
-    throw error;
+  const pPromise = SHOPIFY_RETRIEVAL_ENABLED
+    ? supabaseAdmin
+        .from("products")
+        .select("id, user_id, title, handle, description, price, currency, available, image_url, product_url, sku, collection_names, source")
+        .eq("user_id", profileId)
+        .limit(1000)
+    : Promise.resolve({ data: [] as any[], error: null });
+
+  const [kpResult, pResult] = await Promise.all([kpPromise, pPromise]);
+
+  if (kpResult.error && (!SHOPIFY_RETRIEVAL_ENABLED || pResult.error)) {
+    console.error("SAFE PRODUCT SEARCH ERROR:", kpResult.error || pResult.error);
+    throw kpResult.error || pResult.error;
   }
 
-  const pages = Array.isArray(data) ? data : [];
-  const productLikePages = pages.filter((page: any) => {
-    const title = String(page?.title || "").toLowerCase();
-    const url = String(page?.page_url || "").toLowerCase();
-    const content = String(page?.content || "").toLowerCase();
-    const pageType = String(page?.page_type || "").toLowerCase();
-    return (
-      pageType === "product" ||
-      /\/products?\//i.test(url) ||
-      /shopify|add to cart|buy it now|regular price|sale price|sku/i.test(content) ||
-      /\b(dress|dresses|shirt|shirts|hoodie|hoodies|shoe|shoes|jacket|jackets|pants|jeans|bag|bags|cap|caps|suit|suits|lawn|chiffon|cambric|shalwar|kameez|dupatta|outfit|outfits)\b/i.test(`${title} ${content}`)
-    );
-  });
+  const rawCandidates: any[] = [];
+  if (Array.isArray(kpResult.data)) {
+    const productLikePages = kpResult.data.filter((page: any) => {
+      const title = String(page?.title || "").toLowerCase();
+      const url = String(page?.page_url || "").toLowerCase();
+      const content = String(page?.content || "").toLowerCase();
+      const pageType = String(page?.page_type || "").toLowerCase();
+      return (
+        pageType === "product" ||
+        /\/products?\//i.test(url) ||
+        /shopify|add to cart|buy it now|regular price|sale price|sku/i.test(content) ||
+        /\b(dress|dresses|shirt|shirts|hoodie|hoodies|shoe|shoes|jacket|jackets|pants|jeans|bag|bags|cap|caps|suit|suits|lawn|chiffon|cambric|shalwar|kameez|dupatta|outfit|outfits)\b/i.test(`${title} ${content}`)
+      );
+    });
+    rawCandidates.push(...(productLikePages.length > 0 ? productLikePages : kpResult.data));
+  }
+  if (SHOPIFY_RETRIEVAL_ENABLED && Array.isArray(pResult.data)) {
+    rawCandidates.push(...pResult.data);
+  }
 
-  const searchable = productLikePages.length > 0 ? productLikePages : pages;
+  const searchable = rawCandidates.length > 0 ? rawCandidates : [];
   const normalizedQuery = /^(what do you sell|what do you have|what can i buy|show your products|show me your products|browse|shop|catalog|catalogue)$/i.test(String(query || "").trim()) ? "products" : String(query || "").trim();
 
   const ranked = searchAndRankProducts(searchable, normalizedQuery, 10, { minScore: 0 });
@@ -2714,9 +2709,9 @@ async function safeProductSearch(
   const terms = normalizedQuery.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 3 && !["what","which","have","does","your","you"].includes(term));
   return searchable
     .map((page: any) => {
-      const title = String(page?.title || "").toLowerCase();
-      const content = String(page?.content || "").toLowerCase();
-      const url = String(page?.page_url || "").toLowerCase();
+      const title = String(page?.title || page?.name || "").toLowerCase();
+      const content = String(page?.content || page?.description || "").toLowerCase();
+      const url = String(page?.page_url || page?.product_url || "").toLowerCase();
       const haystack = `${title} ${content} ${url}`;
       const score = terms.reduce((total, term) => haystack.includes(term) ? total + 5 + (title.includes(term) ? 12 : 0) + (url.includes(term) ? 6 : 0) : total, 0);
       return { page, score };
@@ -2882,26 +2877,8 @@ HARD RULES:
     "as an AI", or mention retrieval, sources, tools, or the model.
 20. Do not say "according to the knowledge base" or mention retrieval unless
     the customer asks how the answer was obtained.
-21. GENERAL MATERIAL / FABRIC / SPECIFICATION INQUIRIES:
-    When a customer asks general questions about materials, fabrics, or specifications
-    (e.g., "What material do you use in your clothes?", "What fabrics do you offer?"):
-    - DO NOT give a defensive disclaimer like "I don't have verified details on the fabrics used across our collection."
-    - Explain warmly and confidently that our materials vary depending on the article and design.
-    - Proactively guide the customer: invite them to share a specific product or tell you the style/fabric they prefer so you can check available details (such as fabric, embroidery, print, cut, and specifications).
-    - Example: "Our materials vary depending on the article and design, and I'd be happy to help you find something that suits what you're looking for. If you share a product or tell me the style you prefer, I can check the available details such as fabric, embroidery, print, and other specifications."
-    - Truthfulness: Never invent unverified claims ("finest luxury materials"). Speak positively and guide toward concrete options.
-21a. PRODUCT-SPECIFIC SALES INTELLIGENCE:
-    When actual product data exists, actively use it to sell intelligently:
-    - Weave verified attributes (fabric, cut, embroidery, piece count, fit) into natural, helpful sales language.
-    - Example: "This article is a 3-piece unstitched lawn outfit with embroidered detailing. The lawn fabric makes it a great option for customers looking for a lightweight and elegant style."
-    - Do not merely dump raw specifications. Transform verified information into helpful, customer-centric descriptions.
-21b. OBJECTION HANDLING ("I don't like this" / "Show me something else"):
-    When a customer expresses dislike or asks for alternatives:
-    - Maintain the context of what product they are reacting to.
-    - Acknowledge gracefully and helpfully without being pushy.
-    - Inquire about what they prefer (different color, design, fabric, price range, or detailing).
-    - Example: "No problem — I can help you find something closer to your style. Would you prefer a different color, design, fabric, price range, or something with more or less embroidery?"
-    - Proactively introduce any alternative options displayed.
+21. If the supplied store data does not support an answer, say that you do
+    not have enough verified information and offer the most useful next step.
 22. Answer the direct question first, then add helpful detail. Do not lead
     with an introduction or restate the customer's question.
 23. Give longer, detailed answers only when the customer explicitly asks.
@@ -2914,11 +2891,16 @@ PRODUCT RESPONSE EXAMPLES:
 - Customer: "hi"
   Good: "Hi! How can I help you today?"
 - Customer: "hi what do you have"
-  Good: "Hi! We offer our latest collection of products. Are you looking for a particular style, category, or price range?"
-- Customer: "What material do you use in clothing?"
-  Good: "Our materials vary depending on the article and design, and I'd be happy to help you find something that suits what you're looking for. If you share a product or tell me the style you prefer, I can check the available details such as fabric, embroidery, print, and other specifications."
-- Customer: "I don't like this"
-  Good: "No problem — I can help you find something closer to your style. Would you prefer a different color, design, fabric, price range, or something with more or less embroidery?"
+  Good: "Hi! We offer women's lawn outfits, including embroidered 2-piece
+  and 3-piece styles. Are you looking for a particular color, style, or
+  budget?"
+- Customer: "show me peach 3 piece lawn"
+  Good: "Sure, I found some peach 3-piece lawn options for you. Take a look
+  below and I can help you choose one."
+- Customer: "tell me about the peach one"
+  Good: "The Pret Embroidered & Embellished Lawn 3 Pcs in Peach is
+  Rs.13,999. If you'd like, I can also tell you about its available
+  details or help you compare it with another option."
 
 IMPORTANT:
 The final response must sound like a human ecommerce employee speaking
@@ -2926,69 +2908,154 @@ directly to the customer. Do not expose the data retrieval process.
 `.trim();
 }
 
-// =====================================================
-// OPTIONS PREFLIGHT HANDLER
-// =====================================================
+async function saveMessageAndTouchConversation(
+  conversationId: string | number,
+  sender: "customer" | "ai" | "human",
+  content: string,
+  role?: "user" | "assistant" | "system"
+) {
+  const resolvedRole = role || (sender === "customer" ? "user" : "assistant");
+  try {
+    const { error: msgErr } = await supabaseAdmin
+      .from("conversation_messages")
+      .insert({
+        conversation_id: conversationId,
+        sender,
+        role: resolvedRole,
+        content,
+      });
+    if (msgErr) {
+      console.error("MESSAGE INSERT ERROR:", msgErr);
+    }
 
-export async function OPTIONS(req: Request) {
-  const originHeader =
-    req.headers.get("origin") || req.headers.get("referer");
-
-  const isDev = process.env.NODE_ENV !== "production";
-  const originToEcho = originHeader || (isDev ? "*" : null);
-
-  if (!originToEcho) {
-    return new NextResponse(null, { status: 403 });
+    const { error: convErr } = await supabaseAdmin
+      .from("conversations")
+      .update({
+        last_message: content.slice(0, 300),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
+    if (convErr) {
+      console.error("TOUCH CONVERSATION ERROR:", convErr);
+    }
+  } catch (e) {
+    console.error("saveMessageAndTouchConversation error:", e);
   }
-
-  return new NextResponse(null, {
-    status: 204,
-    headers: getCorsHeaders(originToEcho, "POST, OPTIONS"),
-  });
 }
 
 // =====================================================
 // CHAT API
 // =====================================================
 
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const widgetIdentifier =
+      searchParams.get("widgetIdentifier") || searchParams.get("profileId");
+    const visitorSessionId = searchParams.get("visitorSessionId");
+
+    if (!widgetIdentifier || !visitorSessionId) {
+      return NextResponse.json({ success: false, messages: [] });
+    }
+
+    // Find conversation by visitor session ID
+    const { data: conv, error: convError } = await supabaseAdmin
+      .from("conversations")
+      .select("id, status, assigned_to, handover_requested_at, taken_over_at")
+      .eq("visitor_session_id", visitorSessionId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (convError || !conv) {
+      return NextResponse.json({ success: true, messages: [] });
+    }
+
+    const { data: messages, error: msgError } = await supabaseAdmin
+      .from("conversation_messages")
+      .select("id, sender, role, content, created_at")
+      .eq("conversation_id", conv.id)
+      .order("created_at", { ascending: true })
+      .limit(50);
+
+    if (msgError) {
+      console.error("GET MESSAGES ERROR:", msgError);
+      return NextResponse.json({ success: false, messages: [] });
+    }
+
+    const mode =
+      conv.status === "waiting_for_human"
+        ? "waiting_for_human"
+        : conv.status === "human_active" ||
+          (conv.assigned_to && conv.assigned_to !== "ai" && conv.status !== "resolved")
+        ? "human"
+        : conv.status === "resolved"
+        ? "resolved"
+        : "ai";
+
+    return NextResponse.json({
+      success: true,
+      conversationId: String(conv.id),
+      status: conv.status || "ai_active",
+      mode,
+      assignedTo: conv.assigned_to || "ai",
+      handoverRequestedAt: conv.handover_requested_at,
+      takenOverAt: conv.taken_over_at,
+      messages: (messages || []).map((m: any) => ({
+        id: String(m.id),
+        sender: m.sender,
+        role: m.role,
+        content: m.content,
+        timestamp: m.created_at,
+        created_at: m.created_at,
+      })),
+    });
+  } catch (err: any) {
+    console.error("GET CHAT HISTORY ERROR:", err);
+    return NextResponse.json({ success: false, messages: [] });
+  }
+}
+
 export async function POST(
   req: Request
 ) {
   const requestStartedAt =
     Date.now();
-  console.log("SALES PILOT NEW CHAT ROUTE ACTIVE");
+  console.log("SALES PILOT CHAT ROUTE ACTIVE");
 
-  const originHeader =
-    req.headers.get("origin") || req.headers.get("referer");
-
-  let corsHeaders: Record<string, string> = {};
+  let lockKey: string | null = null;
+  let isQuotaReserved = false;
+  let resolvedProfileId = "";
+  let currentBillingPeriod = "";
 
   try {
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "CHAT API START"
-    );
-
-    console.log(
-      "================================="
-    );
+    console.log("=================================");
+    console.log("CHAT API START");
+    console.log("=================================");
 
     // =================================================
-    // REQUEST BODY
+    // REQUEST BODY PARSING
     // =================================================
 
-    const body =
-      await req.json().catch(() => ({}));
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request body.",
+          code: "INVALID_JSON",
+        },
+        { status: 400 }
+      );
+    }
 
     const {
       message,
       profileId: rawProfileId,
       widgetId: rawWidgetId,
-      widget_public_id: rawWidgetPublicId,
-      visitorSessionId,
+      visitorSessionId: rawVisitorSessionId,
       customerName,
       customerEmail,
 
@@ -2997,132 +3064,7 @@ export async function POST(
       image,
       imageName,
       imageType,
-    } = body;
-
-    const widgetIdentifier =
-      rawWidgetPublicId || rawWidgetId || rawProfileId;
-
-    if (!widgetIdentifier || typeof widgetIdentifier !== "string") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Widget identifier is required.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // =================================================
-    // SERVER-SIDE MERCHANT RESOLUTION
-    // =================================================
-
-    const resolvedWidget =
-      await resolveMerchantFromWidget(widgetIdentifier);
-
-    if (!resolvedWidget) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Widget configuration not found.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    // Bind trusted merchant ID and widget ID
-    const profileId = resolvedWidget.merchantId;
-    const widgetPublicId = resolvedWidget.widgetPublicId;
-
-    // =================================================
-    // ORIGIN VALIDATION & CORS
-    // =================================================
-
-    const { allowed: isAllowedOrigin, originToEcho } = isOriginAllowed(
-      originHeader,
-      resolvedWidget.allowedDomains
-    );
-
-    if (!isAllowedOrigin || !originToEcho) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Origin not authorized for this widget.",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    corsHeaders = getCorsHeaders(originToEcho, "POST, OPTIONS");
-
-    // =================================================
-    // RATE LIMITING (widget_public_id + Client IP)
-    // =================================================
-
-    const clientIp = getClientIp(req.headers);
-    const rateLimitKey = `${widgetPublicId}:${clientIp}`;
-
-    const rateLimit = checkRateLimit(rateLimitKey, {
-      maxRequests: 20,
-      windowSeconds: 60,
-      burstLimit: 6,
-      burstWindowSeconds: 5,
-    });
-
-    if (rateLimit.isRateLimited) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Too many requests. Please slow down and try again shortly.",
-          retryAfter: rateLimit.retryAfter,
-        },
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            "Retry-After": String(rateLimit.retryAfter),
-          },
-        }
-      );
-    }
-
-    // =================================================
-    // INPUT VALIDATION
-    // =================================================
-
-    if (typeof message === "string" && message.length > 2000) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Message is too long. Maximum 2000 characters.",
-        },
-        {
-          status: 400,
-          headers: corsHeaders,
-        }
-      );
-    }
-
-    if (
-      visitorSessionId &&
-      (typeof visitorSessionId !== "string" || visitorSessionId.length > 128)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid visitor session identifier.",
-        },
-        {
-          status: 400,
-          headers: corsHeaders,
-        }
-      );
-    }
+    } = body || {};
 
     const imageData =
       typeof rawImageData === "string"
@@ -3131,82 +3073,322 @@ export async function POST(
           ? image
           : null;
 
-    console.log(
-      "USER MESSAGE:",
-      message
-    );
-
-    console.log(
-      "RESOLVED MERCHANT PROFILE:",
-      profileId
-    );
-
-    console.log(
-      "WIDGET PUBLIC ID:",
-      widgetPublicId
-    );
-
-    console.log(
-      "VISITOR SESSION:",
-      visitorSessionId
-    );
-
-    console.log(
-      "IMAGE NAME:",
-      imageName
-    );
-
-    console.log(
-      "IMAGE TYPE:",
-      imageType
-    );
-
-    console.log(
-      "IMAGE PROVIDED:",
-      Boolean(
-        imageData
-      )
-    );
+    const hasImage = Boolean(imageData);
 
     // =================================================
-    // VALIDATION
+    // 1. INPUT VALIDATION & COST PROTECTION
     // =================================================
 
-    const hasImage =
-      Boolean(
-        imageData
-      );
-
-    if (
-      (
-        !message ||
-        typeof message !==
-          "string"
-      ) &&
-      !hasImage
-    ) {
+    // Message length limit
+    const MAX_ALLOWED_MESSAGE_LENGTH = 4000;
+    if (typeof message === "string" && message.length > MAX_ALLOWED_MESSAGE_LENGTH) {
       return NextResponse.json(
         {
           success: false,
-
-          error:
-            "Message or image required.",
+          error: `Your message is too long (${message.length.toLocaleString()} characters). Please keep it under ${MAX_ALLOWED_MESSAGE_LENGTH.toLocaleString()} characters.`,
+          code: "MESSAGE_TOO_LONG",
         },
-        {
-          status: 400,
-          headers: corsHeaders,
-        }
+        { status: 400 }
       );
     }
 
     const cleanMessage =
-      typeof message ===
-        "string"
+      typeof message === "string"
         ? message.trim()
         : "";
 
+    if (!cleanMessage && !hasImage) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Please enter a message or provide an image.",
+          code: "EMPTY_MESSAGE",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Resolve profileId or widgetId
+    let profileId: string | null =
+      typeof rawProfileId === "string" && rawProfileId.trim()
+        ? rawProfileId.trim()
+        : null;
+
+    const widgetId: string | null =
+      typeof rawWidgetId === "string" && rawWidgetId.trim()
+        ? rawWidgetId.trim()
+        : null;
+
+    if (!profileId && widgetId) {
+      const resolved = await resolveMerchantFromWidget(widgetId);
+      if (resolved) {
+        profileId = resolved.merchantId;
+      }
+    } else if (profileId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)) {
+      // If profileId is passed as public widget ID (e.g. spw_...)
+      const resolved = await resolveMerchantFromWidget(profileId);
+      if (resolved) {
+        profileId = resolved.merchantId;
+      }
+    }
+
+    if (!profileId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "A valid merchant profile ID or widget ID is required.",
+          code: "PROFILE_REQUIRED",
+        },
+        { status: 400 }
+      );
+    }
+
+    resolvedProfileId = profileId;
+
+    // Sanitize visitorSessionId
+    const visitorSessionId: string =
+      typeof rawVisitorSessionId === "string" && rawVisitorSessionId.trim()
+        ? rawVisitorSessionId.trim().slice(0, 128)
+        : crypto.randomUUID();
+
     // =================================================
-    // VALIDATE IMAGE
+    // 2. CONCURRENCY LOCK (Anti-Double-Click / Duplicate Requests)
+    // =================================================
+
+    const lockResult = await acquireRequestLock(supabaseAdmin, visitorSessionId);
+    if (!lockResult.acquired) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "A message is currently being processed. Please wait a moment.",
+          code: "CONCURRENT_REQUEST",
+        },
+        { status: 429 }
+      );
+    }
+    lockKey = lockResult.lockKey;
+
+    // =================================================
+    // 3. VISITOR RATE LIMITING (Distributed across serverless)
+    // =================================================
+
+    const clientIp = extractClientIp(req);
+    const rateLimit = await checkVisitorRateLimit(supabaseAdmin, {
+      merchantId: profileId,
+      visitorSessionId,
+      ip: clientIp,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: rateLimit.error || "You're sending messages too quickly. Please wait a moment and try again.",
+          code: "RATE_LIMIT_EXCEEDED",
+          retryAfter: rateLimit.retryAfter,
+        },
+        {
+          status: 429,
+          headers: rateLimit.retryAfter
+            ? { "Retry-After": String(rateLimit.retryAfter) }
+            : undefined,
+        }
+      );
+    }
+
+    // =================================================
+    // 3.5. CONVERSATION STATE & HANDOVER GATEWAY
+    // =================================================
+    // Check if conversation is already in human mode or if this message
+    // requests human handover. If so, mute AI immediately: save message,
+    // do NOT reserve AI quota, and do NOT invoke OpenAI or embeddings.
+    let conversation: any = null;
+    if (visitorSessionId) {
+      const { data: convData } = await supabaseAdmin
+        .from("conversations")
+        .select("id, profile_id, user_id, visitor_session_id, status, assigned_to, handover_requested_at, taken_over_at")
+        .eq("visitor_session_id", visitorSessionId)
+        .eq("profile_id", profileId)
+        .maybeSingle();
+
+      if (convData) {
+        conversation = convData;
+      }
+    }
+
+    const customerMsgPreview =
+      hasImage
+        ? cleanMessage
+          ? `${cleanMessage}\n[Image uploaded: ${imageName || "product image"}]`
+          : `[Image uploaded: ${imageName || "product image"}]`
+        : cleanMessage;
+
+    // A. Conversation is in waiting_for_human, human_active, or resolved
+    if (conversation && !isAIAllowedForConversation(conversation)) {
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "customer",
+        customerMsgPreview,
+        "user"
+      );
+
+      if (lockKey) {
+        await releaseRequestLock(supabaseAdmin, lockKey);
+        lockKey = null;
+      }
+
+      const convStatus = String(conversation.status || "").toLowerCase().trim();
+      if (convStatus === "waiting_for_human") {
+        return NextResponse.json({
+          success: true,
+          response: "Your message has been sent to our support team. A team member will join shortly.",
+          handover: true,
+          handoverRequested: true,
+          isWaitingForHuman: true,
+          aiMuted: true,
+          mode: "waiting_for_human",
+          status: "waiting_for_human",
+          assignedTo: conversation.assigned_to,
+          conversationId: String(conversation.id),
+        });
+      } else if (convStatus === "human_active" || (conversation.assigned_to && conversation.assigned_to !== "ai")) {
+        return NextResponse.json({
+          success: true,
+          handover: true,
+          isHumanActive: true,
+          aiMuted: true,
+          mode: "human",
+          status: "human_active",
+          assignedTo: conversation.assigned_to,
+          conversationId: String(conversation.id),
+        });
+      } else {
+        return NextResponse.json({
+          success: true,
+          response: "This conversation has been resolved.",
+          handover: true,
+          mode: "resolved",
+          status: "resolved",
+          conversationId: String(conversation.id),
+        });
+      }
+    }
+
+    // B. Check if incoming message is an explicit Handover Request
+    const handoverIntent = detectHandoverIntent(cleanMessage);
+    const actionDetection = detectAction(cleanMessage);
+    const isHandoverTriggered =
+      handoverIntent.requiresHumanHandover || actionDetection?.action === "handoff_to_human";
+
+    if (isHandoverTriggered) {
+      if (!conversation) {
+        const session = visitorSessionId || crypto.randomUUID();
+        const { data: newConv, error: createErr } = await supabaseAdmin
+          .from("conversations")
+          .insert({
+            profile_id: profileId,
+            user_id: profileId,
+            visitor_session_id: session,
+            customer_name: customerName || "Website Visitor",
+            customer_email: customerEmail || null,
+            assigned_to: "waiting_for_human",
+            status: "waiting_for_human",
+            handover_requested_at: new Date().toISOString(),
+            handover_reason: handoverIntent.reason || "customer_requested_human",
+          })
+          .select("id, profile_id, user_id, visitor_session_id, status, assigned_to, handover_requested_at")
+          .single();
+
+        if (createErr || !newConv) {
+          throw createErr || new Error("Failed to create conversation for handover");
+        }
+        conversation = newConv;
+      } else {
+        await requestHumanHandover(supabaseAdmin, {
+          conversationId: conversation.id,
+          profileId,
+          reason: handoverIntent.reason || "customer_requested_human",
+          customerName,
+          customerEmail,
+          lastMessage: cleanMessage,
+        });
+      }
+
+      // Save customer message
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "customer",
+        customerMsgPreview,
+        "user"
+      );
+
+      // Save AI friendly handover reply
+      const handoverReply = "Absolutely. I've notified the support team. A team member will join this conversation shortly.";
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "ai",
+        handoverReply,
+        "assistant"
+      );
+
+      if (lockKey) {
+        await releaseRequestLock(supabaseAdmin, lockKey);
+        lockKey = null;
+      }
+
+      // Return without reserving or consuming any AI quota
+      return NextResponse.json({
+        success: true,
+        response: handoverReply,
+        handover: true,
+        handoverRequested: true,
+        isWaitingForHuman: true,
+        aiMuted: true,
+        mode: "waiting_for_human",
+        status: "waiting_for_human",
+        assignedTo: "waiting_for_human",
+        conversationId: String(conversation.id),
+      });
+    }
+
+    // =================================================
+    // 4. MERCHANT MONTHLY USAGE LIMIT & ATOMIC RESERVATION
+    // =================================================
+
+    const merchantPlan = await getMerchantPlanAndLimit(supabaseAdmin, profileId);
+    currentBillingPeriod = merchantPlan.billingPeriod;
+
+    // Check dev override if active
+    const devOverride =
+      process.env.NODE_ENV !== "production" &&
+      process.env.DEV_CHAT_LIMIT_OVERRIDE === "true";
+
+    const quotaCheck = await reserveMerchantQuota(supabaseAdmin, {
+      merchantId: profileId,
+      billingPeriod: currentBillingPeriod,
+      maxLimit: devOverride ? 999999 : merchantPlan.limit,
+    });
+
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This AI assistant has reached its monthly usage limit. Please contact the website owner.",
+          code: "USAGE_LIMIT_REACHED",
+        },
+        { status: 429 }
+      );
+    }
+
+    isQuotaReserved = true;
+
+    console.log("USER MESSAGE:", message);
+    console.log("PROFILE:", profileId);
+    console.log("VISITOR SESSION:", visitorSessionId);
+    console.log("IMAGE PROVIDED:", hasImage);
+
+    // =================================================
+    // 5. VALIDATE IMAGE
     // =================================================
 
     if (hasImage) {
@@ -3233,7 +3415,7 @@ export async function POST(
     }
 
     // =================================================
-    // IMAGE ANALYSIS
+    // 6. IMAGE ANALYSIS
     // =================================================
 
     let imageDescription =
@@ -3249,6 +3431,18 @@ export async function POST(
             imageData,
             cleanMessage
           );
+
+        // Record vision analysis usage
+        await recordAiUsage(supabaseAdmin, {
+          profileId,
+          billingPeriod: currentBillingPeriod,
+          eventType: "vision_analysis",
+          model: OPENAI_VISION_MODEL,
+          promptTokens: Math.ceil(cleanMessage.length / 4) + 500,
+          completionTokens: Math.ceil(imageDescription.length / 4),
+          success: true,
+          metadata: { imageName, imageType },
+        });
       } catch (imageError) {
         console.error("=================================");
         console.error("IMAGE ANALYSIS ERROR");
@@ -3280,10 +3474,6 @@ export async function POST(
     // =================================================
     // FINAL USER SEARCH MESSAGE
     // =================================================
-    // Product-intent images (identify/price/find/similar) build
-    // a catalog search query. Problem/support images (damage, error,
-    // payment, delivery) are handled as support cases and must never
-    // trigger a random product search.
 
     const effectiveMessage =
       hasImage
@@ -3319,184 +3509,32 @@ export async function POST(
     );
 
     // =================================================
-    // FIND EXISTING CONVERSATION
+    // ENSURE CONVERSATION EXISTS FOR AI PIPELINE
     // =================================================
 
-    let conversation:
-      | any
-      | null = null;
-
-    if (
-      visitorSessionId
-    ) {
-      const {
-        data,
-        error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .select(
-            "id, profile_id, user_id, visitor_session_id"
-          )
-          .eq(
-            "visitor_session_id",
-            visitorSessionId
-          )
-          .eq(
-            "profile_id",
-            profileId
-          )
-          .maybeSingle();
+    if (!conversation) {
+      console.log("CREATING CONVERSATION");
+      const session = visitorSessionId || crypto.randomUUID();
+      const { data, error } = await supabaseAdmin
+        .from("conversations")
+        .insert({
+          profile_id: profileId,
+          user_id: profileId,
+          visitor_session_id: session,
+          customer_name: customerName || "Website Visitor",
+          customer_email: customerEmail || null,
+          assigned_to: "ai",
+          status: "open",
+        })
+        .select("id, profile_id, user_id, visitor_session_id")
+        .single();
 
       if (error) {
-        console.error(
-          "CONVERSATION LOOKUP ERROR:",
-          error
-        );
-      }
-
-      conversation =
-        data;
-    }
-
-    // =================================================
-    // BILLING
-    // =================================================
-
-    if (
-      !conversation
-    ) {
-      console.log(
-        "NEW CONVERSATION - CHECKING BILLING"
-      );
-
-      const billing =
-        await checkBillingAccess(
-          profileId
-        );
-
-      console.log(
-        "BILLING RESULT:",
-        billing
-      );
-
-      if (
-        !billing.allowed
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-
-            error:
-              billing.error,
-
-            code:
-              billing.code ||
-              "BILLING_ACCESS_DENIED",
-
-            planId:
-              "planId" in billing
-                ? billing.planId
-                : undefined,
-
-            planName:
-              "planName" in
-              billing
-                ? billing.planName
-                : undefined,
-
-            used:
-              "used" in billing
-                ? billing.used
-                : undefined,
-
-            limit:
-              "limit" in billing
-                ? billing.limit
-                : undefined,
-
-            remaining:
-              "remaining" in
-              billing
-                ? billing.remaining
-                : undefined,
-          },
-          {
-            status: 403,
-          }
-        );
-      }
-    } else {
-      console.log(
-        "EXISTING CONVERSATION - BILLING CHECK PASSED"
-      );
-    }
-
-    // =================================================
-    // CREATE CONVERSATION
-    // =================================================
-
-    if (
-      !conversation
-    ) {
-      console.log(
-        "CREATING CONVERSATION"
-      );
-
-      const session =
-        visitorSessionId ||
-        crypto.randomUUID();
-
-      const {
-        data,
-        error,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversations"
-          )
-          .insert({
-            profile_id:
-              profileId,
-
-            user_id:
-              profileId,
-
-            visitor_session_id:
-              session,
-
-            customer_name:
-              customerName ||
-              "Website Visitor",
-
-            customer_email:
-              customerEmail ||
-              null,
-
-            assigned_to:
-              "ai",
-
-            status:
-              "open",
-          })
-          .select(
-            "id, profile_id, user_id, visitor_session_id"
-          )
-          .single();
-
-      if (error) {
-        console.error(
-          "CONVERSATION CREATE ERROR:",
-          error
-        );
-
+        console.error("CONVERSATION CREATE ERROR:", error);
         throw error;
       }
 
-      conversation =
-        data;
+      conversation = data;
     }
 
     // =================================================
@@ -3510,33 +3548,12 @@ export async function POST(
           : `[Image uploaded: ${imageName || "product image"}]\n[Image analysis: ${imageDescription}]`
         : cleanMessage;
 
-    const {
-      error:
-        customerMessageError,
-    } =
-      await supabaseAdmin
-        .from(
-          "conversation_messages"
-        )
-        .insert({
-          conversation_id:
-            conversation.id,
-
-          sender:
-            "customer",
-
-          content:
-            customerMessageForDatabase,
-        });
-
-    if (
-      customerMessageError
-    ) {
-      console.error(
-        "CUSTOMER MESSAGE ERROR:",
-        customerMessageError
-      );
-    }
+    await saveMessageAndTouchConversation(
+      conversation.id,
+      "customer",
+      customerMessageForDatabase,
+      "user"
+    );
 
     // =================================================
     // LOAD CONVERSATION HISTORY
@@ -3549,6 +3566,11 @@ export async function POST(
       await getConversationHistory(
         conversation.id
       );
+
+    const conversationOrderContext = await getConversationOrderContext(
+      supabaseAdmin,
+      conversation.id
+    );
 const previousAIMessage =
   [...conversationHistory]
     .reverse()
@@ -3628,33 +3650,23 @@ const previousCustomerMessages =
         fastResponse
       );
 
-      const {
-        error:
-          fastMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "ai",
+        fastResponse,
+        "assistant"
+      );
 
-            sender:
-              "ai",
-
-            content:
-              fastResponse,
-          });
-
-      if (
-        fastMessageError
-      ) {
-        console.error(
-          "FAST AI MESSAGE ERROR:",
-          fastMessageError
-        );
-      }
+      await recordAiUsage(supabaseAdmin, {
+        profileId,
+        conversationId: conversation.id,
+        billingPeriod: currentBillingPeriod,
+        eventType: "message",
+        model: "fast_response",
+        promptTokens: Math.ceil(cleanMessage.length / 4),
+        completionTokens: Math.ceil(fastResponse.length / 4),
+        success: true,
+      });
 
       return NextResponse.json({
         success:
@@ -3700,33 +3712,23 @@ const previousCustomerMessages =
         ? "You can visit our store's website here."
         : "I don't have a verified homepage link available right now.";
 
-      const {
-        error:
-          homeMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "ai",
+        homepageResponse,
+        "assistant"
+      );
 
-            sender:
-              "ai",
-
-            content:
-              homepageResponse,
-          });
-
-      if (
-        homeMessageError
-      ) {
-        console.error(
-          "HOMEPAGE AI MESSAGE ERROR:",
-          homeMessageError
-        );
-      }
+      await recordAiUsage(supabaseAdmin, {
+        profileId,
+        conversationId: conversation.id,
+        billingPeriod: currentBillingPeriod,
+        eventType: "message",
+        model: "homepage_link",
+        promptTokens: Math.ceil(cleanMessage.length / 4),
+        completionTokens: Math.ceil(homepageResponse.length / 4),
+        success: true,
+      });
 
       return NextResponse.json({
         success: true,
@@ -3770,7 +3772,8 @@ const previousCustomerMessages =
         ? null
         : detectContextualOrderAction(
             cleanMessage,
-            conversationHistory
+            conversationHistory,
+            conversationOrderContext
           );
 // =================================================
     // PRODUCT INTENT FALLBACK
@@ -3946,12 +3949,54 @@ if (
 }
 
     // =================================================
-    // ADD PROFILE CONTEXT
+    // ADD PROFILE & STORE CONTEXT
     // =================================================
 
     if (
       actionRequest
     ) {
+      let isMerchantUser = false;
+      try {
+        const authHeader = req.headers.get("authorization");
+        if (authHeader?.startsWith("Bearer ")) {
+          const token = authHeader.replace("Bearer ", "").trim();
+          const { data: userData } = await supabaseAdmin.auth.getUser(token);
+          if (userData?.user?.id && userData.user.id === profileId) {
+            isMerchantUser = true;
+          }
+        }
+        if (!isMerchantUser) {
+          const serverSupabase = await createServerSupabase();
+          const { data: authData } = await serverSupabase.auth.getUser();
+          if (authData?.user?.id && authData.user.id === profileId) {
+            isMerchantUser = true;
+          }
+        }
+      } catch {
+        // Not an authenticated merchant
+      }
+
+      let verifiedStoreContext: VerifiedStoreContext | null = null;
+      if (
+        actionRequest.action === "get_order_status" ||
+        actionRequest.action === "get_order_details"
+      ) {
+        const { data: connectedStore } = await supabaseAdmin
+          .from("shopify_stores")
+          .select("id, shop_domain, access_token")
+          .or(`profile_id.eq.${profileId},user_id.eq.${profileId}`)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (connectedStore?.access_token && connectedStore?.shop_domain) {
+          verifiedStoreContext = {
+            storeId: connectedStore.id,
+            shopDomain: connectedStore.shop_domain,
+            accessToken: connectedStore.access_token,
+          };
+        }
+      }
+
       const parameters:
         Record<
           string,
@@ -3964,6 +4009,15 @@ if (
 
         profileId:
           profileId,
+
+        storeContext:
+          verifiedStoreContext,
+
+        isMerchant:
+          isMerchantUser,
+
+        conversationId:
+          conversation?.id,
       };
 
       actionRequest = {
@@ -4047,7 +4101,11 @@ let rememberRawProducts:
       // ACTION FAILED
       // =================================================
 
-      if (!actionResult.success) {
+      const isOrderTrackingAction =
+        actionRequest.action === "get_order_status" ||
+        actionRequest.action === "get_order_details";
+
+      if (!actionResult.success && !isOrderTrackingAction) {
         const actionError = String(
           actionResult.error || ""
         );
@@ -4186,6 +4244,60 @@ let rememberRawProducts:
                 productContextKey
               );
 
+            if (
+              isSimilarProductRequest(originalQuery) &&
+              rememberedProducts.length > 0
+            ) {
+              const listCards =
+                buildProductCards(
+                  rememberedProducts,
+                  3
+                );
+
+              const referencedFromMemory =
+                selectReferencedProduct(
+                  listCards,
+                  originalQuery
+                ) ||
+                (typeof listCards[0] !== "undefined" ? listCards[0] : null);
+
+              if (referencedFromMemory) {
+                const fullCatalog = await safeProductSearch(profileId, "products");
+                const priceConstraint = parsePriceConstraint(originalQuery);
+                const similarProducts = findSimilarProducts(
+                  fullCatalog,
+                  referencedFromMemory,
+                  3,
+                  priceConstraint
+                );
+
+                if (similarProducts.length > 0) {
+                  const similarCards = buildProductCards(similarProducts, 3);
+                  actionProductData = similarCards;
+                  actionCatalogUrl = "";
+                  actionCollectionUrl = "";
+                  productContextResolved = true;
+
+                  const referencedName =
+                    String(
+                      referencedFromMemory?.displayName ||
+                      referencedFromMemory?.name ||
+                      ""
+                    ).trim();
+
+                  actionResponse = `Here are a few options similar to ${referencedName || "that"}:`;
+                  break;
+                } else if (priceConstraint.explicit) {
+                  actionProductData = [];
+                  actionCatalogUrl = "";
+                  actionCollectionUrl = "";
+                  productContextResolved = true;
+                  actionResponse = `I couldn't find similar products within that price range right now.`;
+                  break;
+                }
+              }
+            }
+
             const productFollowUpOrLink =
               isProductFollowUp(
                 originalQuery
@@ -4200,47 +4312,6 @@ let rememberRawProducts:
               productFollowUpOrLink &&
               rememberedProducts.length > 0
             ) {
-              const isObjection = isObjectionOrAlternativeRequest(originalQuery);
-              if (isObjection) {
-                const rejectedProduct = rememberedProducts[0] || null;
-                const rejectedId =
-                  rejectedProduct?.id ||
-                  rejectedProduct?.product_id ||
-                  rejectedProduct?.productId;
-                const rejectedName = String(
-                  rejectedProduct?.displayName ||
-                    rejectedProduct?.name ||
-                    rejectedProduct?.title ||
-                    "this item"
-                ).trim();
-
-                const poolToFilter =
-                  searchProducts.length > 0
-                    ? searchProducts
-                    : await safeProductSearch(profileId, "available products");
-
-                const rawAlternatives = poolToFilter.filter((p: any) => {
-                  const pid = p?.id || p?.product_id || p?.productId;
-                  return !rejectedId || pid !== rejectedId;
-                });
-
-                actionProductData = buildProductCards(
-                  rawAlternatives.length > 0 ? rawAlternatives : poolToFilter,
-                  3
-                );
-                actionCatalogUrl = "";
-                actionCollectionUrl = "";
-                productContextResolved = true;
-
-                actionResponse =
-                  "No problem — I can help you find something closer to your style. Would you prefer a different color, design, fabric, price range, or something with more or less embroidery?";
-
-                console.log(
-                  `OBJECTION RESOLVED: Customer rejected "${rejectedName}". Showing ${actionProductData.length} alternative products.`
-                );
-                break;
-              }
-
               const listCards =
                 buildProductCards(
                   rememberedProducts,
@@ -4522,163 +4593,205 @@ let rememberRawProducts:
           }
 
           case "handoff_to_human": {
+            if (conversation?.id) {
+              await requestHumanHandover(supabaseAdmin, {
+                conversationId: conversation.id,
+                profileId,
+                reason: "customer_requested_human",
+                customerName,
+                customerEmail,
+                lastMessage: cleanMessage,
+              });
+            }
+
             actionResponse =
-              "Absolutely. I'll connect you with a member of our support team.";
+              "Absolutely. I've notified the support team. A team member will join this conversation shortly.";
 
             break;
           }
 
           case "get_order_status": {
-            const result =
-              (
-                actionResult as any
-              )?.data;
+            const result = (actionResult as any)?.data as LookupOrderResponse | undefined;
 
-            if (
-              !result?.found ||
-              !result?.order
-            ) {
-              actionResponse =
-                `I couldn't find order ${
-                  result?.orderNumber
-                    ? `#${result.orderNumber}`
-                    : "with that number"
-                }. Please check the order number and try again.`;
-
+            if (result?.unavailable) {
+              actionResponse = result.message || SHOPIFY_UNAVAILABLE_MESSAGE;
               break;
             }
 
-            const order =
-              result.order;
-
-            const orderNumber =
-              order.orderNumber ||
-              result.orderNumber ||
-              "your order";
-
-            const fulfillment =
-              String(
-                order.fulfillmentStatus ||
-                  ""
-              )
-                .toLowerCase()
-                .replace(
-                  /_/g,
-                  " "
+            if (result?.requiresVerification) {
+              if (conversation?.id && result?.orderNumber) {
+                await setConversationPendingOrder(
+                  supabaseAdmin,
+                  conversation.id,
+                  result.orderNumber
                 );
-
-            const financial =
-              String(
-                order.financialStatus ||
-                  ""
-              )
-                .toLowerCase()
-                .replace(
-                  /_/g,
-                  " "
-                );
-
-            actionResponse =
-              `Order ${orderNumber} is currently ${
-                fulfillment ||
-                "being processed"
-              }.`;
-
-            if (
-              financial
-            ) {
-              actionResponse +=
-                ` Payment status: ${financial}.`;
+              }
+              actionResponse =
+                result.message ||
+                "To check your order status, please provide the email address used when placing the order.";
+              break;
             }
 
+            if (result?.verificationFailed || !result?.found || !result?.order) {
+              actionResponse =
+                result?.message || GENERIC_VERIFICATION_FAILURE_MESSAGE;
+              break;
+            }
+
+            const order = result.order;
+            if (conversation?.id) {
+              await setConversationVerifiedOrder(supabaseAdmin, conversation.id, {
+                orderNumber: order.orderNumber,
+                orderId: order.id,
+                email:
+                  (actionRequest.parameters.email as string) || undefined,
+              });
+            }
+
+            const orderNumStr = order.orderNumber
+              ? `#${order.orderNumber}`
+              : "your order";
+            const fulfillmentStr =
+              order.friendlyFulfillmentStatus || "Processing";
+            const financialStr = order.financialStatus
+              ? order.financialStatus.toLowerCase()
+              : "";
+
+            let msg = `Order ${orderNumStr} is currently ${fulfillmentStr}.`;
+            if (financialStr) {
+              msg += ` Payment status: ${financialStr}.`;
+            }
+
+            if (
+              Array.isArray(order.fulfillments) &&
+              order.fulfillments.length > 0
+            ) {
+              const trackingDetails = order.fulfillments
+                .filter(
+                  (f) =>
+                    f.trackingNumber || f.trackingCompany || f.trackingUrl
+                )
+                .map((f) => {
+                  let str = "";
+                  if (f.trackingCompany) str += `Carrier: ${f.trackingCompany}. `;
+                  if (f.trackingNumber) str += `Tracking #: ${f.trackingNumber}. `;
+                  if (f.trackingUrl) str += `Tracking link: ${f.trackingUrl}`;
+                  return str.trim();
+                })
+                .filter(Boolean);
+
+              if (trackingDetails.length > 0) {
+                msg += `\n\nTracking details:\n${trackingDetails.join("\n")}`;
+              }
+            } else if (order.fulfillmentStatus === "UNFULFILLED") {
+              msg += ` It has not shipped yet, so tracking information is not yet available.`;
+            }
+
+            actionResponse = msg;
             break;
           }
 
           case "get_order_details": {
-            const result =
-              (
-                actionResult as any
-              )?.data;
+            const result = (actionResult as any)?.data as LookupOrderResponse | undefined;
 
-            if (
-              !result?.found ||
-              !result?.order
-            ) {
-              actionResponse =
-                `I couldn't find order ${
-                  result?.orderNumber
-                    ? `#${result.orderNumber}`
-                    : "with that number"
-                }. Please check the order number and try again.`;
-
+            if (result?.unavailable) {
+              actionResponse = result.message || SHOPIFY_UNAVAILABLE_MESSAGE;
               break;
             }
 
-            const order =
-              result.order;
-
-            const items =
-              Array.isArray(
-                order?.data
-                  ?.lineItems
-              )
-                ? order.data
-                    .lineItems
-                : [];
-
-            const fulfillment =
-              String(
-                order.fulfillmentStatus ||
-                  "being processed"
-              )
-                .toLowerCase()
-                .replace(
-                  /_/g,
-                  " "
+            if (result?.requiresVerification) {
+              if (conversation?.id && result?.orderNumber) {
+                await setConversationPendingOrder(
+                  supabaseAdmin,
+                  conversation.id,
+                  result.orderNumber
                 );
+              }
+              actionResponse =
+                result.message ||
+                "To check your order details, please provide the email address used when placing the order.";
+              break;
+            }
 
-            actionResponse =
-              `Order ${
-                order.orderNumber ||
-                result.orderNumber
-              } is ${fulfillment}.`;
+            if (result?.verificationFailed || !result?.found || !result?.order) {
+              actionResponse =
+                result?.message || GENERIC_VERIFICATION_FAILURE_MESSAGE;
+              break;
+            }
 
-            if (
-              items.length > 0
-            ) {
-              const itemText =
-                items
-                  .slice(
-                    0,
-                    5
-                  )
-                  .map(
-                    (
-                      item: any
-                    ) =>
-                      `${item.quantity} x ${item.title}`
-                  )
-                  .join(
-                    ", "
-                  );
+            const order = result.order;
+            if (conversation?.id) {
+              await setConversationVerifiedOrder(supabaseAdmin, conversation.id, {
+                orderNumber: order.orderNumber,
+                orderId: order.id,
+                email:
+                  (actionRequest.parameters.email as string) || undefined,
+              });
+            }
 
-              actionResponse +=
-                ` Items: ${itemText}.`;
+            const orderNumStr = order.orderNumber
+              ? `#${order.orderNumber}`
+              : "your order";
+            const fulfillmentStr =
+              order.friendlyFulfillmentStatus || "Processing";
+            const items = Array.isArray(order.lineItems) ? order.lineItems : [];
+
+            let msg = `Order ${orderNumStr} is currently ${fulfillmentStr}.`;
+
+            if (items.length > 0) {
+              const itemList = items
+                .map((item) => {
+                  let itemLine = `${item.quantity} x ${item.title}`;
+                  if (
+                    item.variantTitle &&
+                    item.variantTitle !== "Default Title"
+                  ) {
+                    itemLine += ` (${item.variantTitle})`;
+                  }
+                  if (item.price) {
+                    itemLine += ` - ${item.price} ${
+                      order.currency || ""
+                    }`;
+                  }
+                  return itemLine;
+                })
+                .join("\n- ");
+
+              msg += `\n\nItems in this order:\n- ${itemList}`;
+            }
+
+            if (order.totalPrice) {
+              msg += `\n\nTotal: ${order.totalPrice} ${
+                order.currency || ""
+              }.`;
             }
 
             if (
-              order.totalPrice !==
-                null &&
-              order.totalPrice !==
-                undefined
+              Array.isArray(order.fulfillments) &&
+              order.fulfillments.length > 0
             ) {
-              actionResponse +=
-                ` Total: ${order.totalPrice} ${
-                  order.currency ||
-                  ""
-                }.`;
+              const trackingDetails = order.fulfillments
+                .filter(
+                  (f) =>
+                    f.trackingNumber || f.trackingCompany || f.trackingUrl
+                )
+                .map((f) => {
+                  let str = "";
+                  if (f.trackingCompany) str += `Carrier: ${f.trackingCompany}. `;
+                  if (f.trackingNumber) str += `Tracking #: ${f.trackingNumber}. `;
+                  if (f.trackingUrl) str += `Tracking link: ${f.trackingUrl}`;
+                  return str.trim();
+                })
+                .filter(Boolean);
+
+              if (trackingDetails.length > 0) {
+                msg += `\n\nTracking:\n${trackingDetails.join("\n")}`;
+              }
+            } else if (order.fulfillmentStatus === "UNFULFILLED") {
+              msg += `\nThis order has not shipped yet.`;
             }
 
+            actionResponse = msg;
             break;
           }
 
@@ -4767,7 +4880,6 @@ let rememberRawProducts:
             matchPool,
             {
               imageDataUrl: imageData,
-              imageName: imageName,
               visualIndexRows,
             }
           );
@@ -4779,7 +4891,7 @@ let rememberRawProducts:
             imageMatchResult = await determineImageMatchType(
               imageDescription,
               actionProductData,
-              { imageDataUrl: imageData, imageName: imageName, visualIndexRows }
+              { imageDataUrl: imageData, visualIndexRows }
             );
           } catch (catalogRetryError) {
             console.error("IMAGE MATCH RETRY ERROR:", catalogRetryError);
@@ -4812,8 +4924,6 @@ let rememberRawProducts:
                     imageMatchResult.exactProduct.productUrl ||
                     imageMatchResult.exactProduct.viewUrl ||
                     imageMatchResult.exactProduct.url ||
-                    imageMatchResult.exactProduct.page_url ||
-                    imageMatchResult.exactProduct.source_url ||
                     "",
                   price:
                     imageMatchResult.exactProduct.displayPrice ||
@@ -4826,27 +4936,25 @@ let rememberRawProducts:
                 }
               : null,
         };
+
+        // Persist the decision so follow-up turns stay honest.
         rememberImageMatch(
           imageContextKey,
           {
             matchType,
             exactProductId:
               imageMatch?.exactProductId || null,
-            exactProduct:
-              imageMatch?.exactProduct || null,
           }
         );
 
         if (matchType === "exact" && imageMatchResult.exactProduct) {
           actionProductData = [imageMatchResult.exactProduct];
-          rememberRawProducts = actionProductData;
           actionCatalogUrl = "";
           actionCollectionUrl = "";
         } else if (matchType === "high_confidence" && imageMatchResult.exactProduct) {
           // High-confidence visual match: strong feature similarity identifies this product
           // without a hard SKU/title identifier. We surface it as a likely match.
           actionProductData = [imageMatchResult.exactProduct];
-          rememberRawProducts = actionProductData;
           actionCatalogUrl = "";
           actionCollectionUrl = "";
         } else if (matchType === "similar") {
@@ -4863,8 +4971,8 @@ let rememberRawProducts:
             ).trim();
             actionResponse = closestName
               ? "I couldn't verify your image as the exact same design, but " + closestName +
-                " is the closest matching option currently available from our collection."
-              : "I couldn't verify your image as the exact same design, but this is the closest matching option available from our collection.";
+                " is the closest matching option currently available."
+              : "I couldn't verify your image as the exact same design, but this is the closest matching option available.";
           } else {
             actionResponse =
               "I couldn't verify the exact product in your image as a currently available store item.";
@@ -4891,15 +4999,8 @@ let rememberRawProducts:
           imageMatch = {
             matchType: remembered.matchType,
             exactProductId: remembered.exactProductId || null,
-            exactProduct: remembered.exactProduct || null,
+            exactProduct: null,
           };
-          if (
-            (remembered.matchType === "exact" || remembered.matchType === "high_confidence") &&
-            remembered.exactProduct &&
-            (!actionProductData || actionProductData.length === 0)
-          ) {
-            actionProductData = [remembered.exactProduct];
-          }
         }
       }
 
@@ -5074,9 +5175,7 @@ IMPORTANT ACTION RESPONSE RULES:
       // card already carries the correct URL. Use a short deterministic
       // message instead of letting the model refuse or fabricate a link.
       // This keeps the "View Product" button authoritative.
-      const isObjection = isObjectionOrAlternativeRequest(cleanMessage);
       isLinkRequest =
-        !isObjection &&
         (isExplicitProductLinkRequest(
           cleanMessage
         ) ||
@@ -5089,9 +5188,15 @@ IMPORTANT ACTION RESPONSE RULES:
            imageMatch.matchType === "no_match")
         );
 
-      if (isObjection) {
-        finalActionResponse =
-          "No problem — I can help you find something closer to your style. Would you prefer a different color, design, fabric, price range, or something with more or less embroidery?";
+      const isOrderAction =
+        actionRequest.action === "get_order_status" ||
+        actionRequest.action === "get_order_details";
+
+      const isHandoffAction =
+        actionRequest.action === "handoff_to_human";
+
+      if (isOrderAction || isHandoffAction) {
+        finalActionResponse = actionResponse;
       } else if (isSimilarImageResponse) {
         // Never attribute an alternative's URL or details to the uploaded
         // product. Keep the honest framing for both the image turn and any
@@ -5104,11 +5209,11 @@ IMPORTANT ACTION RESPONSE RULES:
           finalActionResponse =
             hasAlternatives
               ? "I couldn't verify the exact product in your image, so I don't have an exact link for it. " +
-                "These are similar options currently available from our collection:"
+                "These are similar options currently available:"
               : "I couldn't verify the exact product in your image as a currently available store item.";
         } else if (hasAlternatives) {
           finalActionResponse =
-            "I couldn't verify the exact product in your image, but here are similar options available from our collection:";
+            "I couldn't verify the exact product in your image, but here are similar options available in the store:";
         } else {
           finalActionResponse =
             "I couldn't verify the exact product in your image as a currently available store item.";
@@ -5125,11 +5230,24 @@ IMPORTANT ACTION RESPONSE RULES:
             actionProductData
           );
       } else {
-        finalActionResponse = await chatWithAI(
+        const aiActionComp = await chatWithAIWithUsage(
           cleanMessage ||
             "Please answer the customer's request using the supplied store data.",
           actionAIContext
         );
+        finalActionResponse = aiActionComp.text;
+
+        await recordAiUsage(supabaseAdmin, {
+          profileId,
+          conversationId: conversation?.id,
+          billingPeriod: currentBillingPeriod,
+          eventType: "chat_completion",
+          model: aiActionComp.model,
+          promptTokens: aiActionComp.usage.prompt_tokens,
+          completionTokens: aiActionComp.usage.completion_tokens,
+          success: true,
+          metadata: { type: "action" },
+        });
       }
       } catch (aiActionError) {
         console.error(
@@ -5169,7 +5287,12 @@ IMPORTANT ACTION RESPONSE RULES:
         )
         .trim();
 
-      if (!isDeterministicLinkResponse) {
+      const isOrderTrackingResponse =
+        (actionRequest.action === "get_order_status" ||
+          actionRequest.action === "get_order_details") &&
+        Boolean(actionResponse && /https?:\/\//i.test(actionResponse));
+
+      if (!isDeterministicLinkResponse && !isOrderTrackingResponse) {
         actionResponse = actionResponse
           .replace(
             /https?:\/\/[^\s<>"')]+/gi,
@@ -5212,33 +5335,12 @@ IMPORTANT ACTION RESPONSE RULES:
       // SAVE AI RESPONSE
       // =================================================
 
-      const {
-        error:
-          actionMessageError,
-      } =
-        await supabaseAdmin
-          .from(
-            "conversation_messages"
-          )
-          .insert({
-            conversation_id:
-              conversation.id,
-
-            sender:
-              "ai",
-
-            content:
-              actionResponse,
-          });
-
-      if (
-        actionMessageError
-      ) {
-        console.error(
-          "ACTION AI MESSAGE ERROR:",
-          actionMessageError
-        );
-      }
+      await saveMessageAndTouchConversation(
+        conversation.id,
+        "ai",
+        actionResponse,
+        "assistant"
+      );
 
       return NextResponse.json({
         success: true,
@@ -5337,10 +5439,22 @@ IMPORTANT ACTION RESPONSE RULES:
         number[];
 
       try {
-        embedding =
-          await createEmbedding(
+        const embeddingRes =
+          await createEmbeddingWithUsage(
             effectiveMessage
           );
+        embedding = embeddingRes.embedding;
+
+        await recordAiUsage(supabaseAdmin, {
+          profileId,
+          conversationId: conversation?.id,
+          billingPeriod: currentBillingPeriod,
+          eventType: "embedding",
+          model: embeddingRes.model,
+          promptTokens: embeddingRes.usage.prompt_tokens,
+          completionTokens: 0,
+          success: true,
+        });
       } catch (
         embeddingError
       ) {
@@ -5456,6 +5570,49 @@ IMPORTANT ACTION RESPONSE RULES:
             }ms`
           );
         }
+
+        // -------------------------------------------------
+        // HIGH-INTENT CONTACT HYBRID RETRIEVAL BOOST
+        // -------------------------------------------------
+        const isContactIntent =
+          /contact|phone|telephone|mobile|whatsapp|email|e-mail|address|location|store|stores|customer service|customer care|support|opening hours|working hours|how can i contact|where are you located|how do i contact/i.test(
+            effectiveMessage
+          );
+
+        if (isContactIntent) {
+          try {
+            const { data: directContactPages } = await supabaseAdmin
+              .from("knowledge_pages")
+              .select("id, page_url, title, content, page_type")
+              .eq("user_id", profileId)
+              .or("page_type.eq.contact,content.ilike.%CONTACT INFORMATION%,content.ilike.%customercare%,page_url.ilike.%contact%,page_url.ilike.%store-locator%")
+              .limit(3);
+
+            if (directContactPages && directContactPages.length > 0) {
+              const formattedDirect = directContactPages.map((p: any) => ({
+                id: p.id,
+                source_url: p.page_url,
+                title: p.title,
+                content: p.content,
+                similarity: 0.99,
+                is_contact_boost: true,
+              }));
+
+              const directUrls = new Set(formattedDirect.map((d: any) => d.source_url));
+              const remainingMatches = knowledgeMatches.filter((m: any) => {
+                const url = m.source_url || m.url || m.page_url || "";
+                return !directUrls.has(url);
+              });
+
+              const nonPrivacy = remainingMatches.filter((m: any) => !String(m.source_url || m.url || "").includes("privacy"));
+              const privacy = remainingMatches.filter((m: any) => String(m.source_url || m.url || "").includes("privacy"));
+
+              knowledgeMatches = [...formattedDirect, ...nonPrivacy, ...privacy];
+            }
+          } catch (boostErr) {
+            console.warn("Contact retrieval boost error:", boostErr);
+          }
+        }
       }
     } else {
       console.log(
@@ -5557,12 +5714,27 @@ ${buildProfessionalAIContext()}
     // Knowledge retrieval is grounding data, not a prerequisite for calling
     // the model. This allows greetings, clarifications, general questions,
     // and unsupported questions to receive natural responses too.
-    aiResponse =
-      await chatWithAI(
+    const aiComp =
+      await chatWithAIWithUsage(
         cleanMessage ||
           "Please identify the product shown in the uploaded image.",
-        finalContext
+        finalContext,
+        {
+          websiteContext: websiteContextText,
+        }
       );
+    aiResponse = aiComp.text;
+
+    await recordAiUsage(supabaseAdmin, {
+      profileId,
+      conversationId: conversation?.id,
+      billingPeriod: currentBillingPeriod,
+      eventType: "chat_completion",
+      model: aiComp.model,
+      promptTokens: aiComp.usage.prompt_tokens,
+      completionTokens: aiComp.usage.completion_tokens,
+      success: true,
+    });
 
     console.log(
       `AI TIME: ${
@@ -5617,33 +5789,12 @@ ${buildProfessionalAIContext()}
     // SAVE AI RESPONSE
     // =================================================
 
-    const {
-      error:
-        aiMessageError,
-    } =
-      await supabaseAdmin
-        .from(
-          "conversation_messages"
-        )
-        .insert({
-          conversation_id:
-            conversation.id,
-
-          sender:
-            "ai",
-
-          content:
-            aiResponse,
-        });
-
-    if (
-      aiMessageError
-    ) {
-      console.error(
-        "AI MESSAGE ERROR:",
-        aiMessageError
-      );
-    }
+    await saveMessageAndTouchConversation(
+      conversation.id,
+      "ai",
+      aiResponse,
+      "assistant"
+    );
 
     // =================================================
     // SUCCESS
@@ -5698,6 +5849,12 @@ ${buildProfessionalAIContext()}
       success:
         true,
 
+      conversationId:
+        String(conversation.id),
+
+      status:
+        conversation.status || "ai_active",
+
       response:
         aiResponse,
 
@@ -5746,12 +5903,20 @@ ${buildProfessionalAIContext()}
 
       collectionUrl:
         null,
-    }, {
-      headers: corsHeaders,
     });
   } catch (
     error: any
   ) {
+    // Reconcile / release reserved quota if request failed
+    if (isQuotaReserved && resolvedProfileId && currentBillingPeriod) {
+      try {
+        await reconcileMerchantQuota(supabaseAdmin, resolvedProfileId, currentBillingPeriod);
+      } catch (recErr) {
+        console.error("FAILED TO RECONCILE MERCHANT QUOTA:", recErr);
+      }
+      isQuotaReserved = false;
+    }
+
     const totalTime =
       Date.now() -
       requestStartedAt;
@@ -5790,9 +5955,12 @@ ${buildProfessionalAIContext()}
       },
       {
         status: 500,
-        headers: typeof corsHeaders !== "undefined" ? corsHeaders : {},
       }
     );
+  } finally {
+    if (lockKey) {
+      await releaseRequestLock(supabaseAdmin, lockKey);
+    }
   }
 }
 
@@ -6436,7 +6604,7 @@ function parseResponseProductPrice(
   const match =
     value
       .replace(/,/g, "")
-      .match(/-?\\d+(?:\\.\\d+)?/);
+      .match(/-?\d+(?:\.\d+)?/);
 
   if (!match) {
     return undefined;
@@ -6453,93 +6621,11 @@ function parseResponseProductPrice(
 function extractRequestedPriceRange(
   query: string
 ) {
-  const text =
-    String(query || "")
-      .toLowerCase()
-      .replace(/,/g, "")
-      .replace(/\\s+/g, " ")
-      .trim();
-
-  if (!text) {
-    return {
-      min: undefined,
-      max: undefined,
-      explicit: false,
-    };
-  }
-
-  let match =
-    text.match(
-      /\\bbetween\\s+(\\d+(?:\\.\\d+)?)\\s+(?:and|to|-)\\s+(\\d+(?:\\.\\d+)?)\\b/
-    );
-
-  if (match) {
-    const first = Number(match[1]);
-    const second = Number(match[2]);
-
-    return {
-      min: Math.min(first, second),
-      max: Math.max(first, second),
-      explicit:
-        Number.isFinite(first) &&
-        Number.isFinite(second),
-    };
-  }
-
-  match =
-    text.match(
-      /\\b(\\d+(?:\\.\\d+)?)\\s*(?:to|-)\\s*(\\d+(?:\\.\\d+)?)\\b/
-    );
-
-  if (match) {
-    const first = Number(match[1]);
-    const second = Number(match[2]);
-
-    return {
-      min: Math.min(first, second),
-      max: Math.max(first, second),
-      explicit:
-        Number.isFinite(first) &&
-        Number.isFinite(second),
-    };
-  }
-
-  match =
-    text.match(
-      /\b(?:under|below|less than|max(?:imum)?|up to)\s+(?:rs\.?|pkr|Ã¢â€šÂ¨|\$|usd|Ã¢â€šÂ¬|eur|Ã‚Â£|gbp)\s*(\d+(?:\.\d+)?)\b/
-    );
-
-  if (match) {
-    const max = Number(match[1]);
-
-    return {
-      min: undefined,
-      max,
-      explicit:
-        Number.isFinite(max),
-    };
-  }
-
-  match =
-    text.match(
-      /\b(?:over|above|more than|at least|from)\s+(?:rs\.?|pkr|Ã¢â€šÂ¨|\$|usd|Ã¢â€šÂ¬|eur|Ã‚Â£|gbp)\s*(\d+(?:\.\d+)?)\b/
-    );
-
-  if (match) {
-    const min = Number(match[1]);
-
-    return {
-      min,
-      max: undefined,
-      explicit:
-        Number.isFinite(min),
-    };
-  }
-
+  const constraint = parsePriceConstraint(query);
   return {
-    min: undefined,
-    max: undefined,
-    explicit: false,
+    min: constraint.min,
+    max: constraint.max,
+    explicit: constraint.explicit,
   };
 }
 
@@ -6552,11 +6638,7 @@ function filterProductsByRequestedPrice(
     return [];
   }
 
-  const range =
-    extractRequestedPriceRange(
-      query
-    );
-
+  const range = extractRequestedPriceRange(query);
   const min =
     typeof analysis?.priceMin === "number"
       ? analysis.priceMin
@@ -6568,9 +6650,7 @@ function filterProductsByRequestedPrice(
       : range.max;
 
   const explicit =
-    Boolean(
-      analysis?.hasPriceRange
-    ) ||
+    Boolean(analysis?.hasPriceRange) ||
     range.explicit;
 
   if (
@@ -6583,40 +6663,13 @@ function filterProductsByRequestedPrice(
     return products;
   }
 
-  return products.filter(
-    (product) => {
-      const price =
-        parseResponseProductPrice(
-          product?.price ??
-            product?.min_price ??
-            product?.amount ??
-            product?.price_amount
-        );
+  const constraint: PriceConstraint = {
+    min,
+    max,
+    explicit: true,
+  };
 
-      // Never claim an unpriced product satisfies an explicit budget.
-      if (
-        price === undefined
-      ) {
-        return false;
-      }
-
-      if (
-        min !== undefined &&
-        price < min
-      ) {
-        return false;
-      }
-
-      if (
-        max !== undefined &&
-        price > max
-      ) {
-        return false;
-      }
-
-      return true;
-    }
-  );
+  return products.filter((product) => matchesPriceConstraint(product, constraint));
 }
 
 
@@ -6719,6 +6772,15 @@ function detectResponseProductIntent(message: string) {
     return "general" as const;
   }
 
+  const isContactQuestion =
+    /\b(whatsapp|wa\.me|phone|tel|telephone|cell|call|mobile|email|e-mail|mail|contact|address|located|location|hours|timings|timing|opening hours|store locator|branches|branch)\b/i.test(
+      text
+    );
+
+  if (isContactQuestion) {
+    return "general" as const;
+  }
+
   // ---------------------------------------------------
   // CATALOG / STORE DISCOVERY
   // ---------------------------------------------------
@@ -6764,30 +6826,20 @@ function detectResponseProductIntent(message: string) {
   // CATEGORY / PRODUCT SEARCH
   // ---------------------------------------------------
   const productCategoryWords = [
-    // Apparel & Clothing
     "dress", "dresses",
     "shirt", "shirts",
-    "t shirt", "t shirts", "tee", "tees",
-    "top", "tops",
-    "hoodie", "hoodies", "sweater", "sweaters",
-    "jacket", "jackets", "coat", "coats",
-    "pants", "jeans", "trousers", "shorts", "skirt", "skirts",
-    "suit", "suits", "outfit", "outfits",
-    "clothing", "clothes", "apparel",
-    "lawn", "chiffon", "silk", "cotton", "linen", "unstitched", "pret",
+    "t shirt", "t shirts",
+    "hoodie", "hoodies",
+    "shoe", "shoes",
+    "jacket", "jackets",
+    "pants", "jeans",
+    "bag", "bags",
+    "cap", "caps",
+    "suit", "suits",
+    "lawn", "chiffon", "cambric",
+    "shalwar", "kameez", "dupatta",
+    "outfit", "outfits",
     "2 pcs", "3 pcs",
-    // Footwear
-    "shoe", "shoes", "sneaker", "sneakers", "boot", "boots", "heel", "heels", "sandal", "sandals", "footwear",
-    // Bags & Accessories
-    "bag", "bags", "handbag", "handbags", "backpack", "backpacks", "tote", "purse", "wallet", "wallets",
-    "watch", "watches", "belt", "belts", "cap", "caps", "hat", "hats", "jewelry",
-    // Electronics & Gadgets
-    "phone", "phones", "laptop", "laptops", "headphone", "headphones", "earbuds", "speaker", "speakers", "charger",
-    // Home & Living
-    "furniture", "chair", "chairs", "table", "tables", "sofa", "sofas", "couch", "bed", "desk", "lamp",
-    // Beauty & Skincare
-    "skincare", "makeup", "lipstick", "perfume", "fragrance", "serum", "lotion", "cream",
-    // General
     "product", "products",
     "item", "items",
   ];
@@ -7205,15 +7257,3 @@ function broadenedSearchQuery(message: string): string {
   const result = Array.from(new Set(kept)).join(" ");
   return result || "products";
 }
-
-
-
-
-
-
-
-
-
-
-
-

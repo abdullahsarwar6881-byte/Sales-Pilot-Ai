@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { shopifyFetch } from "@/lib/shopify/client";
 
 type Product = {
   id: string;
@@ -144,7 +145,7 @@ export default function ShopifyTestPage() {
     setStatus("Connecting to Shopify...");
 
     try {
-      const response = await fetch(
+      const response = await shopifyFetch(
         "/api/shopify/products",
         {
           method: "GET",
@@ -239,7 +240,7 @@ export default function ShopifyTestPage() {
     );
 
     try {
-      const response = await fetch(
+      const response = await shopifyFetch(
         "/api/shopify/orders",
         {
           method: "GET",
@@ -318,6 +319,55 @@ export default function ShopifyTestPage() {
   }
 
   // ==================================================
+  // SYNC SHOPIFY PRODUCTS ONLY
+  // ==================================================
+
+  async function syncShopifyProductsOnly() {
+    console.log("SHOPIFY PRODUCT SYNC STARTED");
+
+    setSyncLoading(true);
+    setSyncError("");
+    setSyncData(null);
+    setSyncStatus("Synchronizing Shopify products with cursor pagination...");
+
+    try {
+      const response = await shopifyFetch("/api/shopify/products/sync", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+
+      console.log("PRODUCT SYNC HTTP STATUS:", response.status);
+
+      const result: SyncResponse = await response.json();
+
+      console.log("SHOPIFY PRODUCT SYNC RESPONSE:", result);
+
+      setSyncData(result);
+
+      if (!response.ok || !result.success) {
+        setSyncStatus("Product synchronization failed.");
+        setSyncError(result.error || "Shopify product sync failed.");
+        return;
+      }
+
+      setSyncStatus(
+        result.message || "Shopify products synchronized successfully."
+      );
+    } catch (err) {
+      console.error("SHOPIFY PRODUCT SYNC ERROR:", err);
+      setSyncStatus("Product sync failed.");
+      setSyncError(
+        err instanceof Error ? err.message : "Unknown error during product sync."
+      );
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  // ==================================================
   // SYNC SHOPIFY DATA TO SUPABASE
   // ==================================================
 
@@ -334,10 +384,10 @@ export default function ShopifyTestPage() {
     );
 
     try {
-      const response = await fetch(
+      const response = await shopifyFetch(
         "/api/shopify/sync",
         {
-          method: "GET",
+          method: "POST",
           headers: {
             Accept: "application/json",
           },
@@ -489,7 +539,20 @@ export default function ShopifyTestPage() {
               : "Test Shopify Orders"}
           </button>
 
-          {/* Sync */}
+          {/* Sync Products Only */}
+
+          <button
+            type="button"
+            onClick={syncShopifyProductsOnly}
+            disabled={syncLoading}
+            className="rounded-xl bg-indigo-600 px-8 py-4 text-lg font-semibold text-white shadow-md transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {syncLoading
+              ? "Syncing Products..."
+              : "Sync Products (Cursor Pagination)"}
+          </button>
+
+          {/* Sync All */}
 
           <button
             type="button"
@@ -499,7 +562,7 @@ export default function ShopifyTestPage() {
           >
             {syncLoading
               ? "Syncing Shopify..."
-              : "Sync Shopify to Supabase"}
+              : "Sync All to Supabase"}
           </button>
         </div>
 

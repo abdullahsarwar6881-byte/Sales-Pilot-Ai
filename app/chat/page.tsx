@@ -61,24 +61,10 @@ export default function ChatPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError) {
-          console.error(
-            "AUTH USER ERROR:",
-            userError
-          );
-
-          setProfileError(
-            "Unable to load your account."
-          );
-
-          return;
-        }
-
-        if (!user) {
+        if (userError || !user) {
           setProfileError(
             "You are not logged in. Please log in first."
           );
-
           return;
         }
 

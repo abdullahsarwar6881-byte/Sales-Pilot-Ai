@@ -5,11 +5,20 @@ export async function getCurrentSubscription() {
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: authData,
+    error: userError,
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error("Unauthorized");
+  const user = authData?.user;
+
+  if (userError || !user) {
+    return {
+      userId: null,
+      planId: "starter" as PlanId,
+      status: "trialing",
+      plan: PLANS.starter,
+      subscription: null,
+    };
   }
 
   const { data: subscription, error } = await supabase

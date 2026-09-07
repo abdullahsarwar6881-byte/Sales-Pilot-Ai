@@ -1,34 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authenticateShopifyRequest } from "@/lib/shopify/auth";
-
-const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!) {
-    products(first: $first) {
-      nodes {
-        id
-        title
-        handle
-        description
-        status
-
-        variants(first: 20) {
-          nodes {
-            id
-            title
-            price
-            inventoryQuantity
-          }
-        }
-      }
-
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-  }
-`;
+import { SHOPIFY_PRODUCTS_QUERY } from "@/lib/shopify/products";
 
 export async function GET(request: Request) {
   try {
@@ -41,6 +14,12 @@ export async function GET(request: Request) {
       accessToken,
       scope,
     } = await authenticateShopifyRequest(request);
+
+    // Extract optional pagination search params
+    const url = new URL(request.url);
+    const firstParam = parseInt(url.searchParams.get("first") || "50", 10);
+    const first = isNaN(firstParam) || firstParam <= 0 ? 50 : Math.min(firstParam, 100);
+    const after = url.searchParams.get("after") || null;
 
     // --------------------------------------------
     // 2. Call Shopify Admin GraphQL API
@@ -57,9 +36,10 @@ export async function GET(request: Request) {
         },
 
         body: JSON.stringify({
-          query: PRODUCTS_QUERY,
+          query: SHOPIFY_PRODUCTS_QUERY,
           variables: {
-            first: 20,
+            first,
+            after,
           },
         }),
 

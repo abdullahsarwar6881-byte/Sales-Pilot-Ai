@@ -1,1195 +1,557 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authenticateUser, createUserClient, getAdminClient } from "@/lib/supabase/serverAuth";
 import { createEmbeddings } from "@/lib/ai/embeddings";
-import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
-import { classifyContent } from "@/lib/ai/classifyContent";
-import { detectPageType } from "@/lib/crawler/detectPageType";
-import { closeBrowser } from "@/lib/browser/browser";
+import { crawlWebsiteDetailed, type CrawledPage } from "@/lib/crawler/crawlWebsite";
+import { normalizeUrl } from "@/lib/crawler/normalizeUrl";
 import { upsertProductVisualIndex } from "@/lib/products/visualIndex";
 
 // =====================================================
 // CONFIGURATION
 // =====================================================
 
-// Maximum number of pages Sales Pilot will process
-// during one website crawl.
-//
-// Keep this here as the default product limit.
-// The crawler itself should also enforce the limit.
-const DEFAULT_MAX_PAGES = 60;
-
-// Maximum chunks generated from one page.
-// This protects the system from extremely large pages.
+const DEFAULT_MAX_PAGES = 500;
+const HARD_MAX_PAGES = 1000;
 const MAX_CHUNKS_PER_PAGE = 50;
+const DB_PAGE_BATCH_SIZE = 25;
+const DB_CHUNK_BATCH_SIZE = 100;
+const EMBEDDING_CONCURRENCY = 4;
 
-// =====================================================
-// NORMALIZE URL
-// =====================================================
-
-function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-
-    // Remove fragments.
-    parsed.hash = "";
-
-    // Remove query parameters.
-    //
-    // This prevents URLs such as:
-    //
-    // /product?id=1
-    // /product?id=2
-    //
-    // from becoming separate pages.
-    parsed.search = "";
-
-    let cleanUrl = parsed.toString();
-
-    // Remove trailing slash.
-    if (cleanUrl.endsWith("/")) {
-      cleanUrl = cleanUrl.slice(0, -1);
-    }
-
-    // Remove .md when present.
-    if (cleanUrl.endsWith(".md")) {
-      cleanUrl = cleanUrl.replace(/\.md$/, "");
-    }
-
-    return cleanUrl;
-  } catch {
-    return url;
-  }
-}
-
-// =====================================================
-// SPLIT TEXT
-// =====================================================
-
-function splitText(
-  text: string,
-  size = 1200
-): string[] {
-  if (!text) {
-    return [];
-  }
-
+function splitText(text: string, size = 1200): string[] {
+  if (!text) return [];
   const chunks: string[] = [];
-
-  for (
-    let i = 0;
-    i < text.length;
-    i += size
-  ) {
-    chunks.push(
-      text.slice(i, i + size)
-    );
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
   }
-
-  return chunks.slice(
-    0,
-    MAX_CHUNKS_PER_PAGE
-  );
+  return chunks.slice(0, MAX_CHUNKS_PER_PAGE);
 }
 
 // =====================================================
-// SAFE PAGE TYPE
+// POST /api/crawl
 // =====================================================
 
-function normalizePageType(
-  pageType: unknown
-): string {
-  if (
-    typeof pageType !== "string" ||
-    !pageType.trim()
-  ) {
-    return "other";
-  }
+export async function POST(req: Request) {
+  const requestStart = performance.now();
 
-  return pageType.trim().toLowerCase();
-}
-
-// =====================================================
-// POST
-// =====================================================
-
-export async function POST(
-  req: Request
-) {
-  const requestStart =
-    Date.now();
-
-  let crawlJobId: string | null =
-    null;
-
-  let knowledgeUrlId: string | null =
-    null;
+  let crawlJobId: string | null = null;
+  let knowledgeUrlId: string | null = null;
+  const adminClient = getAdminClient();
 
   try {
-    // =================================================
-    // REQUEST BODY
-    // =================================================
-
-    const body =
-      await req.json();
-
+    const body = await req.json();
     const {
       url,
-      knowledgeUrlId:
-        requestKnowledgeUrlId,
-      crawlJobId:
-        requestCrawlJobId,
-      maxPages,
+      knowledgeUrlId: requestKnowledgeUrlId,
+      crawlJobId: requestCrawlJobId,
+      maxPages: requestMaxPages,
+      concurrency: requestConcurrency,
     } = body;
 
-    crawlJobId =
-      requestCrawlJobId ||
-      null;
-
-    knowledgeUrlId =
-      requestKnowledgeUrlId ||
-      null;
-
-    // =================================================
-    // VALIDATION
-    // =================================================
-
-    if (
-      !url ||
-      !knowledgeUrlId ||
-      !crawlJobId
-    ) {
+    if (!url) {
       return NextResponse.json(
-        {
-          error:
-            "Missing URL, knowledge URL ID, or crawl job ID",
-        },
-        {
-          status: 400,
-        }
+        { error: "Missing website URL" },
+        { status: 400 }
       );
     }
 
-    // =================================================
-    // AUTHENTICATION
-    // =================================================
+    const normalizedTargetUrl = normalizeUrl(url);
+    if (!normalizedTargetUrl) {
+      return NextResponse.json(
+        { error: "Invalid website URL format" },
+        { status: 400 }
+      );
+    }
 
-    const supabase =
-      await createClient();
-
-    const {
-      data: {
-        user,
-      },
-    } =
-      await supabase.auth.getUser();
+    // Authenticate server-side
+    const auth = await authenticateUser(req);
+    const user = auth?.user;
 
     if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            "Unauthorized",
-        },
-        {
-          status: 401,
-        }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // =================================================
-    // PAGE LIMIT
-    // =================================================
-    //
-    // We allow a caller to request a lower limit,
-    // but never allow more than 60 from this route.
-    //
-    // Example:
-    //
-    // maxPages: 20 → 20
-    // maxPages: 60 → 60
-    // maxPages: 500 → 60
-    //
-    // =================================================
+    const supabase = auth.token ? createUserClient(auth.token) : adminClient;
 
-    const requestedMaxPages =
-      Number(maxPages);
+    // Check for recent genuinely active crawl job for this user to prevent duplicates
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: existingActiveJobs } = await adminClient
+      .from("crawl_jobs")
+      .select("*")
+      .eq("user_id", user.id)
+      .in("status", ["pending", "discovering", "crawling", "processing"])
+      .gte("created_at", thirtyMinutesAgo)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    const crawlMaxPages =
-      Number.isFinite(
-        requestedMaxPages
-      )
-        ? Math.min(
-            Math.max(
-              Math.floor(
-                requestedMaxPages
-              ),
-              1
-            ),
-            DEFAULT_MAX_PAGES
-          )
-        : DEFAULT_MAX_PAGES;
+    if (existingActiveJobs && existingActiveJobs.length > 0) {
+      const activeJob = existingActiveJobs[0];
+      if (!requestCrawlJobId || requestCrawlJobId !== activeJob.id) {
+        console.log(`[CRAWL API] User ${user.id} has active crawl job ${activeJob.id}`);
+        return NextResponse.json({
+          success: true,
+          activeJob,
+          message: "A crawl is already in progress for this account.",
+        });
+      }
+    }
 
-    console.log(
-      "================================="
-    );
+    crawlJobId = requestCrawlJobId || null;
+    knowledgeUrlId = requestKnowledgeUrlId || null;
 
-    console.log(
-      "STARTING WEBSITE CRAWL"
-    );
+    // If crawlJobId wasn't passed, create one using guaranteed schema
+    if (!crawlJobId) {
+      const { data: newJob, error: newJobErr } = await adminClient
+        .from("crawl_jobs")
+        .insert({
+          user_id: user.id,
+          url: normalizedTargetUrl,
+          status: "pending",
+          total_pages: DEFAULT_MAX_PAGES,
+          pages_completed: 0,
+          estimated_seconds: 0,
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-    console.log(
-      "URL:",
-      url
-    );
+      if (newJobErr || !newJob) {
+        console.error("[CRAWL API] Job creation error:", {
+          message: newJobErr?.message,
+          code: newJobErr?.code,
+        });
+        throw new Error(newJobErr?.message || "Failed to create crawl job");
+      }
+      crawlJobId = newJob.id;
+    }
 
-    console.log(
-      "MAX PAGES:",
-      crawlMaxPages
-    );
+    // Ensure knowledge_urls record exists
+    if (!knowledgeUrlId) {
+      const { data: kUrl } = await adminClient
+        .from("knowledge_urls")
+        .insert({
+          user_id: user.id,
+          url: normalizedTargetUrl,
+          status: "scanning",
+        })
+        .select()
+        .single();
 
-    console.log(
-      "USER:",
-      user.id
-    );
+      if (kUrl) {
+        knowledgeUrlId = kUrl.id;
+      }
+    }
 
-    console.log(
-      "================================="
-    );
+    // Determine max pages
+    const parsedMaxPages = Number(requestMaxPages);
+    const crawlMaxPages = Number.isFinite(parsedMaxPages) && parsedMaxPages > 0
+      ? Math.min(Math.floor(parsedMaxPages), HARD_MAX_PAGES)
+      : DEFAULT_MAX_PAGES;
 
-    // =================================================
-    // CRAWL WEBSITE
-    // =================================================
+    const parsedConcurrency = Number(requestConcurrency);
+    const crawlConcurrency = Number.isFinite(parsedConcurrency) && parsedConcurrency > 0
+      ? Math.min(Math.floor(parsedConcurrency), 25)
+      : undefined;
 
-    const crawlStart =
-      Date.now();
+    console.log(`[CRAWL API] Starting crawl for ${normalizedTargetUrl} (Job: ${crawlJobId}, User: ${user.id}, MaxPages: ${crawlMaxPages})`);
 
-    const pages =
-      await crawlWebsite(
-        url,
-        {
-          maxPages:
-            crawlMaxPages,
-        }
-      );
-
-    const crawlDuration =
-      (Date.now() -
-        crawlStart) /
-      1000;
-
-    // =================================================
-    // SAFETY LIMIT
-    // =================================================
-    //
-    // Even if the crawler accidentally returns more
-    // pages, this route will never process more than
-    // the configured maximum.
-    //
-    // =================================================
-
-    const pagesToProcess =
-      Array.isArray(pages)
-        ? pages.slice(
-            0,
-            crawlMaxPages
-          )
-        : [];
-
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      `WEBSITE CRAWLING TOOK: ${crawlDuration.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `WEBSITE CRAWLING TOOK: ${(
-        crawlDuration / 60
-      ).toFixed(2)} minutes`
-    );
-
-    console.log(
-      "Pages returned:",
-      pages.length
-    );
-
-    console.log(
-      "Pages to process:",
-      pagesToProcess.length
-    );
-
-    console.log(
-      "================================="
-    );
-
-    // =================================================
-    // UPDATE CRAWL JOB
-    // =================================================
-
-    await supabase
+    // Update job to "discovering"
+    await adminClient
       .from("crawl_jobs")
       .update({
-        total_pages:
-          pagesToProcess.length,
-
-        pages_completed:
-          0,
-
-        started_at:
-          new Date().toISOString(),
-
-        current_url:
-          null,
-
-        status:
-          "processing",
+        started_at: new Date().toISOString(),
+        status: "discovering",
+        url: normalizedTargetUrl,
+        total_pages: 0,
+        pages_completed: 0,
+        estimated_seconds: 0,
+        current_url: normalizedTargetUrl,
+        updated_at: new Date().toISOString(),
       })
-      .eq(
-        "id",
-        crawlJobId
-      );
+      .eq("id", crawlJobId);
 
-    // =================================================
-    // METRICS
-    // =================================================
+    // Track progress throttle and smoothed moving average ETA
+    let lastProgressUpdate = 0;
+    const progressThrottleMs = 1000;
+    const crawlStartTime = performance.now();
+    let smoothedRemainingSec: number | null = null;
+    let recentTimings: number[] = [];
+    let lastProcessedCount = 0;
+    let lastTimestamp = crawlStartTime;
 
-    let totalChunks = 0;
+    // -------------------------------------------------
+    // 1. CONCURRENT CRAWL
+    // -------------------------------------------------
+    const crawlResult = await crawlWebsiteDetailed(normalizedTargetUrl, {
+      maxPages: crawlMaxPages,
+      concurrency: crawlConcurrency,
+      onProgress: async (progress) => {
+        const now = performance.now();
+        const elapsedSec = (now - crawlStartTime) / 1000;
 
-    let completedPages = 0;
+        // Calculate timing window for recent pages
+        if (progress.crawled > lastProcessedCount) {
+          const deltaPages = progress.crawled - lastProcessedCount;
+          const deltaSec = (now - lastTimestamp) / 1000;
+          const rateForDelta = deltaSec / Math.max(deltaPages, 1);
+          recentTimings.push(rateForDelta);
+          if (recentTimings.length > 8) recentTimings.shift();
 
-    let totalEmbeddingSeconds =
-      0;
-
-    let totalClassificationSeconds =
-      0;
-
-    let totalPageProcessingSeconds =
-      0;
-
-    let skippedPages = 0;
-
-    // =================================================
-    // PROCESS EACH PAGE
-    // =================================================
-
-    for (
-      const crawledPage of
-        pagesToProcess
-    ) {
-      const pageStart =
-        Date.now();
-
-      completedPages++;
-
-      // =================================================
-      // BASIC PAGE VALIDATION
-      // =================================================
-
-      if (
-        !crawledPage ||
-        !crawledPage.url
-      ) {
-        skippedPages++;
-
-        console.log(
-          "Skipping invalid crawled page."
-        );
-
-        continue;
-      }
-
-      // =================================================
-      // CLEAN URL
-      // =================================================
-
-      const cleanUrl =
-        normalizeUrl(
-          crawledPage.url
-        );
-
-      // =================================================
-      // UPDATE PROGRESS
-      // =================================================
-
-      await supabase
-        .from("crawl_jobs")
-        .update({
-          pages_completed:
-            completedPages,
-
-          current_url:
-            cleanUrl,
-        })
-        .eq(
-          "id",
-          crawlJobId
-        );
-
-      console.log(
-        "---------------------------------"
-      );
-
-      console.log(
-        `PROCESSING PAGE ${completedPages}/${pagesToProcess.length}`
-      );
-
-      console.log(
-        "URL:",
-        cleanUrl
-      );
-
-      // =================================================
-      // DUPLICATE PROTECTION
-      // =================================================
-
-      const {
-        data:
-          existingPage,
-      } =
-        await supabase
-          .from(
-            "knowledge_pages"
-          )
-          .select(
-            "id"
-          )
-          .eq(
-            "user_id",
-            user.id
-          )
-          .eq(
-            "page_url",
-            cleanUrl
-          )
-          .maybeSingle();
-
-      if (
-        existingPage
-      ) {
-        skippedPages++;
-
-        console.log(
-          "Duplicate skipped:",
-          cleanUrl
-        );
-
-        continue;
-      }
-
-      // =================================================
-      // PAGE CONTENT VALIDATION
-      // =================================================
-
-      const pageContent =
-        typeof crawledPage.content ===
-        "string"
-          ? crawledPage.content.trim()
-          : "";
-
-      if (!pageContent) {
-        skippedPages++;
-
-        console.log(
-          "Empty page skipped:",
-          cleanUrl
-        );
-
-        continue;
-      }
-
-      // =================================================
-      // PAGE TYPE DETECTION
-      // =================================================
-
-      console.log(
-        "Detecting page type..."
-      );
-
-      const classificationStart =
-        Date.now();
-
-      let pageType =
-        normalizePageType(
-          detectPageType(
-            crawledPage.url,
-            crawledPage.title
-          )
-        );
-
-      // =================================================
-      // AI CLASSIFICATION FALLBACK
-      // =================================================
-
-      if (
-        pageType === "page"
-      ) {
-        console.log(
-          "Fast detector could not determine page type."
-        );
-
-        console.log(
-          "Using AI classifier..."
-        );
-
-        try {
-          pageType =
-            normalizePageType(
-              await classifyContent(
-                crawledPage.title,
-                pageContent
-              )
-            );
-        } catch (
-          classificationError
-        ) {
-          console.error(
-            "AI CLASSIFICATION ERROR:",
-            classificationError
-          );
-
-          pageType =
-            "other";
+          lastProcessedCount = progress.crawled;
+          lastTimestamp = now;
         }
 
-        console.log(
-          "AI Page Type:",
-          pageType
-        );
-      } else {
-        console.log(
-          `Fast page type detected: ${pageType}`
-        );
-      }
+        if (now - lastProgressUpdate > progressThrottleMs && crawlJobId) {
+          lastProgressUpdate = now;
 
-      const classificationDuration =
-        (Date.now() -
-          classificationStart) /
-        1000;
+          const totalDiscovered = Math.max(progress.discovered, 1);
+          const totalTarget = Math.min(totalDiscovered, crawlMaxPages);
+          const currentCrawled = progress.crawled;
 
-      totalClassificationSeconds +=
-        classificationDuration;
+          // Compute smoothed ETA
+          if (currentCrawled >= 2 && elapsedSec > 1) {
+            const overallRate = elapsedSec / currentCrawled;
+            const recentAvgRate = recentTimings.length > 0
+              ? recentTimings.reduce((a, b) => a + b, 0) / recentTimings.length
+              : overallRate;
 
-      console.log(
-        `CLASSIFICATION TOOK: ${classificationDuration.toFixed(
-          2
-        )} seconds`
-      );
+            const weightedRate = 0.7 * recentAvgRate + 0.3 * overallRate;
+            const remainingPages = Math.max(0, totalTarget - currentCrawled);
+            const rawRemainingSec = Math.round(remainingPages * weightedRate);
 
-      // =================================================
-      // STRUCTURED PRODUCT INFORMATION
-      // =================================================
-
-      if (
-        crawledPage.productData
-      ) {
-        console.log(
-          "Structured product detected:"
-        );
-
-        console.log({
-          name:
-            crawledPage
-              .productData
-              .name,
-
-          price:
-            Array.isArray(
-              crawledPage
-                .productData
-                .offers
-            )
-              ? crawledPage
-                  .productData
-                  .offers[0]
-                  ?.price
-              : crawledPage
-                  .productData
-                  .offers
-                  ?.price,
-
-          sku:
-            crawledPage
-              .productData
-              .sku,
-
-          brand:
-            typeof crawledPage
-              .productData
-              .brand ===
-            "string"
-              ? crawledPage
-                  .productData
-                  .brand
-              : crawledPage
-                  .productData
-                  .brand
-                  ?.name,
-        });
-      }
-
-      // =================================================
-      // SAVE PAGE
-      // =================================================
-
-      const {
-        data: page,
-        error:
-          pageError,
-      } =
-        await supabase
-          .from(
-            "knowledge_pages"
-          )
-          .insert({
-            user_id:
-              user.id,
-
-            knowledge_url_id:
-              knowledgeUrlId,
-
-            page_url:
-              cleanUrl,
-
-            title:
-              crawledPage.title ||
-              cleanUrl,
-
-            content:
-              pageContent,
-
-            page_type:
-              pageType,
-          })
-          .select()
-          .single();
-
-      if (
-        pageError ||
-        !page
-      ) {
-        console.error(
-          "PAGE ERROR:",
-          pageError
-        );
-
-        skippedPages++;
-
-        continue;
-      }
-
-      console.log(
-        "Page saved:",
-        page.id
-      );
-
-      // =================================================
-      // PRODUCT PAGE VISUAL INDEX (best-effort)
-      // =================================================
-      if (
-        pageType === "product" &&
-        crawledPage.images &&
-        crawledPage.images.length > 0
-      ) {
-        await upsertProductVisualIndex(
-          supabase,
-          {
-            id: page.id,
-            user_id: user.id,
-            productUrl: cleanUrl,
-            page_url: cleanUrl,
-            title: crawledPage.title || "",
-            images: crawledPage.images,
-            sku: crawledPage.productData?.sku || undefined,
-          },
-          {
-            userId: user.id,
-            source: "crawler",
+            if (smoothedRemainingSec === null) {
+              smoothedRemainingSec = rawRemainingSec;
+            } else {
+              smoothedRemainingSec = Math.round(0.6 * smoothedRemainingSec + 0.4 * rawRemainingSec);
+            }
           }
-        ).catch((e) => {
-          console.error(
-            "CRAWL PRODUCT VISUAL INDEX ERROR:",
-            e?.message || e
-          );
+
+          const currentStatus = progress.phase === "discovering" ? "discovering" : "crawling";
+          const currentDisplayUrl = progress.currentPageTitle
+            ? `${progress.currentPageTitle} (${progress.currentUrl || ""})`
+            : progress.currentUrl || null;
+
+          await adminClient
+            .from("crawl_jobs")
+            .update({
+              status: currentStatus,
+              total_pages: totalDiscovered,
+              pages_completed: currentCrawled,
+              current_url: currentDisplayUrl,
+              estimated_seconds: smoothedRemainingSec !== null ? Math.max(0, smoothedRemainingSec) : 0,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", crawlJobId);
+        }
+      },
+    });
+
+    const pages = crawlResult.pages;
+    const crawlDurationSec = crawlResult.metrics.durationSeconds;
+
+    console.log(`[CRAWL API] Crawl complete: ${pages.length} pages found in ${crawlDurationSec}s`);
+
+    // Update job status to "processing"
+    await adminClient
+      .from("crawl_jobs")
+      .update({
+        status: "processing",
+        total_pages: pages.length,
+        pages_completed: pages.length,
+        estimated_seconds: 5,
+        current_url: "Generating AI embeddings & semantic index...",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", crawlJobId);
+
+    // -------------------------------------------------
+    // 2. BATCH DEDUPLICATION & PAGE PERSISTENCE
+    // -------------------------------------------------
+    const dbWriteStart = performance.now();
+
+    // Clean up existing page records in batches of 100 URLs to allow fresh updates
+    const allNormalizedUrls = pages.map((p) => normalizeUrl(p.url) || p.url);
+
+    for (let i = 0; i < allNormalizedUrls.length; i += 100) {
+      const batchUrls = allNormalizedUrls.slice(i, i + 100);
+      const { data: existing } = await supabase
+        .from("knowledge_pages")
+        .select("id, page_url")
+        .eq("user_id", user.id)
+        .in("page_url", batchUrls);
+
+      if (existing && existing.length > 0) {
+        const existingIds = existing.map((r: any) => r.id);
+        await supabase.from("knowledge_chunks").delete().in("knowledge_page_id", existingIds);
+        await supabase.from("knowledge_pages").delete().in("id", existingIds);
+      }
+    }
+
+    // Filter out in-run duplicates and empty pages
+    const newPagesToInsert: Array<{
+      originalPage: CrawledPage;
+      cleanUrl: string;
+      pageType: string;
+    }> = [];
+
+    let skippedDuplicates = 0;
+    const seenInRun = new Set<string>();
+
+    for (const crawledPage of pages) {
+      const cleanUrl = normalizeUrl(crawledPage.url) || crawledPage.url;
+      if (!cleanUrl || seenInRun.has(cleanUrl)) {
+        skippedDuplicates++;
+        continue;
+      }
+      seenInRun.add(cleanUrl);
+
+      const content = crawledPage.content?.trim();
+      if (!content || content.length < 20) {
+        continue;
+      }
+
+      newPagesToInsert.push({
+        originalPage: crawledPage,
+        cleanUrl,
+        pageType: crawledPage.pageType || "page",
+      });
+    }
+
+    console.log(`[CRAWL API] Inserting ${newPagesToInsert.length} updated pages (${skippedDuplicates} in-run duplicates skipped)`);
+
+    // Bulk insert knowledge_pages in batches of DB_PAGE_BATCH_SIZE (25)
+    const insertedPages: Array<{
+      id: string;
+      cleanUrl: string;
+      pageType: string;
+      content: string;
+      originalPage: CrawledPage;
+    }> = [];
+
+    for (let i = 0; i < newPagesToInsert.length; i += DB_PAGE_BATCH_SIZE) {
+      const batch = newPagesToInsert.slice(i, i + DB_PAGE_BATCH_SIZE);
+      const pageRows = batch.map((item) => ({
+        user_id: user.id,
+        knowledge_url_id: knowledgeUrlId,
+        page_url: item.cleanUrl,
+        title: item.originalPage.title || item.cleanUrl,
+        content: item.originalPage.content,
+        page_type: item.pageType,
+      }));
+
+      const { data: createdPages, error: pageError } = await supabase
+        .from("knowledge_pages")
+        .insert(pageRows)
+        .select();
+
+      if (pageError || !createdPages) {
+        console.error("[CRAWL API] Page batch insert error:", {
+          message: pageError?.message,
+          code: pageError?.code,
+        });
+        continue;
+      }
+
+      for (let j = 0; j < createdPages.length; j++) {
+        insertedPages.push({
+          id: createdPages[j].id,
+          cleanUrl: batch[j].cleanUrl,
+          pageType: batch[j].pageType,
+          content: batch[j].originalPage.content,
+          originalPage: batch[j].originalPage,
         });
       }
 
-      // =================================================
-      // CREATE CHUNKS
-      // =================================================
+      // Best-effort visual indexing for product pages
+      for (const pageItem of batch) {
+        if (pageItem.pageType === "product" && pageItem.originalPage.images && pageItem.originalPage.images.length > 0) {
+          upsertProductVisualIndex(
+            supabase,
+            {
+              id: pageItem.cleanUrl,
+              user_id: user.id,
+              productUrl: pageItem.cleanUrl,
+              page_url: pageItem.cleanUrl,
+              title: pageItem.originalPage.title || "",
+              images: pageItem.originalPage.images,
+              sku: pageItem.originalPage.productData?.sku || undefined,
+            },
+            {
+              userId: user.id,
+              source: "crawler",
+            }
+          ).catch(() => {});
+        }
+      }
+    }
 
-      /*
-       * Product pages stay as one chunk.
-       *
-       * Other pages are split into chunks.
-       */
+    // -------------------------------------------------
+    // 3. BATCH CHUNKING & CHUNK PERSISTENCE
+    // -------------------------------------------------
+    const allChunkRows: Array<{
+      user_id: string;
+      knowledge_page_id: string;
+      source_url: string;
+      content: string;
+    }> = [];
 
-      const chunks =
-        pageType ===
-        "product"
-          ? [
-              pageContent,
-            ]
-          : splitText(
-              pageContent
-            );
+    for (const page of insertedPages) {
+      const textChunks = page.pageType === "product" ? [page.content] : splitText(page.content);
+      for (const chunk of textChunks) {
+        if (chunk.trim().length > 10) {
+          allChunkRows.push({
+            user_id: user.id,
+            knowledge_page_id: page.id,
+            source_url: page.cleanUrl,
+            content: chunk,
+          });
+        }
+      }
+    }
 
-      if (
-        chunks.length ===
-        0
-      ) {
-        console.log(
-          "No chunks generated."
-        );
+    console.log(`[CRAWL API] Inserting ${allChunkRows.length} chunks in bulk`);
 
+    const createdChunks: Array<{ id: string; content: string }> = [];
+
+    for (let i = 0; i < allChunkRows.length; i += DB_CHUNK_BATCH_SIZE) {
+      const batch = allChunkRows.slice(i, i + DB_CHUNK_BATCH_SIZE);
+      const { data: chunkData, error: chunkError } = await supabase
+        .from("knowledge_chunks")
+        .insert(batch)
+        .select("id, content");
+
+      if (chunkError || !chunkData) {
+        console.error("[CRAWL API] Chunk batch insert error:", {
+          message: chunkError?.message,
+          code: chunkError?.code,
+        });
         continue;
       }
 
-      console.log(
-        "Chunks generated:",
-        chunks.length
-      );
+      createdChunks.push(...chunkData);
+    }
 
-      // =================================================
-      // SAVE CHUNKS
-      // =================================================
+    const dbWriteSec = (performance.now() - dbWriteStart) / 1000;
+    console.log(`[CRAWL API] Database writes complete: ${insertedPages.length} pages, ${createdChunks.length} chunks in ${dbWriteSec.toFixed(2)}s`);
 
-      const chunkRows =
-        chunks.map(
-          (
-            chunk
-          ) => ({
-            user_id:
-              user.id,
+    // -------------------------------------------------
+    // 4. BATCHED OPENAI EMBEDDINGS PIPELINE
+    // -------------------------------------------------
+    const embeddingStart = performance.now();
+    let embeddingsGenerated = 0;
 
-            knowledge_page_id:
-              page.id,
-
-            source_url:
-              cleanUrl,
-
-            content:
-              chunk,
-          })
-        );
-
-      const {
-        data:
-          createdChunks,
-        error:
-          chunkError,
-      } =
-        await supabase
-          .from(
-            "knowledge_chunks"
-          )
-          .insert(
-            chunkRows
-          )
-          .select();
-
-      if (
-        chunkError
-      ) {
-        console.error(
-          "CHUNK ERROR:",
-          chunkError
-        );
-
-        continue;
-      }
-
-      if (
-        !createdChunks ||
-        createdChunks.length ===
-          0
-      ) {
-        console.error(
-          "No chunks were created."
-        );
-
-        continue;
-      }
-
-      console.log(
-        "Chunks created:",
-        createdChunks.length
-      );
-
-      totalChunks +=
-        createdChunks.length;
-
-      // =================================================
-      // CREATE EMBEDDINGS
-      // =================================================
-
-      console.log(
-        `Creating ${createdChunks.length} embeddings...`
-      );
-
-      const embeddingStart =
-        Date.now();
-
-      let embeddings: any[] =
-        [];
+    if (createdChunks.length > 0) {
+      console.log(`[CRAWL API] Generating embeddings for ${createdChunks.length} chunks using batched pipeline...`);
 
       try {
-        embeddings =
-          await createEmbeddings(
-            createdChunks.map(
-              (
-                chunk
-              ) =>
-                chunk.content
-            ),
-            3
-          );
-      } catch (
-        embeddingError
-      ) {
-        console.error(
-          "EMBEDDING ERROR:",
-          embeddingError
-        );
+        const chunkTexts = createdChunks.map((c) => c.content);
+        const embeddings = await createEmbeddings(chunkTexts, EMBEDDING_CONCURRENCY);
 
-        continue;
-      }
+        // Bulk update embeddings in Supabase
+        const updatePromises: Promise<any>[] = [];
 
-      const embeddingDuration =
-        (Date.now() -
-          embeddingStart) /
-        1000;
+        for (let i = 0; i < createdChunks.length; i++) {
+          const emb = embeddings[i];
+          if (!emb || emb.length === 0) continue;
 
-      totalEmbeddingSeconds +=
-        embeddingDuration;
-
-      console.log(
-        `EMBEDDINGS TOOK: ${embeddingDuration.toFixed(
-          2
-        )} seconds`
-      );
-
-      // =================================================
-      // SAVE EMBEDDINGS
-      // =================================================
-
-      for (
-        let i = 0;
-        i <
-        createdChunks.length;
-        i++
-      ) {
-        const chunk =
-          createdChunks[i];
-
-        const embedding =
-          embeddings[i];
-
-        if (
-          !embedding
-        ) {
-          console.error(
-            "Missing embedding for chunk:",
-            chunk.id
-          );
-
-          continue;
-        }
-
-        const {
-          error:
-            embeddingError,
-        } =
-          await supabase
-            .from(
-              "knowledge_chunks"
+          updatePromises.push(
+            Promise.resolve(
+              supabase
+                .from("knowledge_chunks")
+                .update({ embedding: emb })
+                .eq("id", createdChunks[i].id)
             )
-            .update({
-              embedding,
-            })
-            .eq(
-              "id",
-              chunk.id
-            );
-
-        if (
-          embeddingError
-        ) {
-          console.error(
-            "Embedding database error:",
-            embeddingError
           );
+
+          if (updatePromises.length >= 25) {
+            await Promise.all(updatePromises.splice(0, updatePromises.length));
+          }
         }
+
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
+        }
+
+        embeddingsGenerated = embeddings.filter(Boolean).length;
+      } catch (embErr: any) {
+        console.error("[CRAWL API] Batch embedding generation error (pages still preserved):", {
+          message: embErr?.message,
+        });
       }
-
-      // =================================================
-      // PAGE TIMING
-      // =================================================
-
-      const pageDuration =
-        (Date.now() -
-          pageStart) /
-        1000;
-
-      totalPageProcessingSeconds +=
-        pageDuration;
-
-      console.log(
-        `PAGE ${completedPages}/${pagesToProcess.length} TOOK: ${pageDuration.toFixed(
-          2
-        )} seconds`
-      );
-
-      console.log(
-        `Page ${completedPages}/${pagesToProcess.length} completed.`
-      );
     }
 
-    // =================================================
-    // MARK KNOWLEDGE URL COMPLETED
-    // =================================================
+    const embeddingSec = (performance.now() - embeddingStart) / 1000;
+    console.log(`[CRAWL API] Embeddings complete: ${embeddingsGenerated} created in ${embeddingSec.toFixed(2)}s`);
 
-    await supabase
-      .from(
-        "knowledge_urls"
-      )
+    // -------------------------------------------------
+    // 5. FINALIZE STATUS
+    // -------------------------------------------------
+    if (knowledgeUrlId) {
+      await adminClient
+        .from("knowledge_urls")
+        .update({ status: "completed" })
+        .eq("id", knowledgeUrlId);
+    }
+
+    const totalDurationSec = (performance.now() - requestStart) / 1000;
+
+    await adminClient
+      .from("crawl_jobs")
       .update({
-        status:
-          "completed",
+        status: "completed",
+        pages_completed: insertedPages.length,
+        total_pages: insertedPages.length,
+        estimated_seconds: 0,
+        finished_at: new Date().toISOString(),
+        current_url: null,
+        updated_at: new Date().toISOString(),
       })
-      .eq(
-        "id",
-        knowledgeUrlId
-      );
+      .eq("id", crawlJobId);
 
-    // =================================================
-    // MARK CRAWL JOB COMPLETED
-    // =================================================
-
-    await supabase
-      .from(
-        "crawl_jobs"
-      )
-      .update({
-        status:
-          "completed",
-
-        pages_completed:
-          completedPages,
-
-        finished_at:
-          new Date().toISOString(),
-
-        current_url:
-          null,
-      })
-      .eq(
-        "id",
-        crawlJobId
-      );
-
-    // =================================================
-    // CLOSE BROWSER
-    // =================================================
-
-    await closeBrowser();
-
-    // =================================================
-    // FINAL TIMING
-    // =================================================
-
-    const totalDuration =
-      (Date.now() -
-        requestStart) /
-      1000;
-
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "WEBSITE CRAWL COMPLETED"
-    );
-
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      `Total time: ${totalDuration.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `Total time: ${(
-        totalDuration / 60
-      ).toFixed(2)} minutes`
-    );
-
-    console.log(
-      `Website crawling: ${crawlDuration.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `AI classification: ${totalClassificationSeconds.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `Embeddings: ${totalEmbeddingSeconds.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `Page processing: ${totalPageProcessingSeconds.toFixed(
-        2
-      )} seconds`
-    );
-
-    console.log(
-      `Pages discovered: ${pages.length}`
-    );
-
-    console.log(
-      `Pages processed: ${completedPages}`
-    );
-
-    console.log(
-      `Pages skipped: ${skippedPages}`
-    );
-
-    console.log(
-      `Chunks: ${totalChunks}`
-    );
-
-    console.log(
-      `Maximum allowed pages: ${crawlMaxPages}`
-    );
-
-    console.log(
-      "================================="
-    );
+    console.log(`[CRAWL API] Total crawl job finished in ${totalDurationSec.toFixed(2)}s (${(totalDurationSec / 60).toFixed(2)}m)`);
 
     return NextResponse.json({
-      success:
-        true,
-
-      message:
-        "Website crawled, classified, chunked and embedded successfully.",
-
-      pagesDiscovered:
-        pages.length,
-
-      pagesProcessed:
-        completedPages,
-
-      pagesSkipped:
-        skippedPages,
-
-      maxPages:
-        crawlMaxPages,
-
-      chunksCreated:
-        totalChunks,
-
-      durationSeconds:
-        Number(
-          totalDuration.toFixed(
-            2
-          )
-        ),
+      success: true,
+      message: "Website crawled, parsed, chunked, and embedded successfully.",
+      pagesDiscovered: crawlResult.metrics.discoveredCount,
+      pagesProcessed: insertedPages.length,
+      pagesSkipped: skippedDuplicates,
+      maxPages: crawlMaxPages,
+      chunksCreated: createdChunks.length,
+      embeddingsCreated: embeddingsGenerated,
+      durationSeconds: Number(totalDurationSec.toFixed(2)),
+      crawlDurationSeconds: Number(crawlDurationSec.toFixed(2)),
+      dbDurationSeconds: Number(dbWriteSec.toFixed(2)),
+      embeddingDurationSeconds: Number(embeddingSec.toFixed(2)),
+      pagesPerSecond: crawlResult.metrics.pagesPerSecond,
     });
-  } catch (
-    error: any
-  ) {
-    console.error(
-      "================================="
-    );
-
-    console.error(
-      "CRAWLER ERROR:",
-      error
-    );
-
-    console.error(
-      "================================="
-    );
-
-    // =================================================
-    // MARK JOB FAILED
-    // =================================================
+  } catch (error: any) {
+    console.error("[CRAWL API] Fatal crawler error:", {
+      message: error?.message,
+    });
 
     try {
-      if (
-        crawlJobId
-      ) {
-        await (
-          await createClient()
-        )
-          .from(
-            "crawl_jobs"
-          )
+      if (crawlJobId) {
+        await adminClient
+          .from("crawl_jobs")
           .update({
-            status:
-              "failed",
-
-            finished_at:
-              new Date().toISOString(),
-
-            current_url:
-              null,
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            current_url: null,
+            updated_at: new Date().toISOString(),
           })
-          .eq(
-            "id",
-            crawlJobId
-          );
+          .eq("id", crawlJobId);
       }
 
-      if (
-        knowledgeUrlId
-      ) {
-        await (
-          await createClient()
-        )
-          .from(
-            "knowledge_urls"
-          )
-          .update({
-            status:
-              "failed",
-          })
-          .eq(
-            "id",
-            knowledgeUrlId
-          );
+      if (knowledgeUrlId) {
+        await adminClient
+          .from("knowledge_urls")
+          .update({ status: "failed" })
+          .eq("id", knowledgeUrlId);
       }
-    } catch (
-      statusError
-    ) {
-      console.error(
-        "FAILED TO UPDATE CRAWL STATUS:",
-        statusError
-
-      );
-    }
-
-    await closeBrowser();
+    } catch {}
 
     return NextResponse.json(
-      {
-        error:
-          error?.message ||
-          "Crawler failed",
-      },
-      {
-        status: 500,
-      }
+      { error: error?.message || "Crawler failed" },
+      { status: 500 }
     );
   }
 }

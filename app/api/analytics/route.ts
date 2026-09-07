@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { authenticateUser, getAdminClient } from "@/lib/supabase/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,19 +7,15 @@ export const dynamic = "force-dynamic";
 // GET ANALYTICS
 // =====================================================
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // =================================================
     // AUTHENTICATE USER
     // =================================================
 
-    const supabaseUser = await createServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseUser.auth.getUser();
+    const auth = await authenticateUser(request);
 
-    if (authError || !user) {
+    if (!auth?.user) {
       return NextResponse.json(
         {
           success: false,
@@ -32,29 +27,13 @@ export async function GET() {
       );
     }
 
-    const merchantId = user.id;
+    const merchantId = auth.user.id;
 
     // =================================================
-    // ENVIRONMENT VARIABLES
+    // SUPABASE ADMIN CLIENT
     // =================================================
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      throw new Error("Supabase server environment variables are not configured.");
-    }
-
-    const supabaseAdmin = createSupabaseAdmin(
-      supabaseUrl,
-      supabaseServiceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabaseAdmin = getAdminClient();
 
     // =================================================
     // TOTAL CONVERSATIONS (MERCHANT-SCOPED)

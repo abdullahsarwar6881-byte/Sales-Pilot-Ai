@@ -3,47 +3,26 @@ export function scoreUrl(url: string): number {
 
   let score = 50;
 
-  // Ecommerce
-  if (path.includes("/products")) score += 100;
-  if (path.includes("/product")) score += 100;
+  // Essential business & customer support pages (highest priority to guarantee complete knowledge)
+  if (path.includes("/contact")) score += 120;
+  if (path.includes("/store-locator") || path.includes("/locations") || path.includes("/stores")) score += 115;
+  if (path.includes("/faq") || path.includes("/help") || path.includes("/support")) score += 110;
+  if (path.includes("/shipping") || path.includes("/delivery")) score += 110;
+  if (path.includes("/returns") || path.includes("/refund") || path.includes("/exchange")) score += 110;
+  if (path.includes("/payment") || path.includes("/pricing") || path.includes("/billing")) score += 105;
+  if (path.includes("/about") || path.includes("/size-chart") || path.includes("/track-your-order")) score += 100;
+  if (path.includes("/privacy") || path.includes("/terms") || path.includes("/disclaimer") || path.includes("/policy")) score += 95;
 
-  if (path.includes("/collections")) score += 95;
-  if (path.includes("/collection")) score += 95;
+  // Ecommerce collections & products
+  if (path.includes("/collections") || path.includes("/collection")) score += 90;
+  if (path.includes("/products") || path.includes("/product")) score += 85;
+  if (path.includes("/shop")) score += 80;
 
-  if (path.includes("/shop")) score += 90;
+  // Documentation & Guides
+  if (path.includes("/docs") || path.includes("/guide") || path.includes("/learn") || path.includes("/api")) score += 75;
 
-  // Customer support
-  if (path.includes("/faq")) score += 90;
-
-  if (path.includes("/shipping")) score += 90;
-
-  if (path.includes("/returns")) score += 90;
-
-  if (path.includes("/refund")) score += 90;
-
-  if (path.includes("/contact")) score += 80;
-
-  if (path.includes("/pricing")) score += 80;
-
-  if (path.includes("/about")) score += 70;
-
-  // Documentation
-  if (path.includes("/docs")) score += 80;
-
-  if (path.includes("/guide")) score += 70;
-
-  if (path.includes("/learn")) score += 70;
-
-  if (path.includes("/api")) score += 60;
-
-  // Lower priority
-  if (path.includes("/blog")) score -= 20;
-
-  if (path.includes("/news")) score -= 20;
-
-  if (path.includes("/privacy")) score -= 50;
-
-  if (path.includes("/terms")) score -= 50;
+  // Lower priority (blogs/news)
+  if (path.includes("/blog") || path.includes("/blogs") || path.includes("/news") || path.includes("/articles")) score += 30;
 
   return score;
 }

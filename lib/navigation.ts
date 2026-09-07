@@ -2,7 +2,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Database,
-  Paintbrush,
+  Rocket,
   Settings,
   CreditCard,
 } from "lucide-react";
@@ -26,7 +26,7 @@ export const navigation = [
   {
     title: "Widget Studio",
     href: "/dashboard/widget",
-    icon: Paintbrush,
+    icon: Rocket,
   },
   {
     title: "Settings",

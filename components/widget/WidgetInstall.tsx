@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ShoppingBag,
   Globe,
   Code2,
   FileCode2,
@@ -10,18 +9,19 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Props {
   profileId?: string;
+  widgetPublicId?: string;
 }
 
 const platforms = [
   {
-    title: "Shopify",
-    description: "Install Sales Pilot from the Shopify App Store.",
-    icon: ShoppingBag,
-    color: "from-emerald-500 to-green-600",
+    title: "HTML Website",
+    description: "Paste one script tag into your website.",
+    icon: FileCode2,
+    color: "from-orange-500 to-red-500",
   },
   {
     title: "WordPress",
@@ -35,22 +35,26 @@ const platforms = [
     icon: Code2,
     color: "from-violet-500 to-indigo-600",
   },
-  {
-    title: "HTML Website",
-    description: "Paste one script tag into your website.",
-    icon: FileCode2,
-    color: "from-orange-500 to-red-500",
-  },
 ];
 
-export default function WidgetInstall({ profileId }: Props) {
+export default function WidgetInstall({ profileId, widgetPublicId }: Props) {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [appUrl, setAppUrl] = useState(
+    process.env.NEXT_PUBLIC_APP_URL || "https://app.salespilot.ai"
+  );
 
-  const widgetId = profileId;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setAppUrl(process.env.NEXT_PUBLIC_APP_URL || window.location.origin);
+    }
+  }, []);
 
-  const embedCode = widgetId
-    ? `<script src="https://salespilottt.netlify.app/widget.js" data-widget-id="${widgetId}"></script>`
+  const publicId = widgetPublicId || profileId;
+  const widgetId = publicId;
+
+  const embedCode = publicId
+    ? `<script src="${appUrl}/widget.js" data-widget-id="${publicId}" async></script>`
     : "";
 
   function handlePlatformClick(platform: string) {
@@ -164,7 +168,7 @@ export default function WidgetInstall({ profileId }: Props) {
           })}
         </div>
 
-        {profileId && (
+        {publicId && (
           <div
             className="
               mt-8
@@ -189,7 +193,7 @@ export default function WidgetInstall({ profileId }: Props) {
                 text-foreground
               "
             >
-              {profileId}
+              {publicId}
             </p>
           </div>
         )}
@@ -316,19 +320,6 @@ export default function WidgetInstall({ profileId }: Props) {
                     The Sales Pilot AI chat widget will appear on your website.
                   </p>
                 </div>
-              </div>
-            )}
-
-            {selectedPlatform === "Shopify" && (
-              <div className="mt-6 rounded-2xl border border-theme bg-muted p-5">
-                <h3 className="font-semibold text-foreground">
-                  Shopify integration
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Shopify installation will be connected to the Sales Pilot
-                  Shopify app and OAuth flow.
-                </p>
               </div>
             )}
 

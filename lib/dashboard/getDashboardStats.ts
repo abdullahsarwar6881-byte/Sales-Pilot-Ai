@@ -9,18 +9,14 @@ export async function getDashboardStats() {
 
 
   const {
-    data:{
-      user
-    }
+    data: authData,
+    error: userError,
   } = await supabase.auth.getUser();
 
+  const user = authData?.user;
 
-
-
-  if(!user){
-
+  if (userError || !user) {
     return null;
-
   }
 
 

@@ -1,73 +1,58 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
-import { createClient } from "@supabase/supabase-js";
-
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-
-if (!supabaseUrl) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local"
-  );
-}
-
-
-if (!supabaseKey) {
-  throw new Error(
-    "Missing Supabase key in .env.local"
-  );
-}
-
-
-
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
-
-
+import { authenticateUser, createUserClient, getAdminClient } from "@/lib/supabase/serverAuth";
 
 export async function POST(request: Request) {
-
   try {
+    const auth = await authenticateUser(request);
+    const user = auth?.user;
 
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
 
     const {
       url,
       knowledgeUrlId,
-      userId
-
     } = await request.json();
 
-
-
-    if (!url || !knowledgeUrlId || !userId) {
-
+    if (!url || !knowledgeUrlId) {
       return NextResponse.json(
         {
           error:
-            "URL, knowledgeUrlId and userId are required"
+            "URL and knowledgeUrlId are required"
         },
         {
           status: 400
         }
       );
-
     }
 
+    const { normalizeUrl, isSafePublicUrl } = await import("@/lib/crawler/normalizeUrl");
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl || !isSafePublicUrl(normalizedUrl)) {
+      return NextResponse.json(
+        {
+          error: "Invalid or disallowed website URL"
+        },
+        {
+          status: 400
+        }
+      );
+    }
 
-
-
+    const userId = user.id;
+    const supabase = auth.token ? createUserClient(auth.token) : getAdminClient();
 
     // Fetch website
-
-    const response = await fetch(url);
+    const response = await fetch(normalizedUrl);
 
 
 

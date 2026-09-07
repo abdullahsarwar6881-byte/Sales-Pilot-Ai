@@ -21,61 +21,65 @@ export default function ConversationStats({
       value: total.toLocaleString(),
       change: "Live",
       icon: MessageSquare,
-      color: "from-indigo-500 to-violet-600",
+      iconBg: "bg-purple-100 dark:bg-purple-950/60",
+      iconColor: "text-[#5B3DF5] dark:text-[#9B7CFC]",
     },
     {
       title: "Resolved by AI",
       value: aiResolved.toLocaleString(),
       change: "Live",
       icon: Bot,
-      color: "from-emerald-500 to-green-600",
+      iconBg: "bg-emerald-100 dark:bg-emerald-950/60",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
     },
     {
       title: "Human Support",
       value: humanSupport.toLocaleString(),
       change: "Live",
       icon: Users,
-      color: "from-orange-500 to-red-500",
+      iconBg: "bg-orange-100 dark:bg-orange-950/60",
+      iconColor: "text-orange-600 dark:text-orange-400",
     },
     {
       title: "Avg Response",
       value: avgResponse,
       change: "Calculated",
       icon: Clock3,
-      color: "from-blue-500 to-cyan-500",
+      iconBg: "bg-purple-100 dark:bg-purple-950/60",
+      iconColor: "text-[#5B3DF5] dark:text-[#9B7CFC]",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {stats.map((item) => {
         const Icon = item.icon;
 
         return (
           <div
             key={item.title}
-            className="rounded-xl border border-theme bg-card px-3.5 py-2.5 shadow-xs transition-colors"
+            className="flex h-full flex-col justify-between rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#12151d] px-4 py-3 sm:px-5 sm:py-3.5 shadow-2xs transition-colors"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium text-muted-foreground truncate">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">
                   {item.title}
                 </p>
 
-                <div className="mt-1 flex items-baseline gap-2">
-                  <h3 className="text-xl font-bold text-foreground tracking-tight">
+                <div className="mt-1.5 flex items-baseline gap-2 flex-wrap">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight whitespace-nowrap">
                     {item.value}
                   </h3>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0">
                     {item.change}
                   </span>
                 </div>
               </div>
 
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} text-white shadow-xs`}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.iconBg} ${item.iconColor} shadow-2xs`}
               >
-                <Icon size={16} />
+                <Icon size={18} />
               </div>
             </div>
           </div>

@@ -22,6 +22,21 @@ export async function proxy(request: NextRequest) {
     request,
   });
 
+  const searchParams = request.nextUrl.searchParams;
+  const referer = request.headers.get("referer") || "";
+  const secFetchDest = request.headers.get("sec-fetch-dest");
+
+  const isEmbedded =
+    searchParams.has("embedded") ||
+    searchParams.has("host") ||
+    searchParams.has("shop") ||
+    secFetchDest === "iframe" ||
+    referer.includes("embedded=1") ||
+    referer.includes("host=") ||
+    referer.includes("shop=") ||
+    referer.includes("admin.shopify.com") ||
+    referer.includes(".myshopify.com");
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -41,7 +56,11 @@ export async function proxy(request: NextRequest) {
           });
 
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            response.cookies.set(name, value, isEmbedded ? {
+              ...options,
+              sameSite: "none",
+              secure: true,
+            } : options);
           });
         },
       },
@@ -63,14 +82,43 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith(route)
   );
 
+  console.log("[PROXY]", {
+    pathname,
+    shopPresent: searchParams.has("shop"),
+    hostPresent: searchParams.has("host"),
+    embedded: isEmbedded,
+    supabaseSessionExists: Boolean(user),
+    isProtectedRoute,
+  });
+
   if (isProtectedRoute && !user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    if (!isEmbedded) {
+      const loginUrl = new URL("/login", request.url);
+      const urlParams = new URLSearchParams(request.nextUrl.search);
+      if (pathname && pathname.startsWith("/dashboard") && pathname !== "/dashboard") {
+        urlParams.set("redirect", pathname);
+      }
+      loginUrl.search = urlParams.toString();
+      console.log("[PROXY] decision: REDIRECT_LOGIN", loginUrl.toString());
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   if (pathname === "/login" && user) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const redirectParam = searchParams.get("redirect");
+    const targetPath =
+      redirectParam && redirectParam.startsWith("/dashboard")
+        ? redirectParam
+        : "/dashboard";
+    const destUrl = new URL(targetPath, request.url);
+    const urlParams = new URLSearchParams(request.nextUrl.search);
+    urlParams.delete("redirect");
+    destUrl.search = urlParams.toString();
+    console.log("[PROXY] decision: REDIRECT_DASHBOARD", destUrl.toString());
+    return NextResponse.redirect(destUrl);
   }
 
+  console.log("[PROXY] decision: PASS");
   return response;
 }
 

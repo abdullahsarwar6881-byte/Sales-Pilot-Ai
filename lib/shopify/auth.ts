@@ -38,7 +38,7 @@ export async function authenticateShopifyRequest(request: Request) {
     shop,
     sessionToken,
     requestedTokenType: RequestedTokenType.OfflineAccessToken,
-    expiring: true,
+    expiring: false,
   });
 
   return {

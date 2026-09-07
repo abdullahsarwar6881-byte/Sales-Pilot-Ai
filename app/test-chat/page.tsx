@@ -5,10 +5,13 @@ export default async function TestChatPage() {
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: authData,
+    error: userError,
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  const user = authData?.user;
+
+  if (userError || !user) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
         <div className="w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm">

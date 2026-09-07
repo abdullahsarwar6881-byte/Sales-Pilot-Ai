@@ -162,29 +162,6 @@ export default function NotificationDropdown() {
         }
       }
 
-      // 4. Check subscription conversation quota
-      const { data: sub } = await supabase
-        .from("subscriptions")
-        .select("plan, conversations_used, conversation_limit")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (sub && sub.conversation_limit > 0) {
-        const usageRatio = sub.conversations_used / sub.conversation_limit;
-        if (usageRatio >= 0.8) {
-          const pct = Math.round(usageRatio * 100);
-          items.push({
-            id: `quota-warning-${sub.plan}-${pct}`,
-            type: "quota_warning",
-            title: "Usage quota notice",
-            description: `You have used ${pct}% of your monthly conversation allowance.`,
-            timestamp: "Today",
-            link: `/dashboard/billing`,
-            read: readIds.has(`quota-warning-${sub.plan}-${pct}`),
-          });
-        }
-      }
-
       // Sort by read status (unread first) then slice to top 15
       items.sort((a, b) => {
         if (a.read === b.read) return 0;
@@ -260,54 +237,15 @@ export default function NotificationDropdown() {
         aria-expanded={open}
         aria-haspopup="true"
         title="Notifications"
-        className="
-          relative
-          flex
-          h-10
-          w-10
-          items-center
-          justify-center
-          rounded-xl
-          border
-          border-theme
-          bg-input
-          text-foreground
-          transition-all
-          duration-150
-          hover:bg-hover
-          active:scale-95
-          active:bg-slate-200/70
-          dark:active:bg-slate-700/70
-          focus-visible:outline-none
-          focus-visible:ring-2
-          focus-visible:ring-indigo-500
-        "
+        className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#12151d] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all duration-150 active:scale-95 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B3DF5]"
       >
-        <Bell size={19} />
+        <Bell size={17} />
 
-        {unreadCount > 0 && (
-          <span
-            className="
-              absolute
-              -right-1
-              -top-1
-              flex
-              h-5
-              min-w-[20px]
-              items-center
-              justify-center
-              rounded-full
-              bg-rose-500
-              px-1
-              text-[11px]
-              font-bold
-              text-white
-              shadow-sm
-            "
-          >
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
+        {/* Red notification dot matching reference image */}
+        <span className="absolute top-2 right-2 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+        </span>
       </button>
 
       {/* Dropdown Panel */}
@@ -504,7 +442,7 @@ function getIcon(type: AppNotification["type"]) {
       );
     case "document_processed":
       return (
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400">
           <FileText size={14} />
         </div>
       );

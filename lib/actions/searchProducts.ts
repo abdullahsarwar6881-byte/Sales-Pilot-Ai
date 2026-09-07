@@ -796,6 +796,9 @@ function extractPrice(product: any): string | undefined {
   const content = getContent(product);
 
   const patterns = [
+    /\bPrice\s*:\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /\bRegular\s+price\s+(?:Rs\.?|PKR|₨|\$)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /\bSale\s+price\s+(?:Rs\.?|PKR|₨|\$)?\s*([\d,]+(?:\.\d{1,2})?)/i,
     /Rs\.?\s?[\d,]+(?:\.\d{1,2})?/i,
     /PKR\s?[\d,]+(?:\.\d{1,2})?/i,
     /₨\s?[\d,]+(?:\.\d{1,2})?/i,
@@ -843,6 +846,11 @@ function extractNumericPrice(product: any): number | undefined {
 function detectCurrency(product: any, price?: string): string | undefined {
   const direct = product?.currency || product?.price_currency || product?.currency_code;
   if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const raw = getRawContent(product);
+  const currencyMatch = raw.match(/\bCurrency\s*:\s*([A-Za-z]{3})\b/i);
+  if (currencyMatch?.[1]) return currencyMatch[1].toUpperCase();
+
   return detectCurrencyFromText(String(price || ""));
 }
 
@@ -866,6 +874,13 @@ function getAvailability(product: any): boolean | undefined {
   }
 
   const raw = normalizeText(getRawContent(product));
+
+  const structuredMatch = raw.match(/\bavailability\s*[:=]\s*([^\n\r]+)/i);
+  if (structuredMatch?.[1]) {
+    const val = structuredMatch[1].toLowerCase();
+    if (val.includes("instock") || val.includes("in stock") || val.includes("available")) return true;
+    if (val.includes("outofstock") || val.includes("out of stock") || val.includes("soldout") || val.includes("sold out")) return false;
+  }
 
   if (
     /\bout of stock\b|\bsold out\b|\bcurrently unavailable\b|\bunavailable\b/.test(raw)
@@ -1652,6 +1667,14 @@ export function limitProducts(
 }
 
 // =====================================================
+// DATA SOURCE CONFIGURATION
+// =====================================================
+// Current MVP mode: Website Crawler / Knowledge Base only.
+// Shopify retrieval is bypassed for MVP so AI responses
+// are strictly grounded in the user's crawled website.
+const SHOPIFY_RETRIEVAL_ENABLED = false;
+
+// =====================================================
 // SEARCH PRODUCTS - DATABASE
 // =====================================================
 
@@ -1674,31 +1697,71 @@ export async function searchProducts(
     JSON.stringify(analysis, null, 2)
   );
 
-  const { data: products, error } = await supabaseAdmin
+  const kpPromise = supabaseAdmin
     .from("knowledge_pages")
     .select("id, user_id, title, page_url, content, page_type")
     .eq("user_id", profileId)
-    .eq("page_type", "product")
     .limit(MAX_DATABASE_PRODUCTS);
 
-  if (error) {
-    console.error("PRODUCT DATABASE ERROR:", error);
+  const pPromise = SHOPIFY_RETRIEVAL_ENABLED
+    ? supabaseAdmin
+        .from("products")
+        .select("id, user_id, title, handle, description, price, currency, available, image_url, product_url, sku, collection_names, source")
+        .eq("user_id", profileId)
+        .limit(MAX_DATABASE_PRODUCTS)
+    : Promise.resolve({ data: [] as any[], error: null });
+
+  const [kpResult, pResult] = await Promise.all([kpPromise, pPromise]);
+
+  if (kpResult.error && (!SHOPIFY_RETRIEVAL_ENABLED || pResult.error)) {
+    console.error("PRODUCT DATABASE ERROR:", kpResult.error || pResult.error);
     throw new Error(
-      error.message || "Unable to load products from the store catalog."
+      kpResult.error?.message || pResult.error?.message || "Unable to load products from the store catalog."
     );
   }
 
-  if (!Array.isArray(products) || !products.length) {
+  const rawProducts: any[] = [];
+  if (Array.isArray(kpResult.data)) {
+    const productPages = kpResult.data.filter((p) => p.page_type === "product" || /\/products?\//i.test(p.page_url || ""));
+    rawProducts.push(...(productPages.length > 0 ? productPages : kpResult.data));
+  }
+  if (SHOPIFY_RETRIEVAL_ENABLED && Array.isArray(pResult.data)) {
+    rawProducts.push(...pResult.data);
+  }
+
+  if (!rawProducts.length) {
     console.log("NO PRODUCT PAGES FOUND");
     return [];
   }
 
-  const uniqueProducts = deduplicateProducts(products);
+  const uniqueProducts = deduplicateProducts(rawProducts);
 
-  console.log("PRODUCT PAGES FOUND:", products.length);
+  console.log("PRODUCT PAGES FOUND:", rawProducts.length);
   console.log("UNIQUE PRODUCTS:", uniqueProducts.length);
 
   if (!uniqueProducts.length) return [];
+
+  // Pure price / budget queries without specific category/color/attribute/other terms
+  if (
+    analysis.priceFilter &&
+    !analysis.categoryTerms.length &&
+    !analysis.attributeTerms.length &&
+    !analysis.colorTerms.length &&
+    !analysis.otherTerms.length
+  ) {
+    const priceMatches = uniqueProducts
+      .filter((p) => productMatchesPrice(p, analysis.priceFilter))
+      .sort((a, b) => {
+        const aAvail = getAvailability(a) === true ? 1 : 0;
+        const bAvail = getAvailability(b) === true ? 1 : 0;
+        if (bAvail !== aAvail) return bAvail - aAvail;
+        const aP = extractNumericPrice(a) ?? 999999;
+        const bP = extractNumericPrice(b) ?? 999999;
+        return aP - bP;
+      });
+
+    return priceMatches.slice(0, MAX_RESULTS).map(formatProduct);
+  }
 
   // Broad catalog.
   if (
@@ -1744,6 +1807,21 @@ export async function searchProducts(
       available: getAvailability(item.product),
     }))
   );
+
+  if (scored.length === 0 && analysis.priceFilter) {
+    const priceMatches = uniqueProducts
+      .filter((p) => productMatchesPrice(p, analysis.priceFilter))
+      .sort((a, b) => {
+        const aAvail = getAvailability(a) === true ? 1 : 0;
+        const bAvail = getAvailability(b) === true ? 1 : 0;
+        if (bAvail !== aAvail) return bAvail - aAvail;
+        const aP = extractNumericPrice(a) ?? 999999;
+        const bP = extractNumericPrice(b) ?? 999999;
+        return aP - bP;
+      });
+
+    return priceMatches.slice(0, MAX_RESULTS).map(formatProduct);
+  }
 
   return scored
     .slice(0, MAX_RESULTS)

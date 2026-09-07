@@ -148,9 +148,6 @@ export default function CurrentPlan({
   const websiteLimit =
     plan.limits.websites;
 
-  const conversationLimit =
-    plan.limits.conversations;
-
   const knowledgePageLimit =
     plan.limits.knowledgePages;
 
@@ -207,13 +204,6 @@ export default function CurrentPlan({
               {websiteLimit === 1
                 ? "website"
                 : "websites"}
-            </span>
-
-            {/* CONVERSATION LIMIT */}
-
-            <span className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground">
-              {conversationLimit.toLocaleString()}{" "}
-              AI conversations/month
             </span>
 
             {/* KNOWLEDGE PAGE LIMIT */}

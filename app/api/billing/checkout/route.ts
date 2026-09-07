@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { authenticateUser, getAdminClient } from "@/lib/supabase/serverAuth";
 
 import { safepayCore } from "@/lib/billing/safepay-core";
 import { safepayV1 } from "@/lib/billing/safepay-v1";
@@ -16,41 +15,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // =====================================================
-// SUPABASE ADMIN CLIENT
-// =====================================================
-
-function getSupabaseAdmin() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL is not configured."
-    );
-  }
-
-  if (!serviceRoleKey) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not configured."
-    );
-  }
-
-  return createSupabaseAdmin(
-    supabaseUrl,
-    serviceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-}
-
-// =====================================================
 // POST
 // =====================================================
 
@@ -62,25 +26,14 @@ export async function POST(
     // AUTHENTICATED USER
     // ===================================================
 
-    const supabase =
-      await createClient();
-
-    const {
-      data: { user },
-      error: userError,
-    } =
-      await supabase.auth.getUser();
-
-    if (userError) {
-      throw userError;
-    }
+    const auth = await authenticateUser(request);
+    const user = auth?.user;
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "You must be logged in.",
+          error: "You must be logged in to create a checkout session.",
         },
         {
           status: 401,
@@ -319,7 +272,7 @@ export async function POST(
     // ===================================================
 
     const supabaseAdmin =
-      getSupabaseAdmin();
+      getAdminClient();
 
     const {
       error:

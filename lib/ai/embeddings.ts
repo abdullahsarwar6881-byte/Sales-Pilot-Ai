@@ -1,51 +1,15 @@
 // =====================================================
-// OPENAI EMBEDDINGS
+// OPENAI EMBEDDINGS (BATCHED & OPTIMIZED)
 // =====================================================
 
-const OPENAI_API_URL =
-  "https://api.openai.com/v1/embeddings";
+const OPENAI_API_URL = "https://api.openai.com/v1/embeddings";
 
-// =====================================================
-// MODEL
-// =====================================================
-//
-// IMPORTANT:
-// This must match the model configured in Netlify.
-//
-// Recommended:
-// text-embedding-3-small
-//
-
-const MODEL =
-  process.env.OPENAI_EMBEDDING_MODEL ??
-  "text-embedding-3-small";
-
-// =====================================================
-// EMBEDDING DIMENSIONS
-// =====================================================
-//
-// Your Supabase knowledge_chunks.embedding column
-// currently uses:
-//
-// vector(768)
-//
-// text-embedding-3-small supports the dimensions
-// parameter, so we request exactly 768 dimensions.
-//
-
+const MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 const DIMENSIONS = 768;
-
-// =====================================================
-// TIMEOUT
-// =====================================================
-
 const TIMEOUT = 30000;
+const MAX_BATCH_SIZE = 100; // OpenAI supports up to 2048, 100 is optimal for network/payload balance
 
-// =====================================================
-// CLEAN TEXT
-// =====================================================
-
-function cleanText(text: string) {
+function cleanText(text: string): string {
   return String(text || "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
@@ -53,401 +17,222 @@ function cleanText(text: string) {
     .slice(0, 8000);
 }
 
-// =====================================================
-// CREATE SINGLE EMBEDDING
-// =====================================================
+export interface EmbeddingResult {
+  embedding: number[];
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    total_tokens: number;
+  };
+}
 
-export async function createEmbedding(
-  text: string
-): Promise<number[]> {
+export interface BatchEmbeddingResult {
+  embeddings: number[][];
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    total_tokens: number;
+  };
+}
+
+/**
+ * Creates a single text embedding via OpenAI.
+ */
+export async function createEmbedding(text: string): Promise<number[]> {
+  const result = await createEmbeddingWithUsage(text);
+  return result.embedding;
+}
+
+/**
+ * Creates a single text embedding with token usage tracking.
+ */
+export async function createEmbeddingWithUsage(text: string): Promise<EmbeddingResult> {
   const prompt = cleanText(text);
-
-  // ---------------------------------------------------
-  // EMPTY TEXT
-  // ---------------------------------------------------
-
   if (!prompt) {
-    throw new Error(
-      "Cannot create embedding from empty text."
-    );
+    throw new Error("Cannot create embedding from empty text.");
   }
 
-  // ---------------------------------------------------
-  // API KEY
-  // ---------------------------------------------------
-
-  const apiKey =
-    process.env.OPENAI_API_KEY;
-
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY is not configured."
-    );
+    throw new Error("OPENAI_API_KEY is not configured.");
   }
 
-  // ---------------------------------------------------
-  // ABORT CONTROLLER
-  // ---------------------------------------------------
-
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(() => {
-      controller.abort();
-    }, TIMEOUT);
-
-  const startedAt =
-    Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT);
 
   try {
-    console.log(
-      "================================="
-    );
+    const response = await fetch(OPENAI_API_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        input: prompt,
+        dimensions: DIMENSIONS,
+        encoding_format: "float",
+      }),
+    });
 
-    console.log(
-      "OPENAI EMBEDDING START"
-    );
-
-    console.log(
-      "MODEL:",
-      MODEL
-    );
-
-    console.log(
-      "TARGET DIMENSIONS:",
-      DIMENSIONS
-    );
-
-    console.log(
-      "TEXT LENGTH:",
-      prompt.length
-    );
-
-    // =================================================
-    // OPENAI REQUEST
-    // =================================================
-
-    const response =
-      await fetch(
-        OPENAI_API_URL,
-        {
-          method: "POST",
-
-          signal:
-            controller.signal,
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Authorization:
-              `Bearer ${apiKey}`,
-          },
-
-          body: JSON.stringify({
-            model: MODEL,
-
-            input: prompt,
-
-            dimensions:
-              DIMENSIONS,
-
-            encoding_format:
-              "float",
-          }),
-        }
-      );
-
-    // ---------------------------------------------------
-    // READ RESPONSE
-    // ---------------------------------------------------
-
-    const responseText =
-      await response.text();
-
-    // ---------------------------------------------------
-    // OPENAI ERROR
-    // ---------------------------------------------------
-
+    const responseText = await response.text();
     if (!response.ok) {
-      console.error(
-        "OPENAI EMBEDDING STATUS:",
-        response.status
-      );
-
-      console.error(
-        "OPENAI EMBEDDING ERROR:",
-        responseText
-      );
-
-      let errorMessage =
-        `OpenAI embeddings returned ${response.status}.`;
-
+      let errorMessage = `OpenAI embeddings returned ${response.status}.`;
       try {
-        const errorData =
-          JSON.parse(
-            responseText
-          );
-
-        errorMessage =
-          errorData?.error
-            ?.message ||
-          errorMessage;
-      } catch {
-        // Response was not JSON.
-      }
-
-      throw new Error(
-        errorMessage
-      );
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData?.error?.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
     }
 
-    // =================================================
-    // PARSE RESPONSE
-    // =================================================
+    const data = JSON.parse(responseText);
+    const embedding = data?.data?.[0]?.embedding;
 
-    let data: any;
-
-    try {
-      data =
-        JSON.parse(
-          responseText
-        );
-    } catch {
-      throw new Error(
-        "OpenAI returned invalid JSON for embeddings."
-      );
+    if (!Array.isArray(embedding) || embedding.length !== DIMENSIONS) {
+      throw new Error(`Invalid embedding returned from OpenAI (expected ${DIMENSIONS} dimensions).`);
     }
 
-    // =================================================
-    // GET EMBEDDING
-    // =================================================
+    const promptTokens = data?.usage?.prompt_tokens ?? Math.ceil(prompt.length / 4);
+    const totalTokens = data?.usage?.total_tokens ?? promptTokens;
 
-    const embedding =
-      data?.data?.[0]?.embedding;
-
-    if (
-      !Array.isArray(
-        embedding
-      )
-    ) {
-      console.error(
-        "OPENAI EMBEDDING RAW RESPONSE:",
-        data
-      );
-
-      throw new Error(
-        "Invalid embedding returned from OpenAI."
-      );
-    }
-
-    // =================================================
-    // EMPTY EMBEDDING
-    // =================================================
-
-    if (
-      embedding.length === 0
-    ) {
-      throw new Error(
-        "OpenAI returned an empty embedding."
-      );
-    }
-
-    // =================================================
-    // CHECK DIMENSIONS
-    // =================================================
-
-    if (
-      embedding.length !==
-      DIMENSIONS
-    ) {
-      throw new Error(
-        `Expected ${DIMENSIONS}-dimensional embedding but received ${embedding.length}.`
-      );
-    }
-
-    // =================================================
-    // FINISHED
-    // =================================================
-
-    const duration =
-      Date.now() -
-      startedAt;
-
-    console.log(
-      "OPENAI EMBEDDING COMPLETED"
-    );
-
-    console.log(
-      `EMBEDDING DIMENSIONS: ${embedding.length}`
-    );
-
-    console.log(
-      `EMBEDDING TIME: ${duration}ms`
-    );
-
-    console.log(
-      "================================="
-    );
-
-    return embedding;
-  } catch (error: any) {
-    // ---------------------------------------------------
-    // TIMEOUT
-    // ---------------------------------------------------
-
-    if (
-      error?.name ===
-      "AbortError"
-    ) {
-      console.error(
-        "OPENAI EMBEDDING TIMEOUT"
-      );
-
-      throw new Error(
-        "OpenAI embedding request timed out after 30 seconds."
-      );
-    }
-
-    // ---------------------------------------------------
-    // ERROR
-    // ---------------------------------------------------
-
-    console.error(
-      "================================="
-    );
-
-    console.error(
-      "OPENAI EMBEDDING ERROR"
-    );
-
-    console.error(
-      error
-    );
-
-    console.error(
-      "================================="
-    );
-
-    throw error;
+    return {
+      embedding,
+      model: MODEL,
+      usage: {
+        prompt_tokens: promptTokens,
+        total_tokens: totalTokens,
+      },
+    };
   } finally {
-    clearTimeout(
-      timeout
-    );
+    clearTimeout(timeout);
   }
 }
 
-// =====================================================
-// CREATE MULTIPLE EMBEDDINGS
-// =====================================================
-//
-// This is used by the crawler when a page is split
-// into multiple chunks.
-//
-// Example:
-//
-// 10 chunks
-//    ↓
-// createEmbeddings()
-//    ↓
-// 10 OpenAI embeddings
-//
-// There is NO retry system here.
-//
-
-export async function createEmbeddings(
-  texts: string[],
-  concurrency = 6
+/**
+ * Native batch embedding call sending up to 100 strings in a single OpenAI HTTP request.
+ */
+export async function createEmbeddingsBatch(
+  rawTexts: string[],
+  maxRetries = 2
 ): Promise<number[][]> {
-  // ---------------------------------------------------
-  // EMPTY INPUT
-  // ---------------------------------------------------
+  if (rawTexts.length === 0) return [];
 
-  if (
-    texts.length === 0
-  ) {
-    return [];
+  const cleaned = rawTexts.map((t) => cleanText(t) || "empty");
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured.");
   }
 
-  // ---------------------------------------------------
-  // RESULTS
-  // ---------------------------------------------------
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT);
 
-  const results: number[][] =
-    new Array(
-      texts.length
-    );
+    try {
+      const response = await fetch(OPENAI_API_URL, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          input: cleaned,
+          dimensions: DIMENSIONS,
+          encoding_format: "float",
+        }),
+      });
 
-  let currentIndex = 0;
+      clearTimeout(timeout);
+      const responseText = await response.text();
 
-  // ===================================================
-  // WORKER
-  // ===================================================
-
-  async function worker() {
-    while (true) {
-      const index =
-        currentIndex++;
-
-      if (
-        index >=
-        texts.length
-      ) {
-        return;
+      if (!response.ok) {
+        if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
+          attempt++;
+          await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+          continue;
+        }
+        let errorMessage = `OpenAI batch embeddings returned ${response.status}.`;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData?.error?.message || errorMessage;
+        } catch {}
+        throw new Error(errorMessage);
       }
 
-      console.log(
-        `Creating embedding ${
-          index + 1
-        }/${texts.length}`
-      );
+      const data = JSON.parse(responseText);
+      const dataItems: Array<{ index: number; embedding: number[] }> = data?.data;
 
-      results[index] =
-        await createEmbedding(
-          texts[index]
-        );
+      if (!Array.isArray(dataItems)) {
+        throw new Error("Invalid response format from OpenAI embeddings API.");
+      }
+
+      const sortedEmbeddings: number[][] = new Array(cleaned.length);
+      for (const item of dataItems) {
+        if (item && typeof item.index === "number" && Array.isArray(item.embedding)) {
+          sortedEmbeddings[item.index] = item.embedding;
+        }
+      }
+
+      return sortedEmbeddings;
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (attempt < maxRetries) {
+        attempt++;
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+        continue;
+      }
+      throw err;
     }
   }
 
-  // ===================================================
-  // CONCURRENCY
-  // ===================================================
+  throw new Error("Batch embedding creation failed after retries.");
+}
 
-  const workerCount =
-    Math.min(
-      Math.max(
-        1,
-        concurrency
-      ),
-      texts.length
-    );
+/**
+ * Creates embeddings for a large array of texts using bounded concurrency
+ * and optimal OpenAI array batching.
+ */
+export async function createEmbeddings(
+  texts: string[],
+  concurrency = 4
+): Promise<number[][]> {
+  if (!Array.isArray(texts) || texts.length === 0) {
+    return [];
+  }
 
-  const workers =
-    Array.from(
-      {
-        length:
-          workerCount,
-      },
-      () =>
-        worker()
-    );
+  // Split into batches of MAX_BATCH_SIZE (100)
+  const batches: Array<{ startIndex: number; items: string[] }> = [];
+  for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
+    batches.push({
+      startIndex: i,
+      items: texts.slice(i, i + MAX_BATCH_SIZE),
+    });
+  }
 
-  // ===================================================
-  // RUN WORKERS
-  // ===================================================
+  const results: number[][] = new Array(texts.length);
+  let batchIndex = 0;
 
-  await Promise.all(
-    workers
-  );
+  async function worker() {
+    while (true) {
+      const current = batchIndex++;
+      if (current >= batches.length) return;
 
-  // ===================================================
-  // COMPLETE
-  // ===================================================
+      const batch = batches[current];
+      const embeddings = await createEmbeddingsBatch(batch.items);
 
-  console.log(
-    `Finished creating ${texts.length} embeddings.`
-  );
+      for (let j = 0; j < embeddings.length; j++) {
+        results[batch.startIndex + j] = embeddings[j];
+      }
+    }
+  }
+
+  const workerCount = Math.min(Math.max(1, concurrency), batches.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+
+  await Promise.all(workers);
 
   return results;
 }

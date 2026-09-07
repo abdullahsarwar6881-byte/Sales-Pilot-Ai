@@ -28,7 +28,7 @@ export default function WidgetStats({
       value: views.toLocaleString(),
       change: "Live",
       icon: Users,
-      color: "from-blue-500 to-cyan-500",
+      color: "from-purple-600 to-indigo-600",
     },
     {
       title: "Conversations",

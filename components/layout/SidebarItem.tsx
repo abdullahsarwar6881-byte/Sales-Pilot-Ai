@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { LucideIcon } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 interface SidebarItemProps {
   title: string;
@@ -16,63 +16,68 @@ export default function SidebarItem({
   icon: Icon,
 }: SidebarItemProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const active =
     pathname === href ||
-    pathname.startsWith(href + "/");
+    (href !== "/dashboard" && pathname.startsWith(href + "/"));
+
+  const search = searchParams?.toString();
+  const targetHref = search ? `${href}?${search}` : href;
 
   return (
     <Link
-      href={href}
+      href={targetHref}
       className={`
         group
         flex
         items-center
-        gap-3
-        rounded-xl
-        px-3.5
-        py-2.5
+        gap-3.5
+        rounded-2xl
+        px-4
+        py-3
         transition-all
         duration-150
         ease-out
         focus-visible:outline-none
         focus-visible:ring-2
-        focus-visible:ring-indigo-500
-
+        focus-visible:ring-[#5B3DF5]
+        text-sm
         ${
           active
             ? `
               bg-gradient-to-r
-              from-indigo-600
-              to-violet-600
+              from-[#5B3DF5]
+              to-[#7C5CFC]
               text-white
-              shadow-sm
-              active:scale-[0.98]
-              active:brightness-95
+              font-bold
+              shadow-md
+              shadow-[#5B3DF5]/25
+              active:scale-[0.99]
             `
             : `
-              text-muted-foreground
-              hover:bg-hover
-              hover:text-foreground
-              active:scale-[0.98]
-              active:bg-slate-200/70
-              dark:active:bg-slate-800/80
-              active:text-foreground
+              text-slate-600
+              dark:text-slate-400
+              hover:bg-slate-100/70
+              dark:hover:bg-white/5
+              hover:text-slate-900
+              dark:hover:text-white
+              font-semibold
+              active:scale-[0.99]
             `
         }
       `}
     >
       <Icon
-        size={18}
-        className="
+        size={19}
+        className={`
           shrink-0
           transition-colors
-        "
+          ${active ? "text-white" : "text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200"}
+        `}
       />
 
-      <span className="font-medium text-sm">
-        {title}
-      </span>
+      <span className="truncate">{title}</span>
     </Link>
   );
 }

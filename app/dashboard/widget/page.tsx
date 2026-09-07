@@ -20,6 +20,7 @@ export default function WidgetStudioPage() {
   // =====================================================
 
   const [profileId, setProfileId] = useState("");
+  const [widgetPublicId, setWidgetPublicId] = useState("");
 
   // =====================================================
   // WIDGET APPEARANCE SETTINGS
@@ -78,20 +79,7 @@ export default function WidgetStudioPage() {
       } =
         await supabase.auth.getUser();
 
-      if (authError) {
-        console.error(
-          "Widget Studio authentication error:",
-          authError
-        );
-
-        return;
-      }
-
-      if (!user) {
-        console.error(
-          "Widget Studio: No authenticated user."
-        );
-
+      if (authError || !user) {
         return;
       }
 
@@ -140,13 +128,36 @@ export default function WidgetStudioPage() {
       }
 
       // -------------------------------------------------
-      // NO SETTINGS
+      // NO SETTINGS -> INITIALIZE DEFAULTS
       // -------------------------------------------------
 
       if (!data) {
         console.log(
-          "Widget Studio: No widget settings found. Using defaults."
+          "Widget Studio: No widget settings found. Initializing defaults."
         );
+
+        const { data: newRow } = await supabase
+          .from("widget_settings")
+          .insert({
+            user_id: user.id,
+            ai_name: "Sales Pilot AI",
+            welcome_message: "👋 Hi! How can I help you today?",
+            brand_color: "#6366F1",
+            position: "Bottom Right",
+            theme: "Light",
+            size: "Medium",
+            radius: "Rounded",
+          })
+          .select()
+          .maybeSingle();
+
+        if (newRow?.public_id) {
+          setWidgetPublicId(newRow.public_id);
+        } else if (newRow?.id) {
+          setWidgetPublicId(newRow.id);
+        } else {
+          setWidgetPublicId(user.id);
+        }
 
         return;
       }
@@ -190,6 +201,24 @@ export default function WidgetStudioPage() {
           "Rounded"
       );
 
+      if (!data.public_id) {
+        const fallbackPublicId =
+          "spw_" +
+          (typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID().replace(/-/g, "").slice(0, 24)
+            : Math.random().toString(36).substring(2, 15) +
+              Math.random().toString(36).substring(2, 13));
+
+        await supabase
+          .from("widget_settings")
+          .update({ public_id: fallbackPublicId })
+          .eq("id", data.id);
+
+        setWidgetPublicId(fallbackPublicId);
+      } else {
+        setWidgetPublicId(data.public_id);
+      }
+
       console.log(
         "Widget Studio settings loaded:",
         data
@@ -225,20 +254,8 @@ export default function WidgetStudioPage() {
       } =
         await supabase.auth.getUser();
 
-      if (authError) {
-        console.error(
-          "Widget save authentication error:",
-          authError
-        );
-
-        return;
-      }
-
-      if (!user) {
-        console.error(
-          "Widget save: No authenticated user."
-        );
-
+      if (authError || !user) {
+        setSaving(false);
         return;
       }
 
@@ -404,6 +421,10 @@ export default function WidgetStudioPage() {
         data.radius ??
           cleanRadius
       );
+
+      if (data.public_id) {
+        setWidgetPublicId(data.public_id);
+      }
 
       setSaved(true);
 
@@ -697,6 +718,9 @@ export default function WidgetStudioPage() {
         profileId={
           profileId
         }
+        widgetPublicId={
+          widgetPublicId
+        }
       />
 
       {/* =================================================
@@ -706,6 +730,9 @@ export default function WidgetStudioPage() {
       <WidgetInstall
         profileId={
           profileId
+        }
+        widgetPublicId={
+          widgetPublicId
         }
       />
     </div>

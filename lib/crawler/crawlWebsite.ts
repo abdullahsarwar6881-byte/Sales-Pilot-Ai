@@ -1,1371 +1,351 @@
-import * as cheerio from "cheerio";
-
+import { normalizeUrl, isSameDomain, shouldSkipUrl } from "./normalizeUrl";
+import { getRobotsRules, isAllowedByRobots, type RobotsRules } from "./robots";
 import { getSitemapUrls } from "./getSitemapUrls";
 import { scoreUrl } from "./scoreUrl";
-import { getRenderedHTML } from "@/lib/browser/browser";
+import { detectPageType } from "./detectPageType";
+import { fetchAndParsePage, type FetchedPageResult } from "./fetchPage";
 
 // =====================================================
 // TYPES
 // =====================================================
 
-export type CrawledPage = {
+export interface CrawledPage {
   url: string;
   title: string;
   content: string;
+  pageType?: string;
+  metaDescription?: string;
   productData?: any;
   images?: string[];
-};
+}
+
+export interface CrawlProgress {
+  phase?: "discovering" | "crawling";
+  discovered: number;
+  queued: number;
+  crawling: number;
+  crawled: number;
+  successful: number;
+  failed: number;
+  skipped: number;
+  elapsedSeconds: number;
+  pagesPerSecond: number;
+  currentUrl?: string;
+  currentPageTitle?: string;
+}
 
 export interface CrawlOptions {
   maxPages?: number;
   maxDepth?: number;
+  concurrency?: number;
+  timeoutMs?: number;
+  maxRetries?: number;
+  customFetch?: typeof fetch;
+  signal?: AbortSignal;
+  onProgress?: (progress: CrawlProgress) => void;
+  onPageCrawled?: (page: CrawledPage) => Promise<void> | void;
+}
+
+export interface CrawlMetrics {
+  discoveredCount: number;
+  crawledCount: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  durationSeconds: number;
+  pagesPerSecond: number;
+  discoverySeconds: number;
+}
+
+export interface CrawlWebsiteResult {
+  pages: CrawledPage[];
+  metrics: CrawlMetrics;
 }
 
 // =====================================================
-// DEFAULT CONFIGURATION
-// =====================================================
-//
-// Sales Pilot can crawl up to 60 pages per crawl.
-//
-// The API route can request a lower number:
-//
-// crawlWebsite(url, {
-//   maxPages: 20
-// })
-//
-// But never more than 60.
-//
-
-const DEFAULT_MAX_PAGES = 60;
-const HARD_MAX_PAGES = 60;
-
-const DEFAULT_MAX_DEPTH = 3;
-
-// =====================================================
-// URL NORMALIZATION
+// CONFIGURATION
 // =====================================================
 
-function normalizeUrl(
-  url: string
-): string | null {
-  try {
-    const parsed =
-      new URL(url);
+export const DEFAULT_CRAWL_CONCURRENCY = 15;
+export const DEFAULT_MAX_PAGES = 500;
+export const HARD_MAX_PAGES = 1000;
+export const DEFAULT_MAX_DEPTH = 3;
 
-    // Remove fragments.
-    parsed.hash = "";
-
-    // Remove tracking/query parameters.
-    //
-    // This prevents duplicate pages such as:
-    //
-    // /products/dress
-    // /products/dress?utm_source=instagram
-    //
-    // from being crawled separately.
-    parsed.search = "";
-
-    // Remove trailing slash except homepage.
-    if (
-      parsed.pathname !== "/"
-    ) {
-      parsed.pathname =
-        parsed.pathname.replace(
-          /\/$/,
-          ""
-        );
-    }
-
-    return parsed.href;
-  } catch {
-    return null;
-  }
+interface QueueItem {
+  url: string;
+  depth: number;
+  score: number;
 }
 
 // =====================================================
-// SAME DOMAIN
+// CRAWL WEBSITE ENGINE
 // =====================================================
 
-function isSameDomain(
-  url1: string,
-  url2: string
-): boolean {
-  try {
-    const host1 =
-      new URL(url1)
-        .hostname
-        .toLowerCase()
-        .replace(
-          /^www\./,
-          ""
-        );
-
-    const host2 =
-      new URL(url2)
-        .hostname
-        .toLowerCase()
-        .replace(
-          /^www\./,
-          ""
-        );
-
-    return host1 === host2;
-  } catch {
-    return false;
-  }
-}
-
-// =====================================================
-// SKIP URL
-// =====================================================
-
-function shouldSkip(
-  url: string
-): boolean {
-  const normalized =
-    url.toLowerCase();
-
-  const blockedPaths = [
-    "/login",
-    "/signin",
-    "/sign-in",
-    "/signup",
-    "/sign-up",
-    "/register",
-    "/logout",
-
-    "/cart",
-    "/checkout",
-
-    "/account",
-    "/my-account",
-
-    "/search",
-
-    "/wishlist",
-
-    "/compare",
-
-    "/password",
-
-    "/admin",
-
-    "/wp-admin",
-
-    "/wp-login",
-
-    "/feed",
-
-    "/rss",
-  ];
-
-  for (
-    const path of blockedPaths
-  ) {
-    if (
-      normalized.includes(path)
-    ) {
-      return true;
-    }
-  }
-
-  const blockedExtensions = [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".webp",
-    ".svg",
-    ".ico",
-
-    ".pdf",
-    ".zip",
-    ".rar",
-
-    ".xml",
-    ".json",
-
-    ".mp3",
-    ".mp4",
-    ".avi",
-    ".mov",
-
-    ".css",
-    ".js",
-    ".map",
-
-    ".woff",
-    ".woff2",
-    ".ttf",
-    ".otf",
-  ];
-
-  for (
-    const extension of blockedExtensions
-  ) {
-    if (
-      normalized.endsWith(
-        extension
-      )
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-// =====================================================
-// CLEAN CONTENT
-// =====================================================
-
-function cleanContent(
-  text: string
-): string {
-  return String(text || "")
-    .replace(
-      /\s+/g,
-      " "
-    )
-    .replace(
-      /\n+/g,
-      " "
-    )
-    .trim();
-}
-
-// =====================================================
-// ADD UNIQUE IMAGE
-// =====================================================
-
-function addUniqueImage(
-  images: string[],
-  imageUrl: unknown,
-  baseUrl: string
-) {
-  if (
-    typeof imageUrl !==
-      "string" ||
-    !imageUrl.trim()
-  ) {
-    return;
-  }
-
-  try {
-    const absoluteUrl =
-      new URL(
-        imageUrl.trim(),
-        baseUrl
-      ).href;
-
-    if (
-      !images.includes(
-        absoluteUrl
-      )
-    ) {
-      images.push(
-        absoluteUrl
-      );
-    }
-  } catch {
-    // Ignore invalid image URL.
-  }
-}
-
-// =====================================================
-// FIND PRODUCT JSON-LD
-// =====================================================
-
-function findProductJsonLd(
-  value: any
-): any {
-  if (!value) {
-    return null;
-  }
-
-  if (
-    Array.isArray(value)
-  ) {
-    for (
-      const item of value
-    ) {
-      const found =
-        findProductJsonLd(
-          item
-        );
-
-      if (found) {
-        return found;
-      }
-    }
-
-    return null;
-  }
-
-  if (
-    typeof value !==
-    "object"
-  ) {
-    return null;
-  }
-
-  const type =
-    value["@type"];
-
-  if (
-    type === "Product" ||
-    (
-      Array.isArray(type) &&
-      type.includes(
-        "Product"
-      )
-    )
-  ) {
-    return value;
-  }
-
-  for (
-    const key of Object.keys(
-      value
-    )
-  ) {
-    const found =
-      findProductJsonLd(
-        value[key]
-      );
-
-    if (found) {
-      return found;
-    }
-  }
-
-  return null;
-}
-
-// =====================================================
-// FETCH PAGE
-// =====================================================
-
-async function fetchPage(
-  url: string
-) {
-  // ---------------------------------------------------
-  // RENDER PAGE
-  // ---------------------------------------------------
-
-  const html =
-    await getRenderedHTML(
-      url
-    );
-
-  const $ =
-    cheerio.load(html);
-
-  // ---------------------------------------------------
-  // TITLE
-  // ---------------------------------------------------
-
-  const title =
-    $("title")
-      .text()
-      .trim() ||
-    $("h1")
-      .first()
-      .text()
-      .trim() ||
-    "Untitled";
-
-  // ---------------------------------------------------
-  // PRODUCT DATA
-  // ---------------------------------------------------
-
-  let productData:
-    any = null;
-
-  $(
-    'script[type="application/ld+json"]'
-  ).each(
-    (
-      _,
-      element
-    ) => {
-      if (productData) {
-        return;
-      }
-
-      try {
-        const raw =
-          $(element).html();
-
-        if (!raw) {
-          return;
-        }
-
-        const parsed =
-          JSON.parse(raw);
-
-        const found =
-          findProductJsonLd(
-            parsed
-          );
-
-        if (found) {
-          productData =
-            found;
-        }
-      } catch {
-        // Invalid JSON-LD.
-      }
-    }
-  );
-
-  // ---------------------------------------------------
-  // META
-  // ---------------------------------------------------
-
-  const metaDescription =
-    $(
-      'meta[name="description"]'
-    ).attr(
-      "content"
-    ) ||
-    $(
-      'meta[property="og:description"]'
-    ).attr(
-      "content"
-    ) ||
-    "";
-
-  const ogTitle =
-    $(
-      'meta[property="og:title"]'
-    ).attr(
-      "content"
-    ) ||
-    "";
-
-  const ogImage =
-    $(
-      'meta[property="og:image"]'
-    ).attr(
-      "content"
-    ) ||
-    "";
-
-  // ---------------------------------------------------
-  // IMAGES
-  // ---------------------------------------------------
-
-  const images:
-    string[] = [];
-
-  $("img").each(
-    (
-      _,
-      element
-    ) => {
-      const src =
-        $(element).attr(
-          "src"
-        ) ||
-        $(element).attr(
-          "data-src"
-        ) ||
-        $(element).attr(
-          "data-lazy-src"
-        ) ||
-        $(element).attr(
-          "data-original"
-        ) ||
-        $(element).attr(
-          "data-image"
-        );
-
-      addUniqueImage(
-        images,
-        src,
-        url
-      );
-    }
-  );
-
-  // Add OG image.
-  addUniqueImage(
-    images,
-    ogImage,
-    url
-  );
-
-  // ---------------------------------------------------
-  // PRODUCT IMAGES
-  // ---------------------------------------------------
-
-  if (
-    productData?.image
-  ) {
-    const productImages =
-      Array.isArray(
-        productData.image
-      )
-        ? productData.image
-        : [
-            productData.image,
-          ];
-
-    for (
-      const image of
-        productImages
-    ) {
-      if (
-        typeof image ===
-        "string"
-      ) {
-        addUniqueImage(
-          images,
-          image,
-          url
-        );
-      }
-    }
-  }
-
-  // ---------------------------------------------------
-  // REMOVE UNWANTED ELEMENTS
-  // ---------------------------------------------------
-
-  $(
-    "script, style, noscript, svg, header, footer, nav, aside, form"
-  ).remove();
-
-  // ---------------------------------------------------
-  // MAIN CONTENT
-  // ---------------------------------------------------
-
-  let main =
-    $("main")
-      .text()
-      .trim();
-
-  if (!main) {
-    main =
-      $("article")
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $(
-        '[role="main"]'
-      )
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $(".product")
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $(".product-page")
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $(
-        ".product-single"
-      )
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $("section")
-        .first()
-        .text()
-        .trim();
-  }
-
-  if (!main) {
-    main =
-      $("body")
-        .text()
-        .trim();
-  }
-
-  let content =
-    cleanContent(
-      main
-    );
-
-  // ---------------------------------------------------
-  // PRODUCT INFORMATION
-  // ---------------------------------------------------
-
-  if (
-    productData
-  ) {
-    const brand =
-      typeof productData.brand ===
-      "string"
-        ? productData.brand
-        : productData.brand
-            ?.name ||
-          "";
-
-    const offers =
-      Array.isArray(
-        productData.offers
-      )
-        ? productData.offers[0]
-        : productData.offers;
-
-    let availability =
-      offers?.availability ||
-      "";
-
-    availability =
-      String(
-        availability
-      )
-        .replace(
-          "http://schema.org/",
-          ""
-        )
-        .replace(
-          "https://schema.org/",
-          ""
-        );
-
-    const productImageList =
-      images.length > 0
-        ? images.join(
-            "\n"
-          )
-        : typeof productData.image ===
-          "string"
-        ? productData.image
-        : "";
-
-    content +=
-      `
-
-================ PRODUCT INFORMATION ================
-
-Product Name:
-${productData.name ?? ""}
-
-Description:
-${productData.description ?? metaDescription}
-
-Brand:
-${brand}
-
-Price:
-${offers?.price ?? ""}
-
-Currency:
-${offers?.priceCurrency ?? ""}
-
-Availability:
-${availability}
-
-SKU:
-${productData.sku ?? ""}
-
-Category:
-${productData.category ?? ""}
-
-Rating:
-${productData.aggregateRating?.ratingValue ?? ""}
-
-Reviews:
-${productData.aggregateRating?.reviewCount ?? ""}
-
-Images:
-${productImageList}
-
-Product URL:
-${productData.url ?? url}
-
-=====================================================
-`;
-  } else {
-    content +=
-      `
-
-Meta Title:
-${ogTitle}
-
-Meta Description:
-${metaDescription}
-
-`;
-  }
-
-  // ---------------------------------------------------
-  // COLLECT LINKS
-  // ---------------------------------------------------
-
-  const links:
-    string[] = [];
-
-  const linkSet =
-    new Set<string>();
-
-  $("a").each(
-    (
-      _,
-      element
-    ) => {
-      const href =
-        $(element).attr(
-          "href"
-        );
-
-      if (!href) {
-        return;
-      }
-
-      try {
-        const absolute =
-          new URL(
-            href,
-            url
-          ).href;
-
-        const normalized =
-          normalizeUrl(
-            absolute
-          );
-
-        if (
-          !normalized
-        ) {
-          return;
-        }
-
-        if (
-          !isSameDomain(
-            url,
-            normalized
-          )
-        ) {
-          return;
-        }
-
-        if (
-          shouldSkip(
-            normalized
-          )
-        ) {
-          return;
-        }
-
-        if (
-          !linkSet.has(
-            normalized
-          )
-        ) {
-          linkSet.add(
-            normalized
-          );
-
-          links.push(
-            normalized
-          );
-        }
-      } catch {
-        // Ignore invalid links.
-      }
-    }
-  );
-
-  // ---------------------------------------------------
-  // DEBUG
-  // ---------------------------------------------------
-
-  if (
-    productData
-  ) {
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "PRODUCT DETECTED"
-    );
-
-    console.log(
-      "Product:",
-      productData.name
-    );
-
-    console.log(
-      "Product URL:",
-      productData.url ??
-        url
-    );
-
-    console.log(
-      "Product Images:",
-      images.length
-    );
-
-    console.log(
-      "Discovered links:",
-      links.length
-    );
-
-    console.log(
-      "================================="
-    );
-  }
-
-  // ---------------------------------------------------
-  // RETURN
-  // ---------------------------------------------------
-
-  return {
-    title,
-
-    content,
-
-    links,
-
-    productData,
-
-    images,
-  };
-}
-
-// =====================================================
-// CRAWL WEBSITE
-// =====================================================
-
+/**
+ * High-performance concurrent website crawler with bounded worker pool,
+ * priority queue, sitemap discovery, robots.txt compliance, and incremental processing.
+ */
 export async function crawlWebsite(
   startUrl: string,
   options: CrawlOptions = {}
 ): Promise<CrawledPage[]> {
-  // ===================================================
-  // CONFIGURATION
-  // ===================================================
+  const result = await crawlWebsiteDetailed(startUrl, options);
+  return result.pages;
+}
 
-  const requestedMaxPages =
-    Number(
-      options.maxPages
-    );
+export async function crawlWebsiteDetailed(
+  startUrl: string,
+  options: CrawlOptions = {}
+): Promise<CrawlWebsiteResult> {
+  const crawlStart = performance.now();
 
-  const maxPages =
-    Number.isFinite(
-      requestedMaxPages
-    )
-      ? Math.min(
-          Math.max(
-            Math.floor(
-              requestedMaxPages
-            ),
-            1
-          ),
-          HARD_MAX_PAGES
-        )
-      : DEFAULT_MAX_PAGES;
+  const requestedMaxPages = Number(options.maxPages);
+  const maxPages = Number.isFinite(requestedMaxPages)
+    ? Math.min(Math.max(Math.floor(requestedMaxPages), 1), HARD_MAX_PAGES)
+    : DEFAULT_MAX_PAGES;
 
-  const requestedMaxDepth =
-    Number(
-      options.maxDepth
-    );
+  const requestedMaxDepth = Number(options.maxDepth);
+  const maxDepth = Number.isFinite(requestedMaxDepth)
+    ? Math.min(Math.max(Math.floor(requestedMaxDepth), 0), 5)
+    : DEFAULT_MAX_DEPTH;
 
-  const maxDepth =
-    Number.isFinite(
-      requestedMaxDepth
-    )
-      ? Math.min(
-          Math.max(
-            Math.floor(
-              requestedMaxDepth
-            ),
-            0
-          ),
-          5
-        )
-      : DEFAULT_MAX_DEPTH;
+  const envConcurrency = Number(process.env.CRAWL_CONCURRENCY);
+  const concurrency =
+    options.concurrency ??
+    (Number.isFinite(envConcurrency) && envConcurrency > 0 ? envConcurrency : DEFAULT_CRAWL_CONCURRENCY);
 
-  // ===================================================
-  // NORMALIZE START URL
-  // ===================================================
-
-  const normalizedStartUrl =
-    normalizeUrl(
-      startUrl
-    );
-
-  if (
-    !normalizedStartUrl
-  ) {
-    throw new Error(
-      "Invalid website URL."
-    );
+  const normalizedStartUrl = normalizeUrl(startUrl);
+  if (!normalizedStartUrl) {
+    throw new Error("Invalid website start URL.");
   }
 
-  // ===================================================
-  // DATA STRUCTURES
-  // ===================================================
+  // State Tracking
+  const visited = new Set<string>();
+  const queued = new Set<string>();
+  const results: CrawledPage[] = [];
 
-  const visited =
-    new Set<string>();
+  const queue: QueueItem[] = [];
 
-  const queued =
-    new Set<string>();
+  let activeWorkers = 0;
+  let successCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
 
-  const results:
-    CrawledPage[] = [];
+  function addToQueue(url: string, depth: number, robotsRules?: RobotsRules): boolean {
+    const normalized = normalizeUrl(url, normalizedStartUrl);
+    if (!normalized) return false;
+    if (!isSameDomain(normalizedStartUrl, normalized)) return false;
+    if (shouldSkipUrl(normalized)) return false;
+    if (robotsRules && !isAllowedByRobots(normalized, robotsRules)) return false;
+    if (visited.has(normalized) || queued.has(normalized)) return false;
+    if (depth > maxDepth) return false;
 
-  type QueueItem = {
-    url: string;
-    depth: number;
-    score: number;
-  };
-
-  const queue:
-    QueueItem[] = [];
-
-  // ===================================================
-  // ADD TO QUEUE
-  // ===================================================
-
-  function addToQueue(
-    url: string,
-    depth: number
-  ) {
-    const normalized =
-      normalizeUrl(
-        url
-      );
-
-    if (
-      !normalized
-    ) {
-      return;
-    }
-
-    if (
-      !isSameDomain(
-        normalizedStartUrl,
-        normalized
-      )
-    ) {
-      return;
-    }
-
-    if (
-      shouldSkip(
-        normalized
-      )
-    ) {
-      return;
-    }
-
-    if (
-      visited.has(
-        normalized
-      )
-    ) {
-      return;
-    }
-
-    if (
-      queued.has(
-        normalized
-      )
-    ) {
-      return;
-    }
-
-    if (
-      depth > maxDepth
-    ) {
-      return;
-    }
-
-    queued.add(
-      normalized
-    );
-
+    queued.add(normalized);
     queue.push({
       url: normalized,
-
       depth,
+      score: scoreUrl(normalized),
+    });
+    return true;
+  }
 
-      score:
-        scoreUrl(
-          normalized
-        ),
+  // 1. Initial Start URL & Robots.txt
+  const discoveryStart = performance.now();
+  let robotsRules: RobotsRules | undefined;
+  try {
+    robotsRules = await getRobotsRules(normalizedStartUrl);
+  } catch {
+    // Continue if robots.txt check fails
+  }
+
+  addToQueue(normalizedStartUrl, 0, robotsRules);
+
+  // 2. Discover Sitemap URLs
+  try {
+    const sitemapUrls = await getSitemapUrls(normalizedStartUrl, robotsRules?.sitemaps);
+    for (const smUrl of sitemapUrls) {
+      if (queue.length >= maxPages * 4) break;
+      addToQueue(smUrl, 0, robotsRules);
+    }
+  } catch (err) {
+    console.warn("Sitemap discovery failed:", err);
+  }
+
+  const discoverySeconds = (performance.now() - discoveryStart) / 1000;
+
+  console.log(`[CRAWLER] Started crawl for ${normalizedStartUrl}`);
+  console.log(`[CRAWLER] Concurrency: ${concurrency}, Max Pages: ${maxPages}, Initial Queue: ${queue.length}`);
+
+  // Initial report during discovery
+  if (options.onProgress) {
+    options.onProgress({
+      phase: "discovering",
+      discovered: queued.size + visited.size,
+      queued: queue.length,
+      crawling: 0,
+      crawled: 0,
+      successful: 0,
+      failed: 0,
+      skipped: 0,
+      elapsedSeconds: Number(((performance.now() - crawlStart) / 1000).toFixed(1)),
+      pagesPerSecond: 0,
+      currentUrl: normalizedStartUrl,
     });
   }
 
-  // ===================================================
-  // START URL
-  // ===================================================
-
-  addToQueue(
-    normalizedStartUrl,
-    0
-  );
-
-  // ===================================================
-  // SITEMAP
-  // ===================================================
-
-  try {
-    const sitemapUrls =
-      await getSitemapUrls(
-        normalizedStartUrl
-      );
-
-    console.log(
-      "SITEMAP URLS FOUND:",
-      sitemapUrls.length
-    );
-
-    for (
-      const sitemapUrl of
-        sitemapUrls
-    ) {
-      if (
-        queue.length >=
-        maxPages * 5
-      ) {
-        break;
-      }
-
-      addToQueue(
-        sitemapUrl,
-        0
-      );
-    }
-  } catch (
-    sitemapError
-  ) {
-    console.log(
-      "SITEMAP DISCOVERY FAILED:"
-    );
-
-    console.error(
-      sitemapError
-    );
+  // Sort queue by priority score
+  function sortQueue() {
+    queue.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.depth - b.depth;
+    });
   }
 
-  console.log(
-    "================================="
-  );
+  sortQueue();
 
-  console.log(
-    "STARTING WEBSITE CRAWLER"
-  );
+  let lastActiveUrl: string | undefined = undefined;
+  let lastActiveTitle: string | undefined = undefined;
 
-  console.log(
-    "START URL:",
-    normalizedStartUrl
-  );
+  function reportProgress(activeUrl?: string, activeTitle?: string) {
+    if (activeUrl) lastActiveUrl = activeUrl;
+    if (activeTitle) lastActiveTitle = activeTitle;
 
-  console.log(
-    "MAX PAGES:",
-    maxPages
-  );
+    if (options.onProgress) {
+      const elapsed = (performance.now() - crawlStart) / 1000;
+      const totalProcessed = successCount + failedCount;
+      const pagesPerSec = elapsed > 0 ? Number((totalProcessed / elapsed).toFixed(2)) : 0;
 
-  console.log(
-    "MAX DEPTH:",
-    maxDepth
-  );
+      options.onProgress({
+        phase: "crawling",
+        discovered: queued.size + visited.size,
+        queued: queue.length,
+        crawling: activeWorkers,
+        crawled: totalProcessed,
+        successful: successCount,
+        failed: failedCount,
+        skipped: skippedCount,
+        elapsedSeconds: Number(elapsed.toFixed(1)),
+        pagesPerSecond: pagesPerSec,
+        currentUrl: lastActiveUrl,
+        currentPageTitle: lastActiveTitle,
+      });
+    }
+  }
 
-  console.log(
-    "INITIAL QUEUE:",
-    queue.length
-  );
+  // Worker Loop
+  async function worker(workerId: number): Promise<void> {
+    while (true) {
+      if (options.signal?.aborted) break;
+      if (results.length >= maxPages) break;
 
-  console.log(
-    "================================="
-  );
-
-  // ===================================================
-  // CRAWL LOOP
-  // ===================================================
-
-  while (
-    queue.length > 0 &&
-    results.length <
-      maxPages
-  ) {
-    // -------------------------------------------------
-    // SORT BY PRIORITY
-    // -------------------------------------------------
-
-    queue.sort(
-      (
-        a,
-        b
-      ) => {
-        // First prioritize URL score.
-        if (
-          b.score !==
-          a.score
-        ) {
-          return (
-            b.score -
-            a.score
-          );
+      if (queue.length === 0) {
+        if (activeWorkers === 0) {
+          // No more active workers and queue is empty -> crawl finished
+          break;
         }
-
-        // Then shallower pages.
-        return (
-          a.depth -
-          b.depth
-        );
+        // Wait briefly for other workers to potentially discover new links
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
       }
-    );
 
-    // -------------------------------------------------
-    // GET NEXT PAGE
-    // -------------------------------------------------
+      const item = queue.shift();
+      if (!item) continue;
 
-    const current =
-      queue.shift();
+      queued.delete(item.url);
 
-    if (
-      !current
-    ) {
-      break;
-    }
+      if (visited.has(item.url)) continue;
+      visited.add(item.url);
 
-    // -------------------------------------------------
-    // REMOVE FROM QUEUED
-    // -------------------------------------------------
+      activeWorkers++;
+      reportProgress(item.url);
 
-    queued.delete(
-      current.url
-    );
-
-    // -------------------------------------------------
-    // NORMALIZE
-    // -------------------------------------------------
-
-    const normalized =
-      normalizeUrl(
-        current.url
-      );
-
-    if (
-      !normalized
-    ) {
-      continue;
-    }
-
-    // -------------------------------------------------
-    // DUPLICATE
-    // -------------------------------------------------
-
-    if (
-      visited.has(
-        normalized
-      )
-    ) {
-      continue;
-    }
-
-    // -------------------------------------------------
-    // DEPTH
-    // -------------------------------------------------
-
-    if (
-      current.depth >
-      maxDepth
-    ) {
-      continue;
-    }
-
-    // -------------------------------------------------
-    // BLOCKED
-    // -------------------------------------------------
-
-    if (
-      shouldSkip(
-        normalized
-      )
-    ) {
-      continue;
-    }
-
-    // -------------------------------------------------
-    // MARK VISITED
-    // -------------------------------------------------
-
-    visited.add(
-      normalized
-    );
-
-    // -------------------------------------------------
-    // CRAWL
-    // -------------------------------------------------
-
-    try {
-      console.log(
-        "---------------------------------"
-      );
-
-      console.log(
-        `CRAWLING ${results.length + 1}/${maxPages}`
-      );
-
-      console.log(
-        "DEPTH:",
-        current.depth
-      );
-
-      console.log(
-        "URL:",
-        normalized
-      );
-
-      const page =
-        await fetchPage(
-          normalized
-        );
-
-      // -------------------------------------------------
-      // SAVE PAGE
-      // -------------------------------------------------
-
-      if (
-        page.content &&
-        page.content.length >
-          100
-      ) {
-        results.push({
-          url:
-            normalized,
-
-          title:
-            page.title,
-
-          content:
-            page.content,
-
-          productData:
-            page.productData,
-
-          images:
-            page.images,
+      try {
+        const pageResult: FetchedPageResult = await fetchAndParsePage(item.url, {
+          timeoutMs: options.timeoutMs,
+          maxRetries: options.maxRetries,
+          customFetch: options.customFetch,
+          signal: options.signal,
         });
 
-        console.log(
-          "SAVED:",
-          page.title
-        );
+        if (pageResult.status >= 200 && pageResult.status < 400 && pageResult.content.length >= 40) {
+          const pageType = detectPageType(item.url, pageResult.title, Boolean(pageResult.productData));
 
-        console.log(
-          "TOTAL SAVED:",
-          results.length
-        );
-      } else {
-        console.log(
-          "PAGE CONTENT TOO SHORT — NOT SAVED"
-        );
-      }
+          const crawledPage: CrawledPage = {
+            url: item.url,
+            title: pageResult.title,
+            content: pageResult.content,
+            pageType,
+            metaDescription: pageResult.metaDescription,
+            productData: pageResult.productData,
+            images: pageResult.images,
+          };
 
-      // -------------------------------------------------
-      // DISCOVER LINKS
-      // -------------------------------------------------
+          if (results.length < maxPages) {
+            results.push(crawledPage);
+            successCount++;
+            reportProgress(item.url, pageResult.title);
 
-      if (
-        current.depth <
-        maxDepth
-      ) {
-        for (
-          const link of
-            page.links
-        ) {
-          // Stop adding an excessive number of
-          // URLs to memory.
-          if (
-            queue.length >
-            maxPages * 10
-          ) {
-            break;
+            if (options.onPageCrawled) {
+              try {
+                await options.onPageCrawled(crawledPage);
+              } catch (onPageErr) {
+                console.error(`Error in onPageCrawled for ${item.url}:`, onPageErr);
+              }
+            }
           }
 
-          addToQueue(
-            link,
-            current.depth +
-              1
-          );
+          // Discover Internal Links
+          if (item.depth < maxDepth && results.length < maxPages) {
+            let newlyAdded = 0;
+            for (const link of pageResult.links) {
+              if (queue.length >= maxPages * 5) break;
+              if (addToQueue(link, item.depth + 1, robotsRules)) {
+                newlyAdded++;
+              }
+            }
+            if (newlyAdded > 0) {
+              sortQueue();
+            }
+          }
+        } else {
+          failedCount++;
         }
+      } catch {
+        failedCount++;
+      } finally {
+        activeWorkers--;
+        reportProgress();
       }
-
-      console.log(
-        "QUEUE SIZE:",
-        queue.length
-      );
-    } catch (
-      error
-    ) {
-      console.log(
-        "FAILED TO CRAWL:",
-        normalized
-      );
-
-      console.error(
-        error
-      );
     }
   }
 
-  // ===================================================
-  // FINAL RESULT
-  // ===================================================
+  // Launch Bounded Worker Pool
+  const workerCount = Math.min(concurrency, Math.max(1, queue.length));
+  const workerPromises: Promise<void>[] = [];
 
-  console.log(
-    "================================="
-  );
+  for (let i = 0; i < workerCount; i++) {
+    workerPromises.push(worker(i + 1));
+  }
 
-  console.log(
-    "WEBSITE CRAWL FINISHED"
-  );
+  await Promise.all(workerPromises);
 
-  console.log(
-    "================================="
-  );
+  const durationSeconds = (performance.now() - crawlStart) / 1000;
+  const totalCrawled = successCount + failedCount;
+  const pagesPerSec = durationSeconds > 0 ? Number((totalCrawled / durationSeconds).toFixed(2)) : 0;
 
-  console.log(
-    "Pages crawled:",
-    results.length
-  );
+  console.log(`[CRAWLER] Finished crawl in ${durationSeconds.toFixed(2)}s. Crawled: ${results.length} pages (${pagesPerSec} p/s)`);
 
-  console.log(
-    "Pages requested:",
-    maxPages
-  );
-
-  console.log(
-    "URLs visited:",
-    visited.size
-  );
-
-  console.log(
-    "URLs remaining in queue:",
-    queue.length
-  );
-
-  console.log(
-    "================================="
-  );
-
-  return results;
+  return {
+    pages: results,
+    metrics: {
+      discoveredCount: visited.size + queued.size,
+      crawledCount: totalCrawled,
+      successCount,
+      failedCount,
+      skippedCount,
+      durationSeconds: Number(durationSeconds.toFixed(2)),
+      pagesPerSecond: pagesPerSec,
+      discoverySeconds: Number(discoverySeconds.toFixed(2)),
+    },
+  };
 }

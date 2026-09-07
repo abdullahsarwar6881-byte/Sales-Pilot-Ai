@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Bot,
@@ -8,6 +8,7 @@ import {
   User,
   Image as ImageIcon,
   X,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -176,7 +177,7 @@ export default function WidgetPreview({
   // REFS
   // =====================================================
 
-  const messagesEndRef =
+  const messagesContainerRef =
     useRef<HTMLDivElement | null>(
       null
     );
@@ -190,6 +191,9 @@ export default function WidgetPreview({
     useRef<HTMLInputElement | null>(
       null
     );
+
+  const isInitialMount =
+    useRef(true);
 
   // =====================================================
   // MESSAGES
@@ -285,19 +289,45 @@ export default function WidgetPreview({
     mounted,
   ]);
 
+  function resetConversation() {
+    const newSession = crypto.randomUUID();
+    if (profileId) {
+      const storageKey = `sales-pilot-preview-session-${profileId}`;
+      localStorage.setItem(storageKey, newSession);
+    }
+    setVisitorSessionId(newSession);
+    setMessages([
+      {
+        id: "welcome",
+        sender: "ai",
+        content: welcomeMessage,
+        timestamp: new Date(),
+      },
+    ]);
+    setSelectedImage(null);
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImagePreview(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  }
+
   // =====================================================
-  // AUTO SCROLL
+  // AUTO SCROLL (INTERNAL CONTAINER ONLY)
   // =====================================================
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView(
-      {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
         behavior:
           enableAnimations
             ? "smooth"
             : "auto",
-      }
-    );
+      });
+    }
   }, [
     messages,
     loading,
@@ -305,15 +335,22 @@ export default function WidgetPreview({
   ]);
 
   // =====================================================
-  // FOCUS INPUT
+  // FOCUS INPUT (PREVENT WINDOW JUMPING)
   // =====================================================
 
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
     if (!loading) {
       const timer =
         setTimeout(() => {
-          inputRef.current?.focus();
-        }, 100);
+          inputRef.current?.focus({
+            preventScroll: true,
+          });
+        }, 50);
 
       return () =>
         clearTimeout(timer);
@@ -1539,7 +1576,7 @@ export default function WidgetPreview({
               <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h3 className="truncate text-[15px] font-bold">
                 {aiName}
               </h3>
@@ -1548,10 +1585,19 @@ export default function WidgetPreview({
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
 
                 <span>
-                  Online Â· AI Support
+                  Online · AI Support
                 </span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={resetConversation}
+              title="Start fresh conversation"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-95"
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
 
           {/* =================================================
@@ -1559,6 +1605,7 @@ export default function WidgetPreview({
           ================================================= */}
 
           <div
+            ref={messagesContainerRef}
             className={`
               flex-1
               overflow-y-auto
@@ -1656,12 +1703,6 @@ export default function WidgetPreview({
                     </div>
                   </div>
                 )}
-
-              <div
-                ref={
-                  messagesEndRef
-                }
-              />
             </div>
           </div>
 

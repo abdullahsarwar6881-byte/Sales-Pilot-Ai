@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { authenticateUser, getAdminClient } from "@/lib/supabase/serverAuth";
 
 
 function splitText(
@@ -29,19 +29,18 @@ function splitText(
 
 
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-
-
-
-
 
 export async function POST(req: Request) {
 
   try {
+
+    const auth = await authenticateUser(req);
+    if (!auth?.user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
 
     const {
@@ -68,6 +67,7 @@ export async function POST(req: Request) {
 
 
 
+    const supabaseAdmin = getAdminClient();
 
 
 
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
         "id",
         knowledgePageId
       )
-
+      .eq("user_id", auth.user.id)
       .single();
 
 
@@ -100,8 +100,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            pageError?.message ||
-            "Knowledge page not found"
+            "Knowledge page not found or unauthorized"
         },
         {
           status: 404

@@ -281,11 +281,30 @@ export interface ChatWithAIOptions {
 // CHAT WITH AI (via the extensible provider layer)
 // =====================================================
 
+export interface ChatWithAIResult {
+  text: string;
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
 export async function chatWithAI(
   question: string,
   context: string,
   options: ChatWithAIOptions = {}
 ): Promise<string> {
+  const res = await chatWithAIWithUsage(question, context, options);
+  return res.text;
+}
+
+export async function chatWithAIWithUsage(
+  question: string,
+  context: string,
+  options: ChatWithAIOptions = {}
+): Promise<ChatWithAIResult> {
   const cleanQuestion = limitQuestion(question);
   const cleanContext = limitContext(context);
   const cleanSiteContext = cleanText(options.websiteContext).slice(0, 2000);
@@ -320,5 +339,27 @@ export async function chatWithAI(
   if (!cleaned) {
     throw new Error("AI provider returned an empty response.");
   }
-  return cleaned;
+
+  const rawData: any = result.raw;
+  const promptTokens =
+    rawData?.usage?.input_tokens ??
+    rawData?.usage?.prompt_tokens ??
+    Math.ceil(input.length / 4);
+  const completionTokens =
+    rawData?.usage?.output_tokens ??
+    rawData?.usage?.completion_tokens ??
+    Math.ceil(cleaned.length / 4);
+  const totalTokens =
+    rawData?.usage?.total_tokens ??
+    (promptTokens + completionTokens);
+
+  return {
+    text: cleaned,
+    model: rawData?.model || process.env.OPENAI_CHAT_MODEL || "gpt-5-mini",
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+    },
+  };
 }

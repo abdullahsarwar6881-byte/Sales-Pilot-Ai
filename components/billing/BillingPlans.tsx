@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import PricingPlans from "@/components/billing/PricingPlans";
 import type { PlanId } from "@/lib/billing/plans";
+import { createClient } from "@/lib/supabase/client";
 
 interface BillingPlansProps {
   currentPlan: PlanId;
@@ -14,6 +15,7 @@ export default function BillingPlans({
   currentPlan,
   billingCycle,
 }: BillingPlansProps) {
+  const supabase = createClient();
   const [loadingPlan, setLoadingPlan] =
     useState<PlanId | null>(null);
 
@@ -41,6 +43,9 @@ export default function BillingPlans({
       // CREATE STARTER SAFEPAY CHECKOUT
       // =====================================================
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(
         "/api/billing/checkout",
         {
@@ -49,6 +54,7 @@ export default function BillingPlans({
           headers: {
             "Content-Type":
               "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
 
           body: JSON.stringify({

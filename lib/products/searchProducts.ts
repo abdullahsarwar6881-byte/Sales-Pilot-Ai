@@ -769,6 +769,173 @@ export function deduplicateProducts(products: any[]) {
 }
 
 // =====================================================
+// STRUCTURED PRICE PARSING & FILTERING
+// =====================================================
+
+export interface PriceConstraint {
+  min?: number;
+  max?: number;
+  operator?: "lt" | "lte" | "gt" | "gte" | "between" | "exact";
+  explicit: boolean;
+}
+
+export function parseMoneyValue(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const cleaned = String(value).replace(/,/g, "").trim();
+  const match = cleaned.match(/(\d+(?:\.\d{1,2})?)/);
+  if (!match) return undefined;
+  const num = Number(match[1]);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+export function getProductNumericPrice(product: any): number | undefined {
+  const directCandidates = [
+    product?.price,
+    product?.min_price,
+    product?.minPrice,
+    product?.amount,
+    product?.price_amount,
+    product?.display_price,
+  ];
+
+  for (const candidate of directCandidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate;
+    if (candidate !== null && candidate !== undefined && String(candidate).trim()) {
+      const parsed = parseMoneyValue(candidate);
+      if (parsed !== undefined) return parsed;
+    }
+  }
+
+  const raw = String(product?.content || product?.description || product?.body_html || "");
+  const patterns = [
+    /(?:rs\.?|pkr|₨)\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:\$|usd)\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:€|eur)\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:£|gbp)\s*([\d,]+(?:\.\d{1,2})?)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      const parsed = parseMoneyValue(match[1]);
+      if (parsed !== undefined) return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+export function parsePriceConstraint(query: string): PriceConstraint {
+  const text = String(query || "")
+    .toLowerCase()
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) {
+    return { min: undefined, max: undefined, explicit: false };
+  }
+
+  // between X and Y / X to Y / X - Y
+  let match = text.match(
+    /\b(?:between\s+)?(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?(\d+(?:\.\d+)?)\s*k?\s*(?:and|to|-)\s*(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?(\d+(?:\.\d+)?)\s*k?\b/i
+  );
+  if (match) {
+    let min = Number(match[1]);
+    let max = Number(match[2]);
+    if (match[0].toLowerCase().includes(match[1] + "k") || (min < 100 && !text.includes("$") && !text.includes("dollar"))) min *= 1000;
+    if (match[0].toLowerCase().includes(match[2] + "k") || (max < 100 && !text.includes("$") && !text.includes("dollar"))) max *= 1000;
+    return {
+      min: Math.min(min, max),
+      max: Math.max(min, max),
+      operator: "between",
+      explicit: true,
+    };
+  }
+
+  // under / below / less than / up to / max
+  match = text.match(
+    /\b(?:under|below|less than|up to|max(?:imum)?(?: of)?|at most)\s+(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?(\d+(?:\.\d+)?)\s*k?\b/i
+  );
+  if (match) {
+    let max = Number(match[1]);
+    if (match[0].toLowerCase().includes("k") || (max <= 100 && !text.includes("$") && !text.includes("dollar"))) {
+      if (match[0].toLowerCase().includes("k") || max <= 100) max *= 1000;
+    }
+    const operator = /\bup to|max(?:imum)?|at most/i.test(match[0]) ? "lte" : "lt";
+    return { max, operator, explicit: true };
+  }
+
+  // over / above / more than / starting from / from / at least
+  match = text.match(
+    /\b(?:over|above|more than|starting from|from|at least)\s+(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?(\d+(?:\.\d+)?)\s*k?\b/i
+  );
+  if (match) {
+    let min = Number(match[1]);
+    if (match[0].toLowerCase().includes("k") || (min <= 100 && !text.includes("$") && !text.includes("dollar"))) {
+      if (match[0].toLowerCase().includes("k") || min <= 100) min *= 1000;
+    }
+    const operator = /\bstarting from|from|at least/i.test(match[0]) ? "gte" : "gt";
+    return { min, operator, explicit: true };
+  }
+
+  return { min: undefined, max: undefined, explicit: false };
+}
+
+export function matchesPriceConstraint(
+  product: any,
+  constraint?: PriceConstraint
+): boolean {
+  if (!constraint || !constraint.explicit) return true;
+  const price = getProductNumericPrice(product);
+  if (price === undefined || !Number.isFinite(price)) return false;
+
+  switch (constraint.operator) {
+    case "lt":
+      return constraint.max !== undefined && price < constraint.max;
+    case "lte":
+      return constraint.max !== undefined && price <= constraint.max;
+    case "gt":
+      return constraint.min !== undefined && price > constraint.min;
+    case "gte":
+      return constraint.min !== undefined && price >= constraint.min;
+    case "between":
+      return (
+        constraint.min !== undefined &&
+        constraint.max !== undefined &&
+        price >= constraint.min &&
+        price <= constraint.max
+      );
+    default:
+      if (constraint.min !== undefined && price < constraint.min) return false;
+      if (constraint.max !== undefined && price > constraint.max) return false;
+      return true;
+  }
+}
+
+function stripPricePhrases(query: string): string {
+  return String(query || "")
+    .replace(/\b(?:under|below|less than|up to|max(?:imum)?(?: of)?|at most|over|above|more than|starting from|from|at least|between)\s+(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?[\d,]+(?:\.\d{1,2})?\s*k?(?:\s*(?:and|to|-)\s*(?:(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\s*)?[\d,]+(?:\.\d{1,2})?\s*k?)?/gi, " ")
+    .replace(/\b(?:rs\.?|pkr|₨|\$|usd|€|eur|£|gbp)\b/gi, " ")
+    .replace(/\b\d+k?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isGenericOrBroadQuery(text: string): boolean {
+  const norm = normalize(text);
+  if (!norm || norm.length <= 2) return true;
+  const words = norm.split(" ").filter((w) => w.length >= 2);
+  const genericWords = new Set([
+    "anything", "something", "items", "item", "product", "products", "what", "which",
+    "do", "you", "have", "sell", "show", "me", "any", "some", "all", "available",
+    "can", "i", "get", "buy", "see", "options", "option", "collection", "catalogue", "catalog"
+  ]);
+  return words.every((w) => genericWords.has(w));
+}
+
+// =====================================================
 // SEARCH AND RANK
 // =====================================================
 
@@ -793,12 +960,41 @@ export function searchAndRankProducts(
     return [];
   }
 
-  // Exact product first.
-  const exact = findExactProduct(unique, query);
+  // 1. Structured price filtering
+  const priceConstraint = parsePriceConstraint(query);
+  const priceFiltered = priceConstraint.explicit
+    ? unique.filter((p) => matchesPriceConstraint(p, priceConstraint))
+    : unique;
+
+  if (priceConstraint.explicit && priceFiltered.length === 0) {
+    return [];
+  }
+
+  // 2. Check if remaining query without price phrase is broad/generic
+  const textQuery = stripPricePhrases(query);
+  const isBroadBudget = isGenericOrBroadQuery(textQuery);
+
+  if (priceConstraint.explicit && isBroadBudget) {
+    return priceFiltered
+      .sort((a, b) => {
+        const aAvail = getProductAvailability(a) === true ? 1 : 0;
+        const bAvail = getProductAvailability(b) === true ? 1 : 0;
+        if (bAvail !== aAvail) return bAvail - aAvail;
+        const aP = getProductNumericPrice(a) ?? 999999;
+        const bP = getProductNumericPrice(b) ?? 999999;
+        return aP - bP;
+      })
+      .slice(0, safeMax)
+      .map((product) => normalizeProduct(product))
+      .filter(Boolean);
+  }
+
+  // Exact product match first.
+  const exact = findExactProduct(priceFiltered, textQuery || query);
 
   if (exact) {
     const exactName = normalize(getProductName(exact));
-    const normalizedQuery = normalize(query);
+    const normalizedQuery = normalize(textQuery || query);
 
     if (
       exactName === normalizedQuery ||
@@ -811,22 +1007,125 @@ export function searchAndRankProducts(
     }
   }
 
+  const searchTargetQuery = textQuery && textQuery.length >= 2 ? textQuery : query;
+
   const ranked = rankProducts(
-    unique,
-    query,
-    options.minScore ?? 28
+    priceFiltered,
+    searchTargetQuery,
+    options.minScore ?? 20
   );
 
   if (options.exactOnly) {
     return ranked.filter(
       (product) =>
-        scoreProduct(product, query) >= 85
+        scoreProduct(product, searchTargetQuery) >= 85
     ).slice(0, safeMax);
+  }
+
+  if (ranked.length === 0 && priceConstraint.explicit) {
+    return priceFiltered
+      .slice(0, safeMax)
+      .map((product) => normalizeProduct(product))
+      .filter(Boolean);
   }
 
   return ranked
     .slice(0, safeMax)
     .map((product) => normalizeProduct(product))
+    .filter(Boolean);
+}
+
+// =====================================================
+// SIMILAR PRODUCT RECOMMENDATION
+// =====================================================
+
+export function findSimilarProducts(
+  products: any[],
+  targetProduct: any,
+  maxResults = 3,
+  priceConstraint?: PriceConstraint
+): any[] {
+  if (!Array.isArray(products) || !targetProduct) return [];
+  const unique = deduplicateProducts(products);
+
+  const targetId = normalize(
+    targetProduct?.id ||
+    targetProduct?.externalId ||
+    targetProduct?.external_id ||
+    targetProduct?.productId ||
+    ""
+  );
+  const targetName = normalize(getProductName(targetProduct));
+  const targetUrl = normalize(getProductUrl(targetProduct));
+
+  // Exclude the exact referenced product
+  const candidates = unique.filter((p) => {
+    const pId = normalize(p?.id || p?.externalId || p?.external_id || p?.productId || "");
+    const pName = normalize(getProductName(p));
+    const pUrl = normalize(getProductUrl(p));
+
+    if (targetId && pId && targetId === pId) return false;
+    if (targetUrl && pUrl && targetUrl === pUrl) return false;
+    if (targetName && pName && targetName === pName) return false;
+    return true;
+  });
+
+  const priceFiltered = priceConstraint && priceConstraint.explicit
+    ? candidates.filter((p) => matchesPriceConstraint(p, priceConstraint))
+    : candidates;
+
+  if (priceFiltered.length === 0) return [];
+
+  const targetTokens = new Set(
+    tokens(
+      [
+        getProductName(targetProduct),
+        getCollectionNames(targetProduct).join(" "),
+        targetProduct?.tags,
+        targetProduct?.product_type,
+        targetProduct?.type,
+        targetProduct?.vendor,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    ).filter((w) => !STOP_WORDS.has(w) && w.length >= 3)
+  );
+
+  const scored = priceFiltered.map((p) => {
+    const pTokens = new Set(
+      tokens(
+        [
+          getProductName(p),
+          getCollectionNames(p).join(" "),
+          p?.tags,
+          p?.product_type,
+          p?.type,
+          p?.vendor,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      ).filter((w) => !STOP_WORDS.has(w) && w.length >= 3)
+    );
+
+    let matchCount = 0;
+    for (const t of targetTokens) {
+      if (pTokens.has(t)) matchCount += 10;
+      else {
+        const syns = SYNONYMS[t] || [];
+        if (syns.some((s) => pTokens.has(s))) matchCount += 5;
+      }
+    }
+
+    if (getProductAvailability(p) === true) matchCount += 2;
+
+    return { product: p, score: matchCount };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored
+    .slice(0, Math.min(Math.max(maxResults, 1), 3))
+    .map((item) => normalizeProduct(item.product))
     .filter(Boolean);
 }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 interface Props {
   title: string;
@@ -18,6 +19,10 @@ export default function QuickActionCard({
   href,
   icon: Icon,
 }: Props) {
+  const searchParams = useSearchParams();
+  const search = searchParams?.toString();
+  const targetHref = search ? `${href}?${search}` : href;
+
   return (
     <motion.div
       whileHover={{
@@ -26,7 +31,7 @@ export default function QuickActionCard({
       transition={{ duration: 0.15 }}
     >
       <Link
-        href={href}
+        href={targetHref}
         className="block rounded-2xl border border-theme bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-indigo-500/50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       >
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xs">

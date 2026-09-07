@@ -1,451 +1,231 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
-// --------------------------------------------------
-// SUPABASE ADMIN CLIENT
-// --------------------------------------------------
+import { createClient as createServerSupabase } from "@/lib/supabase/server";
+import { authenticateShopifyRequest } from "@/lib/shopify/auth";
+import {
+  lookupLiveShopifyOrder,
+  VerifiedStoreContext,
+  normalizeOrderNumber,
+  cleanEmail,
+  GENERIC_VERIFICATION_FAILURE_MESSAGE,
+  SHOPIFY_UNAVAILABLE_MESSAGE,
+} from "@/lib/shopify/orders";
 
 function getSupabaseAdmin() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL"
-    );
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase configuration");
   }
 
-  if (!serviceRoleKey) {
-    throw new Error(
-      "Missing SUPABASE_SERVICE_ROLE_KEY"
-    );
-  }
-
-  return createClient(
-    supabaseUrl,
-    serviceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
-// --------------------------------------------------
-// GET ORDER
-// --------------------------------------------------
-
-export async function GET(
-  request: Request
-) {
+export async function GET(request: Request) {
   try {
-    // --------------------------------------------------
-    // 1. Read query parameters
-    // --------------------------------------------------
-
-    const { searchParams } =
-      new URL(request.url);
-
-    const rawOrderNumber =
-      searchParams.get("order");
-
-    const rawShop =
-      searchParams.get("shop");
-
-    // --------------------------------------------------
-    // 2. Validate order number
-    // --------------------------------------------------
+    const { searchParams } = new URL(request.url);
+    const rawOrderNumber = searchParams.get("order");
+    const rawShop = searchParams.get("shop");
+    const rawEmail = searchParams.get("email");
 
     if (!rawOrderNumber) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Missing order number. Example: ?order=1001",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Missing order number. Example: ?order=1001" },
+        { status: 400 }
       );
     }
 
-    const cleanedOrderNumber =
-      rawOrderNumber.trim();
-
-    if (!cleanedOrderNumber) {
+    const orderNumber = normalizeOrderNumber(rawOrderNumber);
+    if (!orderNumber) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Order number cannot be empty.",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Invalid order number." },
+        { status: 400 }
       );
     }
-
-    // --------------------------------------------------
-    // Normalize order number
-    //
-    // Accept:
-    // 1001
-    // #1001
-    //
-    // Search for both formats in case the database
-    // contains either one.
-    // --------------------------------------------------
-
-    const numericOrderNumber =
-      cleanedOrderNumber.replace(
-        /^#/,
-        ""
-      );
-
-    if (!numericOrderNumber) {
-      return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Invalid order number.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    const hashOrderNumber =
-      `#${numericOrderNumber}`;
-
-    // --------------------------------------------------
-    // 3. Validate Shopify store
-    // --------------------------------------------------
 
     if (!rawShop) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Missing shop. Example: ?shop=sales-pilot.myshopify.com",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Missing shop parameter." },
+        { status: 400 }
       );
     }
 
-    const shop =
-      rawShop.trim().toLowerCase();
-
-    if (
-      !shop.endsWith(
-        ".myshopify.com"
-      )
-    ) {
+    const shop = rawShop.trim().toLowerCase();
+    if (!shop.endsWith(".myshopify.com")) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Invalid Shopify store domain.",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Invalid Shopify store domain." },
+        { status: 400 }
       );
     }
 
-    // --------------------------------------------------
-    // 4. Connect to Supabase
-    // --------------------------------------------------
+    const supabase = getSupabaseAdmin();
 
-    const supabase =
-      getSupabaseAdmin();
+    // -------------------------------------------------------------------------
+    // 1. Check for Merchant Authentication (Shopify App Bridge or Supabase)
+    // -------------------------------------------------------------------------
+    let isMerchant = false;
+    let storeContext: VerifiedStoreContext | null = null;
 
-    // --------------------------------------------------
-    // 5. Find Shopify store
-    // --------------------------------------------------
-
-    const {
-      data: store,
-      error: storeError,
-    } = await supabase
-      .from("shopify_stores")
-      .select(
-        `
-          id,
-          shop_domain
-        `
-      )
-      .eq(
-        "shop_domain",
-        shop
-      )
-      .maybeSingle();
-
-    if (storeError) {
-      console.error(
-        "Store lookup error:",
-        storeError
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Failed to find Shopify store.",
-          details:
-            storeError.message,
-        },
-        {
-          status: 500,
-        }
-      );
+    // A. Check Shopify App Bridge Session Token
+    try {
+      const shopifyAuth = await authenticateShopifyRequest(request);
+      if (shopifyAuth && shopifyAuth.shop.toLowerCase() === shop) {
+        isMerchant = true;
+        storeContext = {
+          shopDomain: shopifyAuth.shop,
+          accessToken: shopifyAuth.accessToken,
+        };
+      }
+    } catch {
+      // Not a Shopify App Bridge request
     }
 
-    if (!store) {
-      return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            `Shopify store ${shop} is not synchronized yet.`,
-        },
-        {
-          status: 404,
+    // B. Check Supabase Merchant Session
+    if (!isMerchant) {
+      try {
+        const serverSupabase = await createServerSupabase();
+        const { data: authData } = await serverSupabase.auth.getUser();
+        if (authData?.user?.id) {
+          const { data: merchantStore } = await supabase
+            .from("shopify_stores")
+            .select("id, shop_domain, access_token, user_id, profile_id")
+            .eq("shop_domain", shop)
+            .eq("is_active", true)
+            .maybeSingle();
+
+          if (
+            merchantStore &&
+            (merchantStore.user_id === authData.user.id || merchantStore.profile_id === authData.user.id)
+          ) {
+            isMerchant = true;
+            storeContext = {
+              storeId: merchantStore.id,
+              shopDomain: merchantStore.shop_domain,
+              accessToken: merchantStore.access_token,
+            };
+          }
         }
-      );
+      } catch {
+        // Not an authenticated Supabase merchant
+      }
     }
 
-    // --------------------------------------------------
-    // 6. Find order
-    // --------------------------------------------------
-    //
-    // First search using #1001.
-    // If that doesn't exist, search using 1001.
-    //
-    // This makes the API compatible with either
-    // database format.
-    // --------------------------------------------------
+    // -------------------------------------------------------------------------
+    // 2. Public Customer Widget Request Handling
+    // -------------------------------------------------------------------------
+    if (!isMerchant) {
+      const email = cleanEmail(rawEmail);
 
-    let order = null;
+      // Require email verification for public customer lookups
+      if (!email) {
+        return NextResponse.json(
+          {
+            success: false,
+            requiresVerification: true,
+            message: "Please provide the email address used when placing this order.",
+          },
+          { status: 401 }
+        );
+      }
 
-    let orderError = null;
-
-    // --------------------------------------------------
-    // First attempt: #1001
-    // --------------------------------------------------
-
-    const firstSearch =
-      await supabase
-        .from("shopify_orders")
-        .select(
-          `
-            id,
-            store_id,
-            shopify_id,
-            order_number,
-            email,
-            customer_name,
-            financial_status,
-            fulfillment_status,
-            currency,
-            total_price,
-            created_at,
-            updated_at,
-            data
-          `
-        )
-        .eq(
-          "store_id",
-          store.id
-        )
-        .eq(
-          "order_number",
-          hashOrderNumber
-        )
+      // Look up store for domain
+      const { data: activeStore, error: storeErr } = await supabase
+        .from("shopify_stores")
+        .select("id, shop_domain, access_token")
+        .eq("shop_domain", shop)
+        .eq("is_active", true)
         .maybeSingle();
 
-    order =
-      firstSearch.data;
+      if (storeErr || !activeStore || !activeStore.access_token) {
+        return NextResponse.json(
+          { success: false, error: GENERIC_VERIFICATION_FAILURE_MESSAGE },
+          { status: 404 }
+        );
+      }
 
-    orderError =
-      firstSearch.error;
+      storeContext = {
+        storeId: activeStore.id,
+        shopDomain: activeStore.shop_domain,
+        accessToken: activeStore.access_token,
+      };
 
-    // --------------------------------------------------
-    // Second attempt: 1001
-    // --------------------------------------------------
+      // Query live Shopify with customer verification filter
+      const result = await lookupLiveShopifyOrder(storeContext, {
+        orderNumber,
+        email,
+        isMerchant: false,
+      });
 
-    if (!order && !orderError) {
-      const secondSearch =
-        await supabase
-          .from("shopify_orders")
-          .select(
-            `
-              id,
-              store_id,
-              shopify_id,
-              order_number,
-              email,
-              customer_name,
-              financial_status,
-              fulfillment_status,
-              currency,
-              total_price,
-              created_at,
-              updated_at,
-              data
-            `
-          )
-          .eq(
-            "store_id",
-            store.id
-          )
-          .eq(
-            "order_number",
-            numericOrderNumber
-          )
-          .maybeSingle();
+      if (result.unavailable) {
+        return NextResponse.json(
+          { success: false, unavailable: true, message: SHOPIFY_UNAVAILABLE_MESSAGE },
+          { status: 503 }
+        );
+      }
 
-      order =
-        secondSearch.data;
+      if (!result.success || !result.order) {
+        // Generic failure response prevents order enumeration
+        return NextResponse.json(
+          { success: false, error: GENERIC_VERIFICATION_FAILURE_MESSAGE },
+          { status: 404 }
+        );
+      }
 
-      orderError =
-        secondSearch.error;
+      return NextResponse.json({
+        success: true,
+        verified: true,
+        order: result.order,
+      });
     }
 
-    // --------------------------------------------------
-    // 7. Handle database error
-    // --------------------------------------------------
-
-    if (orderError) {
-      console.error(
-        "Order lookup error:",
-        orderError
-      );
-
+    // -------------------------------------------------------------------------
+    // 3. Authenticated Merchant Request Handling
+    // -------------------------------------------------------------------------
+    if (!storeContext) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            "Failed to search for order.",
-          details:
-            orderError.message,
-        },
-        {
-          status: 500,
-        }
+        { success: false, error: "Store credentials could not be verified." },
+        { status: 403 }
       );
     }
 
-    // --------------------------------------------------
-    // 8. Order not found
-    // --------------------------------------------------
+    const result = await lookupLiveShopifyOrder(storeContext, {
+      orderNumber,
+      isMerchant: true,
+    });
 
-    if (!order) {
+    if (result.unavailable) {
       return NextResponse.json(
-        {
-          success: false,
-          found: false,
-          error:
-            `Order #${numericOrderNumber} was not found.`,
-        },
-        {
-          status: 404,
-        }
+        { success: false, unavailable: true, message: SHOPIFY_UNAVAILABLE_MESSAGE },
+        { status: 503 }
       );
     }
 
-    // --------------------------------------------------
-    // 9. Return order
-    // --------------------------------------------------
+    if (!result.success || !result.order) {
+      return NextResponse.json(
+        { success: false, error: `Order #${orderNumber} was not found.` },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      found: true,
-
-      store: {
-        id:
-          store.id,
-
-        shop:
-          store.shop_domain,
-      },
-
-      order: {
-        id:
-          order.id,
-
-        shopifyId:
-          order.shopify_id,
-
-        orderNumber:
-          order.order_number,
-
-        customerName:
-          order.customer_name,
-
-        // Email may be null when Shopify protected
-        // customer data access has not been approved.
-        email:
-          order.email,
-
-        financialStatus:
-          order.financial_status,
-
-        fulfillmentStatus:
-          order.fulfillment_status,
-
-        totalPrice:
-          order.total_price,
-
-        currency:
-          order.currency,
-
-        createdAt:
-          order.created_at,
-
-        updatedAt:
-          order.updated_at,
-
-        data:
-          order.data,
-      },
+      verified: true,
+      order: result.order,
     });
   } catch (error) {
-    // --------------------------------------------------
-    // 10. Unexpected error
-    // --------------------------------------------------
-
-    console.error(
-      "Order lookup API error:",
-      error
-    );
-
+    console.error("Order lookup endpoint error:", error);
     return NextResponse.json(
       {
         success: false,
-        found: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown server error.",
+        error: error instanceof Error ? error.message : "Internal server error.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

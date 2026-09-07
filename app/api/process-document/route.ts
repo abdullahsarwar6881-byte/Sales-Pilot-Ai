@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
+import { authenticateUser } from "@/lib/supabase/serverAuth";
 import { extractDocument } from "@/lib/documents/extractDocument";
 import { createEmbedding } from "@/lib/ai/embeddings";
 
@@ -21,6 +21,13 @@ function splitText(text: string, size = 500) {
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateUser(req);
+    const user = auth?.user;
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
       fileUrl,
       fileName,
@@ -37,7 +44,7 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log("Processing document:", fileName);
+    console.log("Processing document:", fileName, "for user:", user.id);
 
     const response = await fetch(fileUrl);
 
@@ -69,6 +76,7 @@ export async function POST(req: Request) {
       .from("knowledge_documents")
       .select("*")
       .eq("file_url", fileUrl)
+      .eq("user_id", user.id)
       .single();
 
     if (documentError || !document) {
